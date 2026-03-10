@@ -1,4 +1,4 @@
-﻿// api/chat.js - 兼容本地+Vercel
+// api/chat.js - 兼容本地+Vercel
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
