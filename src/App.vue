@@ -20,12 +20,12 @@ const sendMessage = async () => {
       ? 'http://localhost:3000' 
       : 'https://cpt208-group-work.vercel.app';
     
-    const response = await fetch(`${API_BASE}/api/chat`, {
+    const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: prompt,
-        gpsLocation: '31.3155, 120.6322' // 模拟定位坐标
+        gpsLocation: '31.3155, 120.6322'  // 模拟定位坐标
       })
     });
 
