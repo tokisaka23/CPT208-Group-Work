@@ -16,7 +16,11 @@ const sendMessage = async () => {
   isLoading.value = true;
 
   try {
-    const response = await fetch('https://cpt208-group-work.vercel.app/api/chat', {
+    const API_BASE = import.meta.env.DEV 
+      ? 'http://localhost:3000' 
+      : 'https://cpt208-group-work.vercel.app';
+    
+    const response = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
