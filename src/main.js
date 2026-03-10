@@ -1,6 +1,7 @@
-import { createApp } from 'vue'
-import App from './App.vue'
-// 导入 Vant 核心样式表
-import 'vant/lib/index.css'
+import { createApp } from 'vue';
+import App from './App.vue';
+import { Button, Field, CellGroup, NavBar } from 'vant';
 
-createApp(App).mount('#app')
+const app = createApp(App);
+app.use(Button).use(Field).use(CellGroup).use(NavBar);
+app.mount('#app');

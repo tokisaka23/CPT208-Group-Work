@@ -1,63 +1,115 @@
-// 与AI对话，模型: Llama3.1 8b
-const API_KEY = process.env.CEREBRAS_API_KEY;
+﻿// Simple AI chat relay with model fallbacks (Cerebras)
+import 'dotenv/config';
 
-export default async function handler(req) {
-  // 1. 只处理 POST 请求
+const MODELS = ['llama3.1-8b', 'gpt-oss-120b'];
+
+export default async function handler(req, res) {
+  const API_KEY = process.env.CEREBRAS_API_KEY;
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    res.status(405).json({ success: false, error: 'Method Not Allowed' });
+    return;
   }
 
   try {
-    const body = await req.json();
-    const { message, gpsLocation } = body;
-
-    // 2. 简化系统指令（移除所有 poi 依赖）
-    const systemPrompt = `你是一个苏州平江路旅游助手。用户当前坐标: ${gpsLocation || '未知'}。请提供景点导览和解说。保持回答简洁友好，富有文化底蕴，字数150字以内。`;
-
-    // 3. 直接调用 AI
-    const aiResponse = await fetch('https://api.cerebras.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: "llama3.1-8b",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: message || "你好" }
-        ],
-        temperature: 0.7,
-        max_tokens: 300
-      })
-    });
-
-    if (!aiResponse.ok) {
-      throw new Error(`API error: ${aiResponse.status}`);
+    let rawBody = '';
+    if (req.body) {
+      rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    } else {
+      for await (const chunk of req) rawBody += chunk.toString();
     }
 
-    const data = await aiResponse.json();
-    return new Response(JSON.stringify({
-      success: true,
-      response: data.choices[0].message.content,
-      timestamp: new Date().toISOString()
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const { message, gpsLocation } = JSON.parse(rawBody || '{}');
 
-  } catch (error) {
-    // 4. 增强错误处理（关键！）
-    console.error("Backend error:", error.message);
-    return new Response(JSON.stringify({
-      success: false,
-      error: `AI服务暂时不可用: ${error.message.substring(0, 50)}`
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
+    if (!message) {
+      res.status(400).json({ success: false, error: 'Message is required' });
+      return;
+    }
+    if (!API_KEY) {
+      res.status(500).json({ success: false, error: 'Missing CEREBRAS_API_KEY' });
+      return;
+    }
+
+    const systemPrompt =
+      `你是一个友好的苏州旅行向导。 User location: ${gpsLocation || 'unknown'}. ` +
+      `给出有好的，富有文化底蕴的建议，小于100个字符`;
+
+    const errors = [];
+
+    for (const model of MODELS) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+      const aiResponse = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message }
+          ],
+          temperature: 0.7,
+          max_tokens: 300
+        }),
+        signal: controller.signal
+      }).catch(err => ({ ok: false, statusText: err.message, _abort: err.name === 'AbortError' }));
+
+      clearTimeout(timeoutId);
+
+      if (aiResponse && aiResponse.ok) {
+        const data = await aiResponse.json();
+        res.status(200).json({
+          success: true,
+          model,
+          response: data.choices?.[0]?.message?.content || 'No content returned',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      let body = {};
+      if (aiResponse && aiResponse.json) {
+        body = await aiResponse.json().catch(() => ({}));
+      }
+      errors.push({ model, status: aiResponse?.status, detail: body.error?.message || aiResponse?.statusText });
+
+      if (aiResponse?.status === 401) {
+        res.status(200).json({
+          success: true,
+          response: '鉴权失败 (401)：请确认 CEREBRAS_API_KEY 是否有效或是否有对应模型权限。',
+          errors
+        });
+        return;
+      }
+
+      if (aiResponse?.status === 403) {
+        res.status(200).json({
+          success: true,
+          response: '额度/权限受限 (403)：可能免费额度用完或该模型未开通，尝试更换密钥或改用其他提供商。',
+          errors
+        });
+        return;
+      }
+    }
+
+    // All models failed
+    res.status(200).json({
+      success: true,
+      response: '抱歉，当前所有模型均不可用，我先给你本地推荐：拙政园、留园、苏州博物馆排一天，午饭去松鹤楼试试。',
+      errors
     });
+  } catch (error) {
+    console.error('Backend error:', error);
+
+    if (error.name === 'AbortError') {
+      res.status(504).json({ success: false, error: 'Upstream request timed out (15s). Please try again.' });
+      return;
+    }
+
+    res.status(500).json({ success: false, error: `AI service unavailable: ${error.message?.substring(0, 120) || 'unknown'}` });
   }
 }

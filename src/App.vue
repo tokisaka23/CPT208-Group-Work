@@ -1,60 +1,44 @@
-<script setup>
+﻿<script setup>
 import { ref } from 'vue';
 import { NavBar, Field, Button, CellGroup } from 'vant';
 
 const userInput = ref('');
 const messages = ref([
-  { role: 'agent', content: '你好！我是苏小游，平江路智能导览助手。你可以问我关于苏州的历史、景点或隐藏打卡点哦～' }
+  { role: 'agent', content: '你好，我是苏州本地向导，随时帮你规划路线、推荐景点。' }
 ]);
 const isLoading = ref(false);
 
 const sendMessage = async () => {
   if (!userInput.value.trim()) return;
-  
   const prompt = userInput.value;
   messages.value.push({ role: 'user', content: prompt });
   userInput.value = '';
   isLoading.value = true;
 
   try {
-    // 所有请求直连 AI
-    const aiResponse = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+    const response = await fetch('https://cpt208-group-work.vercel.app/api/chat', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_CEREBRAS_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "llama3.1-8b",
-        messages: [
-          { 
-            role: "system", 
-            content: `你是一个苏州平江路旅游助手。用户当前坐标: 31.3155,120.6322。请提供景点导览和解说。保持回答简洁友好，富有文化底蕴，字数150字以内。` 
-          },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 300
+        message: prompt,
+        gpsLocation: '31.3155, 120.6322' // 模拟定位坐标
       })
     });
 
-    if (!aiResponse.ok) {
-      const err = await aiResponse.json();
-      throw new Error(err.error?.message || `状态码: ${aiResponse.status}`);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `请求失败，状态码: ${response.status}`);
     }
 
-    const data = await aiResponse.json();
-    messages.value.push({ 
-      role: 'agent', 
-      content: data.choices[0].message.content 
-    });
-    
+    const data = await response.json();
+
+    if (data.success) {
+      messages.value.push({ role: 'agent', content: data.response });
+    } else {
+      throw new Error(data.error || '返回数据格式异常');
+    }
   } catch (error) {
-    // 友好错误提示
-    messages.value.push({ 
-      role: 'agent', 
-      content: `⚠️ 服务暂时不可用: ${error.message}` 
-    });
+    messages.value.push({ role: 'agent', content: `⚠️ 出现问题：${error.message}` });
   } finally {
     isLoading.value = false;
   }
@@ -63,18 +47,18 @@ const sendMessage = async () => {
 
 <template>
   <div class="app-container">
-    <NavBar title="苏小游 - 平江路导览助手" fixed placeholder />
+    <NavBar title="苏小游 · 苏州AI导览助手" fixed placeholder />
 
     <div class="chat-window">
-      <div 
-        v-for="(msg, index) in messages" 
-        :key="index" 
+      <div
+        v-for="(msg, index) in messages"
+        :key="index"
         :class="['message-wrapper', msg.role === 'user' ? 'is-user' : 'is-agent']"
       >
         <div class="bubble">{{ msg.content }}</div>
       </div>
       <div v-if="isLoading" class="message-wrapper is-agent">
-        <div class="bubble typing">正在生成回复，请稍候...</div>
+        <div class="bubble typing">正在生成回复，请稍等...</div>
       </div>
     </div>
 
@@ -84,7 +68,7 @@ const sendMessage = async () => {
           v-model="userInput"
           center
           clearable
-          placeholder="输入你的问题，例如：平江路有哪些老宅？"
+          placeholder="请输入你的问题，例如‘推荐苏州园林’"
           @keyup.enter="sendMessage"
         >
           <template #button>
