@@ -1,16 +1,29 @@
-﻿<script setup>
-import { onMounted, ref } from 'vue';
-import { NavBar, Field, Button, CellGroup } from 'vant';
-import DatabaseAuthStepPanel from './components/DatabaseAuthStepPanel.vue';
-import { logoutDatabaseSession, restoreDatabaseSession } from './services/auth/databaseAuth';
+<script setup>
+import { onMounted, onUnmounted, ref } from 'vue';
+import { Button, CellGroup, Field, NavBar } from 'vant';
+import SupabaseAuthPanel from './components/SupabaseAuthPanel.vue';
+import {
+  getCurrentSession,
+  getCurrentUser,
+  onAuthStateChange,
+  signOut,
+} from './services/supabase/authRuntime';
+import { isSupabaseConfigured } from './services/supabase/clientRuntime';
+import { clearGuestSession } from './utils/guestSession';
+
+const defaultAgentMessage = '你好，我是苏州本地向导，随时帮你规划路线、推荐景点。';
 
 const userInput = ref('');
-const messages = ref([
-  { role: 'agent', content: '你好，我是苏州本地向导，随时帮你规划路线、推荐景点。' }
-]);
+const messages = ref([{ role: 'agent', content: defaultAgentMessage }]);
 const isLoading = ref(false);
 const isBooting = ref(true);
 const currentSession = ref(null);
+
+let authSubscription = null;
+
+function getRegisteredUsername(user) {
+  return user?.user_metadata?.display_name || user?.email || '已登录用户';
+}
 
 function buildWelcomeMessage(session) {
   if (!session) {
@@ -24,37 +37,108 @@ function buildWelcomeMessage(session) {
   return `${session.user.username}，欢迎回来，现在可以开始提问了。`;
 }
 
-function enterChat(session) {
-  currentSession.value = session;
+function resetMessages(session = null) {
   messages.value = [
-    { role: 'agent', content: buildWelcomeMessage(session) }
+    { role: 'agent', content: session ? buildWelcomeMessage(session) : defaultAgentMessage },
   ];
 }
 
-function exitChat() {
-  logoutDatabaseSession();
+function applySupabaseSession(session, user) {
+  if (!session || !user) {
+    currentSession.value = null;
+    return;
+  }
+
+  clearGuestSession();
+  currentSession.value = {
+    mode: 'registered',
+    session,
+    user: {
+      id: user.id,
+      email: user.email ?? '',
+      username: getRegisteredUsername(user),
+    },
+  };
+  resetMessages(currentSession.value);
+}
+
+function enterChat(session) {
+  currentSession.value = session;
+  resetMessages(session);
+}
+
+async function exitChat() {
+  if (currentSession.value?.mode === 'registered' && isSupabaseConfigured()) {
+    try {
+      await signOut();
+    } catch (error) {
+      messages.value.push({ role: 'agent', content: `退出登录失败：${error.message}` });
+      return;
+    }
+  }
+
+  clearGuestSession();
   currentSession.value = null;
   userInput.value = '';
   isLoading.value = false;
-  messages.value = [
-    { role: 'agent', content: '你好，我是苏州本地向导，随时帮你规划路线、推荐景点。' }
-  ];
+  resetMessages();
+}
+
+async function restoreRegisteredSession() {
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+
+  const session = await getCurrentSession();
+
+  if (!session) {
+    return;
+  }
+
+  const user = await getCurrentUser();
+  applySupabaseSession(session, user);
 }
 
 onMounted(async () => {
-  currentSession.value = await restoreDatabaseSession();
-
-  if (currentSession.value) {
-    messages.value = [
-      { role: 'agent', content: buildWelcomeMessage(currentSession.value) }
-    ];
+  try {
+    await restoreRegisteredSession();
+  } catch (error) {
+    messages.value = [{ role: 'agent', content: `登录状态恢复失败：${error.message}` }];
+  } finally {
+    isBooting.value = false;
   }
 
-  isBooting.value = false;
+  if (isSupabaseConfigured()) {
+    const { data } = onAuthStateChange(async (_event, session) => {
+      if (!session) {
+        if (currentSession.value?.mode === 'registered') {
+          currentSession.value = null;
+          resetMessages();
+        }
+        return;
+      }
+
+      try {
+        const user = await getCurrentUser();
+        applySupabaseSession(session, user);
+      } catch (error) {
+        messages.value.push({ role: 'agent', content: `同步登录状态失败：${error.message}` });
+      }
+    });
+
+    authSubscription = data.subscription;
+  }
+});
+
+onUnmounted(() => {
+  authSubscription?.unsubscribe();
 });
 
 const sendMessage = async () => {
-  if (!userInput.value.trim()) return;
+  if (!userInput.value.trim()) {
+    return;
+  }
+
   const prompt = userInput.value;
   messages.value.push({ role: 'user', content: prompt });
   userInput.value = '';
@@ -66,8 +150,8 @@ const sendMessage = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: prompt,
-        gpsLocation: '31.3155, 120.6322'  // 模拟定位坐标
-      })
+        gpsLocation: '31.3155, 120.6322',
+      }),
     });
 
     if (!response.ok) {
@@ -77,13 +161,13 @@ const sendMessage = async () => {
 
     const data = await response.json();
 
-    if (data.success) {
-      messages.value.push({ role: 'agent', content: data.response });
-    } else {
+    if (!data.success) {
       throw new Error(data.error || '返回数据格式异常');
     }
+
+    messages.value.push({ role: 'agent', content: data.response });
   } catch (error) {
-    messages.value.push({ role: 'agent', content: `⚠️ 出现问题：${error.message}` });
+    messages.value.push({ role: 'agent', content: `出现问题：${error.message}` });
   } finally {
     isLoading.value = false;
   }
@@ -104,7 +188,7 @@ const sendMessage = async () => {
       <NavBar title="苏小游 · 苏州AI导览助手" fixed placeholder />
 
       <main class="entry-page">
-        <DatabaseAuthStepPanel @enter-chat="enterChat" />
+        <SupabaseAuthPanel @enter-chat="enterChat" />
       </main>
     </template>
 
@@ -115,12 +199,12 @@ const sendMessage = async () => {
         <span>
           {{
             currentSession.mode === 'guest'
-              ? '当前身份：游客'
+              ? `当前身份：游客（${currentSession.id}）`
               : `当前身份：${currentSession.user.username}`
           }}
         </span>
         <Button size="small" plain type="primary" @click="exitChat">
-          返回认证页
+          {{ currentSession.mode === 'guest' ? '退出游客模式' : '退出登录' }}
         </Button>
       </section>
 
