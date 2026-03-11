@@ -1,6 +1,7 @@
 ﻿<script setup>
 import { ref } from 'vue';
 import { NavBar, Field, Button, CellGroup } from 'vant';
+import UgcSubmit from './components/UgcSubmit.vue';
 
 const userInput = ref('');
 const messages = ref([
@@ -16,16 +17,12 @@ const sendMessage = async () => {
   isLoading.value = true;
 
   try {
-    const API_BASE = import.meta.env.DEV 
-      ? 'http://localhost:3000' 
-      : 'https://cpt208-group-work.vercel.app';
-    
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: prompt,
-        gpsLocation: '31.3155, 120.6322'  // 模拟定位坐标
+        gpsLocation: '31.3155, 120.6322'
       })
     });
 
@@ -54,6 +51,10 @@ const sendMessage = async () => {
     <NavBar title="苏小游 · 苏州AI导览助手" fixed placeholder />
 
     <div class="chat-window">
+      <div class="ugc-panel">
+        <UgcSubmit />
+      </div>
+
       <div
         v-for="(msg, index) in messages"
         :key="index"
@@ -90,6 +91,7 @@ const sendMessage = async () => {
 body { margin: 0; background-color: #f7f8fa; }
 .app-container { height: 100vh; display: flex; flex-direction: column; }
 .chat-window { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.ugc-panel { margin-bottom: 4px; }
 .message-wrapper { display: flex; width: 100%; }
 .is-user { justify-content: flex-end; }
 .is-agent { justify-content: flex-start; }
