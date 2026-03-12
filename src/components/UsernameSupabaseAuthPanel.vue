@@ -78,7 +78,7 @@ async function handleRegister() {
 
   if (!isReady.value) {
     setMessage(
-      '还没有配置 Supabase 前端环境变量，请先在 .env.local 中填写 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。',
+      '还没有配置 Supabase 前端环境变量，请先在 .env.local 中填写 VITE_FY_SUPABASE_URL 和 VITE_FY_SUPABASE_ANON_KEY。',
       'warning'
     );
     return;
@@ -112,7 +112,7 @@ async function handleLogin() {
 
   if (!isReady.value) {
     setMessage(
-      '还没有配置 Supabase 前端环境变量，请先在 .env.local 中填写 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。',
+      '还没有配置 Supabase 前端环境变量，请先在 .env.local 中填写 VITE_FY_SUPABASE_URL 和 VITE_FY_SUPABASE_ANON_KEY。',
       'warning'
     );
     return;

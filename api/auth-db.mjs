@@ -3,8 +3,8 @@ import fetch from 'node-fetch';
 
 function getDatabaseConfig() {
   return {
-    supabaseUrl: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    supabaseUrl: process.env.FY_SUPABASE_URL || process.env.VITE_FY_SUPABASE_URL,
+    serviceRoleKey: process.env.FY_SUPABASE_SERVICE_ROLE_KEY,
   };
 }
 
@@ -13,7 +13,7 @@ function ensureDatabaseConfig() {
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error(
-      '缺少数据库环境变量，请在 .env.local 中配置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY。'
+      '缺少数据库环境变量，请在 .env.local 中配置 FY_SUPABASE_URL 和 FY_SUPABASE_SERVICE_ROLE_KEY。'
     );
   }
 

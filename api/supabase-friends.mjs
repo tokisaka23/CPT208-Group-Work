@@ -2,9 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 
 function getAuthConfig() {
   return {
-    supabaseUrl: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    anonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+    supabaseUrl: process.env.FY_SUPABASE_URL || process.env.VITE_FY_SUPABASE_URL,
+    serviceRoleKey: process.env.FY_SUPABASE_SERVICE_ROLE_KEY,
+    anonKey: process.env.FY_SUPABASE_ANON_KEY || process.env.VITE_FY_SUPABASE_ANON_KEY,
   };
 }
 
@@ -13,7 +13,7 @@ function ensureAuthConfig() {
 
   if (!config.supabaseUrl || !config.serviceRoleKey || !config.anonKey) {
     throw new Error(
-      '缺少 Supabase 环境变量，请在 .env.local 中配置 SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY 和 VITE_SUPABASE_ANON_KEY。'
+      '缺少 Supabase 环境变量，请在 .env.local 中配置 FY_SUPABASE_URL、FY_SUPABASE_SERVICE_ROLE_KEY 和 VITE_FY_SUPABASE_ANON_KEY。'
     );
   }
 

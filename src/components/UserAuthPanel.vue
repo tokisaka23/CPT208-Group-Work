@@ -133,7 +133,7 @@ async function handlePrimaryAction() {
 
   if (!isReady.value) {
     setFeedback(
-      '还没有配置 Supabase。请先在 .env.local 中填写 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。',
+      '还没有配置 Supabase。请先在 .env.local 中填写 VITE_FY_SUPABASE_URL 和 VITE_FY_SUPABASE_ANON_KEY。',
       'warning'
     );
     return;

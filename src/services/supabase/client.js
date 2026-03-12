@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_FY_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_FY_SUPABASE_ANON_KEY;
 
 let supabaseClient = null;
 
@@ -16,7 +16,7 @@ export function getSupabaseClient() {
 
   if (!isSupabaseConfigured()) {
     throw new Error(
-      '缺少 Supabase 环境变量，请在 .env.local 中配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。'
+      '缺少 Supabase 环境变量，请在 .env.local 中配置 VITE_FY_SUPABASE_URL 和 VITE_FY_SUPABASE_ANON_KEY。'
     );
   }
 

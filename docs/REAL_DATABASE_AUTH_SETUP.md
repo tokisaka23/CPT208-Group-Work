@@ -20,17 +20,17 @@
 
 ```env
 QWEN_API_KEY=你的Qwen密钥
-SUPABASE_URL=https://你的项目地址.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=你的service_role_key
+FY_SUPABASE_URL=https://你的项目地址.supabase.co
+FY_SUPABASE_SERVICE_ROLE_KEY=你的service_role_key
 ```
 
 说明：
 
-- `SUPABASE_URL`：你的 Supabase 项目地址
-- `SUPABASE_SERVICE_ROLE_KEY`：后端访问数据库用的密钥
+- `FY_SUPABASE_URL`：你的 Supabase 项目地址
+- `FY_SUPABASE_SERVICE_ROLE_KEY`：后端访问数据库用的密钥
 - 这个 key 只能放后端，不能放前端公开代码里
 
-## 去哪里找 `SUPABASE_SERVICE_ROLE_KEY`
+## 去哪里找 `FY_SUPABASE_SERVICE_ROLE_KEY`
 
 1. 打开 Supabase 后台
 2. 进入你的项目
@@ -117,8 +117,8 @@ SUPABASE_SERVICE_ROLE_KEY=你的service_role_key
 
 你现在真正要做的是：
 
-1. 配 `SUPABASE_URL`
-2. 配 `SUPABASE_SERVICE_ROLE_KEY`
+1. 配 `FY_SUPABASE_URL`
+2. 配 `FY_SUPABASE_SERVICE_ROLE_KEY`
 3. 执行新的 SQL
 
 ## 本地运行
