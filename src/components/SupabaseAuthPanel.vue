@@ -196,6 +196,17 @@ function handleGuestLogin() {
 <template>
   <section class="auth-panel">
     <header class="auth-header">
+      <div class="welcome-copy">
+        <p class="eyebrow">{{ currentMode === 'login' ? '身份认证' : '账号注册' }}</p>
+        <h1 class="welcome-title">{{ currentMode === 'login' ? '欢迎来到苏小游' : '创建你的账号' }}</h1>
+        <p class="subtitle welcome-subtitle">
+          {{
+            currentMode === 'login'
+              ? '登录后即可继续使用对话、好友和定位功能，也可以先以游客身份快速体验。'
+              : '填写基础信息后即可完成注册，注册成功后就能使用好友与定位等完整功能。'
+          }}
+        </p>
+      </div>
       <p class="eyebrow">身份认证</p>
       <h1>{{ currentMode === 'login' ? '欢迎回来' : '创建账号' }}</h1>
       <p class="subtitle">
@@ -317,6 +328,14 @@ function handleGuestLogin() {
   font-size: 30px;
   line-height: 1.15;
   color: #173829;
+}
+
+.auth-header > :not(.welcome-copy) {
+  display: none;
+}
+
+.welcome-copy {
+  display: block;
 }
 
 .eyebrow {

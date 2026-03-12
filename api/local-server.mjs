@@ -27,21 +27,13 @@ if (fs.existsSync(envPath)) {
 }
 
 import chatHandler from './chat.js';
-import registerHandler from './auth-register.js';
-import loginHandler from './auth-login.js';
-import sessionHandler from './auth-session.js';
-import logoutHandler from './auth-logout.js';
-import friendsAddHandler from './friends-add.js';
-import friendsListHandler from './friends-list.js';
+import { authHandlers } from './auth.js';
+import { friendHandlers } from './friends.js';
 
 const routeHandlers = {
   '/api/chat': chatHandler,
-  '/api/auth/register': registerHandler,
-  '/api/auth/login': loginHandler,
-  '/api/auth/session': sessionHandler,
-  '/api/auth/logout': logoutHandler,
-  '/api/friends/add': friendsAddHandler,
-  '/api/friends/list': friendsListHandler,
+  ...authHandlers,
+  ...friendHandlers,
 };
 
 const server = http.createServer(async (req, res) => {

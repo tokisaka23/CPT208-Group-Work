@@ -78,12 +78,12 @@ execute function public.set_user_profiles_updated_at();
 
 alter table public.user_profiles enable row level security;
 
-drop policy if exists "users can view own profile" on public.user_profiles;
-create policy "users can view own profile"
+drop policy if exists "authenticated users can read profiles" on public.user_profiles;
+create policy "authenticated users can read profiles"
 on public.user_profiles
 for select
 to authenticated
-using (auth.uid() = id);
+using (true);
 
 drop policy if exists "users can insert own profile" on public.user_profiles;
 create policy "users can insert own profile"
@@ -155,6 +155,43 @@ for update
 to authenticated
 using (auth.uid() = requester_user_id or auth.uid() = target_user_id)
 with check (auth.uid() = requester_user_id or auth.uid() = target_user_id);
+
+create table if not exists public.location_share_permissions (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references public.user_profiles (id) on delete cascade,
+  viewer_user_id uuid not null references public.user_profiles (id) on delete cascade,
+  is_active boolean not null default true,
+  granted_at timestamptz not null default timezone('utc', now()),
+  revoked_at timestamptz,
+  constraint location_share_permissions_unique_pair
+    unique (owner_user_id, viewer_user_id),
+  constraint location_share_permissions_no_self
+    check (owner_user_id <> viewer_user_id)
+);
+
+alter table public.location_share_permissions enable row level security;
+
+drop policy if exists "related users can view location permissions" on public.location_share_permissions;
+create policy "related users can view location permissions"
+on public.location_share_permissions
+for select
+to authenticated
+using (auth.uid() = owner_user_id or auth.uid() = viewer_user_id);
+
+drop policy if exists "owners can create location permissions" on public.location_share_permissions;
+create policy "owners can create location permissions"
+on public.location_share_permissions
+for insert
+to authenticated
+with check (auth.uid() = owner_user_id);
+
+drop policy if exists "owners can update location permissions" on public.location_share_permissions;
+create policy "owners can update location permissions"
+on public.location_share_permissions
+for update
+to authenticated
+using (auth.uid() = owner_user_id)
+with check (auth.uid() = owner_user_id);
 
 drop policy if exists "users can update own profile" on public.user_profiles;
 create policy "users can update own profile"

@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { Button, Loading, NavBar, showFailToast, showSuccessToast, showToast } from 'vant';
 import AddFriendForm from '../../components/friends/AddFriendForm.vue';
 import FriendCodeCard from '../../components/friends/FriendCodeCard.vue';
@@ -26,7 +26,7 @@ const pageError = ref('');
 const isSubmitting = ref(false);
 const locationPopupVisible = ref(false);
 const selectedFriend = ref(null);
-const feedbackText = ref('当前列表初始为空，只有你手动添加成功的好友才会显示在这里。');
+const feedbackText = ref('当前列表会展示已通过确认的好友，新的好友申请需要等待对方处理。');
 const feedbackType = ref('info');
 
 function setFeedback(type, text) {
@@ -80,7 +80,7 @@ async function handleAddFriend() {
   const targetFriendCode = friendCodeInput.value.trim().toUpperCase();
 
   if (!targetFriendCode) {
-    setFeedback('error', '请输入对方的好友码后再添加。');
+    setFeedback('error', '请输入对方的好友码后再发送好友请求。');
     showFailToast('请输入好友码');
     return;
   }
@@ -91,10 +91,10 @@ async function handleAddFriend() {
     const result = await sendFriendRequest({ targetFriendCode });
     friendCodeInput.value = '';
     setFeedback('success', result.message);
-    showSuccessToast('好友已加入列表');
+    showSuccessToast('好友请求已发送');
     await refreshFriendList();
   } catch (error) {
-    const message = error.message || '添加好友失败，请稍后再试';
+    const message = error.message || '发送好友请求失败，请稍后再试';
     setFeedback('error', message);
     showFailToast(message);
   } finally {
@@ -129,8 +129,21 @@ function handlePopupVisibleChange(nextVisible) {
   }
 }
 
+async function handleFriendDataChanged() {
+  try {
+    await refreshFriendList();
+  } catch (error) {
+    showFailToast(error.message || '刷新好友列表失败');
+  }
+}
+
 onMounted(() => {
   loadPage();
+  window.addEventListener('friends-updated', handleFriendDataChanged);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('friends-updated', handleFriendDataChanged);
 });
 </script>
 

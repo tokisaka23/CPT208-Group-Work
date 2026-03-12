@@ -1,14 +1,35 @@
-// 登录验证与游客模式
+import { buildJsonResponse, getAuthenticatedUser } from './supabase.js';
 
-export default function handler(req, res) {
-  res.status(200).json({
-    success: true,
-    status: "Mock API Active",
-    message: "Supabase 鉴权接口已预留",
-    data: {
-      user_id: "mock_user_123",
-      role: "guest", // 游客模式标记
-      notice: "当前为游客模式，对话不记录数据库，刷新即销毁。"
+async function handleDeleteAccount(req, res) {
+  if (req.method === 'OPTIONS') {
+    buildJsonResponse(res, 200, { success: true });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    buildJsonResponse(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { error } = await adminClient.auth.admin.deleteUser(user.id);
+
+    if (error) {
+      throw new Error(`注销账号失败：${error.message}`);
     }
-  });
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      message: '账号已注销。',
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '注销账号失败，请稍后再试。',
+    });
+  }
 }
+
+export const authHandlers = {
+  '/api/auth/delete-account': handleDeleteAccount,
+};

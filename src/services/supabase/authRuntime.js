@@ -1,14 +1,48 @@
-import { getSupabaseClient } from './clientRuntime';
+﻿import { getSupabaseClient } from './clientRuntime';
 import { clearGuestSession, ensureGuestSession } from '../../utils/guestSession';
 
+function readEmailLocalPart(email) {
+  return String(email || '').split('@')[0] || '';
+}
+
+function normalizeUsernamePart(value) {
+  const normalizedValue = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return normalizedValue || 'user';
+}
+
+function buildProfileUsername(user) {
+  const basePart = normalizeUsernamePart(readEmailLocalPart(user.email));
+  const suffix = String(user.id || '').replace(/-/g, '').slice(0, 8) || 'profile';
+  return `${basePart.slice(0, 20)}_${suffix}`;
+}
+
 function buildProfilePayload(user, displayName) {
+  if (!user.email) {
+    throw new Error('当前账号缺少邮箱信息，无法初始化用户资料。');
+  }
+
   return {
     id: user.id,
+    username: buildProfileUsername(user),
+    auth_email: user.email,
     display_name: displayName,
     avatar_url: null,
     role: 'user',
     status: 'active',
   };
+}
+
+function buildEmailRedirectTo() {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  return `${window.location.origin}/`;
 }
 
 async function ensureUserProfile(user, displayName) {
@@ -26,11 +60,13 @@ async function ensureUserProfile(user, displayName) {
 
 export async function signUpWithEmail({ email, password, displayName }) {
   const supabase = getSupabaseClient();
+  const emailRedirectTo = buildEmailRedirectTo();
 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      emailRedirectTo,
       data: {
         display_name: displayName,
         auth_provider: 'email',
@@ -63,7 +99,7 @@ export async function signInWithEmail({ email, password }) {
 
   if (data.user) {
     const fallbackDisplayName =
-      data.user.user_metadata?.display_name || data.user.email?.split('@')[0] || '新用户';
+      data.user.user_metadata?.display_name || readEmailLocalPart(data.user.email) || '新用户';
     await ensureUserProfile(data.user, fallbackDisplayName);
   }
 
@@ -78,6 +114,38 @@ export async function signOut() {
   if (error) {
     throw error;
   }
+}
+
+export async function deleteCurrentAccount() {
+  const supabase = getSupabaseClient();
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw new Error(`获取当前登录会话失败：${sessionError.message}`);
+  }
+
+  if (!session?.access_token) {
+    throw new Error('当前没有可用的登录会话，请重新登录后再试。');
+  }
+
+  const response = await fetch('/api/auth/delete-account', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  });
+
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.error || `注销账号失败，状态码：${response.status}`);
+  }
+
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+  return result;
 }
 
 export async function getCurrentSession() {

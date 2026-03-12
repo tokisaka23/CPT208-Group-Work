@@ -1,9 +1,23 @@
 ﻿<script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
-import { Button, CellGroup, Field, NavBar } from 'vant';
-import UsernameSupabaseAuthPanel from './components/UsernameSupabaseAuthPanel.vue';
+import {
+  Button,
+  CellGroup,
+  Field,
+  NavBar,
+  showConfirmDialog,
+  showFailToast,
+  showSuccessToast,
+} from 'vant';
+import SupabaseAuthPanel from './components/SupabaseAuthPanel.vue';
+import FriendRequestDialog from './components/friends/FriendRequestDialog.vue';
 import FriendsPage from './pages/friends/FriendsPage.vue';
 import {
+  getPendingFriendRequests,
+  respondToFriendRequest,
+} from './services/friends/friendServiceRuntime';
+import {
+  deleteCurrentAccount,
   getCurrentSession,
   onAuthStateChange,
   signOut,
@@ -17,13 +31,19 @@ const userInput = ref('');
 const messages = ref([{ role: 'agent', content: defaultAgentMessage }]);
 const isLoading = ref(false);
 const isBooting = ref(true);
+const isDeletingAccount = ref(false);
 const currentSession = ref(null);
 const activeView = ref('chat');
+const pendingFriendRequests = ref([]);
+const pendingRequestPopupVisible = ref(false);
+const processingRequestId = ref('');
+const pendingRequestSignature = ref('');
 
 let authSubscription = null;
+let pendingRequestPollTimer = null;
 
 function getRegisteredUsername(user) {
-  return user?.user_metadata?.display_name || user?.user_metadata?.username || '已登录用户';
+  return user?.user_metadata?.display_name || user?.email || '已登录用户';
 }
 
 function buildWelcomeMessage(session) {
@@ -44,10 +64,95 @@ function resetMessages(session = null) {
   ];
 }
 
+function clearPendingRequestState() {
+  pendingFriendRequests.value = [];
+  pendingRequestPopupVisible.value = false;
+  processingRequestId.value = '';
+  pendingRequestSignature.value = '';
+}
+
+function stopPendingRequestPolling() {
+  if (pendingRequestPollTimer) {
+    window.clearInterval(pendingRequestPollTimer);
+    pendingRequestPollTimer = null;
+  }
+}
+
+function startPendingRequestPolling() {
+  stopPendingRequestPolling();
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  pendingRequestPollTimer = window.setInterval(() => {
+    loadPendingRequests({ silent: true });
+  }, 10000);
+}
+
+function applyPendingRequests(requests, { forceOpen = false } = {}) {
+  const nextRequests = Array.isArray(requests) ? requests : [];
+  const nextSignature = nextRequests.map((item) => item.id).join(',');
+  const hasNewRequests =
+    Boolean(nextSignature) && nextSignature !== pendingRequestSignature.value;
+
+  pendingFriendRequests.value = nextRequests;
+  pendingRequestSignature.value = nextSignature;
+
+  if (!nextRequests.length) {
+    pendingRequestPopupVisible.value = false;
+    return;
+  }
+
+  if (forceOpen || hasNewRequests) {
+    pendingRequestPopupVisible.value = true;
+  }
+}
+
+async function loadPendingRequests({ silent = false, forceOpen = false } = {}) {
+  if (currentSession.value?.mode !== 'registered' || !isSupabaseConfigured()) {
+    stopPendingRequestPolling();
+    clearPendingRequestState();
+    return;
+  }
+
+  try {
+    const requests = await getPendingFriendRequests();
+    applyPendingRequests(requests, { forceOpen });
+  } catch (error) {
+    if (!silent) {
+      showFailToast(error.message || '读取好友请求失败，请稍后再试');
+    }
+  }
+}
+
+async function handleFriendRequestDecision(request, decision) {
+  processingRequestId.value = request.id;
+
+  try {
+    const result = await respondToFriendRequest({
+      requestId: request.id,
+      decision,
+    });
+
+    pendingFriendRequests.value = pendingFriendRequests.value.filter((item) => item.id !== request.id);
+    pendingRequestSignature.value = pendingFriendRequests.value.map((item) => item.id).join(',');
+    pendingRequestPopupVisible.value = pendingFriendRequests.value.length > 0;
+    showSuccessToast(result.message);
+
+  } catch (error) {
+    showFailToast(error.message || '处理好友请求失败，请稍后再试');
+  } finally {
+    processingRequestId.value = '';
+  }
+}
+
 function applySupabaseSession(session, user) {
   if (!session || !user) {
+    stopPendingRequestPolling();
     currentSession.value = null;
     activeView.value = 'chat';
+    clearPendingRequestState();
     return;
   }
 
@@ -63,6 +168,8 @@ function applySupabaseSession(session, user) {
   };
   activeView.value = 'chat';
   resetMessages(currentSession.value);
+  startPendingRequestPolling();
+  loadPendingRequests({ silent: true, forceOpen: true });
 }
 
 function enterChat(session) {
@@ -78,6 +185,7 @@ function enterChat(session) {
     };
     activeView.value = 'chat';
     resetMessages(currentSession.value);
+    clearPendingRequestState();
     return;
   }
 
@@ -92,6 +200,8 @@ function enterChat(session) {
   };
   activeView.value = 'chat';
   resetMessages(currentSession.value);
+  startPendingRequestPolling();
+  loadPendingRequests({ silent: true, forceOpen: true });
 }
 
 async function exitChat() {
@@ -105,11 +215,49 @@ async function exitChat() {
   }
 
   clearGuestSession();
+  stopPendingRequestPolling();
   currentSession.value = null;
   activeView.value = 'chat';
   userInput.value = '';
   isLoading.value = false;
+  clearPendingRequestState();
   resetMessages();
+}
+
+async function deleteAccount() {
+  if (currentSession.value?.mode !== 'registered') {
+    return;
+  }
+
+  try {
+    await showConfirmDialog({
+      title: '注销账号',
+      message: '注销后将删除当前账号及其关联资料，且无法恢复。确定继续吗？',
+      confirmButtonText: '确认注销',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+
+  isDeletingAccount.value = true;
+
+  try {
+    const result = await deleteCurrentAccount();
+    clearGuestSession();
+    stopPendingRequestPolling();
+    currentSession.value = null;
+    activeView.value = 'chat';
+    userInput.value = '';
+    isLoading.value = false;
+    clearPendingRequestState();
+    resetMessages();
+    showSuccessToast(result.message || '账号已注销');
+  } catch (error) {
+    showFailToast(error.message || '注销账号失败，请稍后再试');
+  } finally {
+    isDeletingAccount.value = false;
+  }
 }
 
 async function restoreRegisteredSession() {
@@ -146,8 +294,10 @@ onMounted(async () => {
     const { data } = onAuthStateChange(async (_event, session) => {
       if (!session) {
         if (currentSession.value?.mode === 'registered') {
+          stopPendingRequestPolling();
           currentSession.value = null;
           activeView.value = 'chat';
+          clearPendingRequestState();
           resetMessages();
         }
         return;
@@ -166,6 +316,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   authSubscription?.unsubscribe();
+  stopPendingRequestPolling();
 });
 
 async function sendMessage() {
@@ -221,7 +372,7 @@ async function sendMessage() {
       <NavBar title="苏小游 · 苏州AI导览助手" fixed placeholder />
 
       <main class="entry-page">
-        <UsernameSupabaseAuthPanel @enter-chat="enterChat" />
+        <SupabaseAuthPanel @enter-chat="enterChat" />
       </main>
     </template>
 
@@ -242,6 +393,27 @@ async function sendMessage() {
         </span>
 
         <div class="action-stack">
+          <Button
+            v-if="currentSession.mode === 'registered' && pendingFriendRequests.length"
+            size="small"
+            plain
+            type="warning"
+            @click="pendingRequestPopupVisible = true"
+          >
+            请求 {{ pendingFriendRequests.length }}
+          </Button>
+
+          <Button
+            v-if="currentSession.mode === 'registered'"
+            size="small"
+            plain
+            type="danger"
+            :loading="isDeletingAccount"
+            @click="deleteAccount"
+          >
+            注销账号
+          </Button>
+
           <Button size="small" plain type="danger" @click="exitChat">
             {{ currentSession.mode === 'guest' ? '退出游客模式' : '退出登录' }}
           </Button>
@@ -305,6 +477,16 @@ async function sendMessage() {
           </CellGroup>
         </div>
       </template>
+
+      <FriendRequestDialog
+        v-if="currentSession.mode === 'registered'"
+        :show="pendingRequestPopupVisible"
+        :requests="pendingFriendRequests"
+        :processing-id="processingRequestId"
+        @update:show="pendingRequestPopupVisible = $event"
+        @accept="handleFriendRequestDecision($event, 'accepted')"
+        @reject="handleFriendRequestDecision($event, 'rejected')"
+      />
     </template>
   </div>
 </template>

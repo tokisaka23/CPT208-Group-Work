@@ -1,4 +1,4 @@
-import { findUserByFriendCode, mockCurrentUser } from './friendMockData';
+﻿import { findUserByFriendCode, mockCurrentUser } from './friendMockData';
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase/clientRuntime';
 
 const friendStorageKey = 'cpt208_mock_friends';
@@ -12,6 +12,14 @@ function wait(ms = 400) {
 
 function cloneFriend(friend) {
   return { ...friend };
+}
+
+export function notifyFriendDataChanged() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent('friends-updated'));
 }
 
 function getStorage() {
@@ -89,63 +97,15 @@ function saveCachedCurrentProfile(profile) {
   storage.setItem(currentProfileCacheKey, JSON.stringify(profile));
 }
 
-async function getAccessToken() {
-  if (!isSupabaseConfigured()) {
-    return '';
-  }
-
-  const supabase = getSupabaseClient();
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-
-  if (error) {
-    throw new Error(`获取登录会话失败：${error.message}`);
-  }
-
-  return session?.access_token || '';
-}
-
-async function requestFriendApi(pathname, options = {}) {
-  const accessToken = await getAccessToken();
-
-  if (!accessToken) {
-    throw new Error('当前没有可用的登录会话，请重新登录后再试。');
-  }
-
-  const response = await fetch(pathname, {
-    method: options.method || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || !data.success) {
-    throw new Error(data.error || '好友接口请求失败');
-  }
-
-  return data;
-}
-
-function buildFallbackProfile(authUser = null) {
-  if (!authUser) {
-    return { ...mockCurrentUser };
-  }
-
-  return {
-    id: authUser.id,
-    username:
-      authUser.user_metadata?.username ||
-      authUser.user_metadata?.display_name ||
-      authUser.email?.split('@')[0] ||
-      '已登录用户',
-    friendCode: '',
-  };
+function buildResolvedUsername(authUser, profile = null) {
+  return (
+    profile?.display_name ||
+    authUser?.user_metadata?.display_name ||
+    profile?.username ||
+    authUser?.user_metadata?.username ||
+    authUser?.email?.split('@')[0] ||
+    '已登录用户'
+  );
 }
 
 function sortFriends(list) {
@@ -158,6 +118,90 @@ function sortFriends(list) {
   });
 }
 
+async function getAuthenticatedUser() {
+  const supabase = getSupabaseClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error) {
+    throw new Error(`获取当前登录用户失败：${error.message}`);
+  }
+
+  if (!user) {
+    throw new Error('当前没有可用的登录会话，请重新登录后再试。');
+  }
+
+  return user;
+}
+
+async function getAccessToken() {
+  const supabase = getSupabaseClient();
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) {
+    throw new Error(`获取当前登录会话失败：${error.message}`);
+  }
+
+  if (!session?.access_token) {
+    throw new Error('当前没有可用的登录会话，请重新登录后再试。');
+  }
+
+  return session.access_token;
+}
+
+async function requestFriendApi(path, payload = {}) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.error || `请求好友接口失败，状态码：${response.status}`);
+  }
+
+  return result;
+}
+
+async function findProfileById(userId) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('id, username, display_name, friend_code')
+    .eq('id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`读取当前用户资料失败：${error.message}`);
+  }
+
+  return data;
+}
+
+function buildFallbackProfile(authUser = null) {
+  if (!authUser) {
+    return { ...mockCurrentUser };
+  }
+
+  return {
+    id: authUser.id,
+    username: buildResolvedUsername(authUser),
+    friendCode: '',
+  };
+}
+
 export async function getCurrentUserProfile() {
   await wait(250);
 
@@ -165,79 +209,49 @@ export async function getCurrentUserProfile() {
     return readCachedCurrentProfile() || { ...mockCurrentUser };
   }
 
-  const supabase = getSupabaseClient();
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await supabase.auth.getUser();
+  try {
+    const authUser = await getAuthenticatedUser();
+    const profile = await findProfileById(authUser.id);
 
-  if (authError) {
+    const resolvedProfile = {
+      id: authUser.id,
+      username: buildResolvedUsername(authUser, profile),
+      friendCode: profile?.friend_code || '',
+    };
+
+    saveCachedCurrentProfile(resolvedProfile);
+    return resolvedProfile;
+  } catch (error) {
     const cachedProfile = readCachedCurrentProfile();
 
     if (cachedProfile) {
       return cachedProfile;
     }
 
-    throw new Error(`获取当前登录用户失败：${authError.message}`);
+    throw error;
   }
-
-  if (!authUser) {
-    const cachedProfile = readCachedCurrentProfile();
-    return cachedProfile || { ...mockCurrentUser };
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('user_profiles')
-    .select('id, username, display_name, friend_code')
-    .eq('id', authUser.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (profileError) {
-    const cachedProfile = readCachedCurrentProfile();
-
-    if (cachedProfile) {
-      return cachedProfile;
-    }
-
-    throw new Error(`读取当前用户资料失败：${profileError.message}`);
-  }
-
-  const resolvedProfile = {
-    id: authUser.id,
-    username:
-      profile?.username ||
-      authUser.user_metadata?.username ||
-      profile?.display_name ||
-      authUser.user_metadata?.display_name ||
-      authUser.email?.split('@')[0] ||
-      '已登录用户',
-    friendCode: profile?.friend_code || '',
-  };
-
-  saveCachedCurrentProfile(resolvedProfile);
-  return resolvedProfile;
 }
 
 export async function getFriendList() {
   await wait(400);
 
-  if (isSupabaseConfigured()) {
-    try {
-      const data = await requestFriendApi('/api/friends/list');
-      return (data.friends || []).map(cloneFriend);
-    } catch (error) {
-      const cachedFriends = readStoredFriends();
-
-      if (cachedFriends.length) {
-        return sortFriends(cachedFriends).map(cloneFriend);
-      }
-
-      throw error;
-    }
+  if (!isSupabaseConfigured()) {
+    return sortFriends(readStoredFriends()).map(cloneFriend);
   }
 
-  return sortFriends(readStoredFriends()).map(cloneFriend);
+  const result = await requestFriendApi('/api/friends/list');
+  return sortFriends((result.friends || []).map(cloneFriend));
+}
+
+export async function getPendingFriendRequests() {
+  await wait(250);
+
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const result = await requestFriendApi('/api/friends/pending-list');
+  return Array.isArray(result.requests) ? result.requests.map(cloneFriend) : [];
 }
 
 export async function sendFriendRequest({ targetFriendCode }) {
@@ -249,45 +263,66 @@ export async function sendFriendRequest({ targetFriendCode }) {
 
   await wait(500);
 
-  const currentProfile = await getCurrentUserProfile().catch(() => buildFallbackProfile());
+  if (!isSupabaseConfigured()) {
+    const currentProfile = await getCurrentUserProfile().catch(() => buildFallbackProfile());
 
-  if (normalizedCode === String(currentProfile.friendCode || '').toUpperCase()) {
-    throw new Error('不能添加自己为好友');
-  }
+    if (normalizedCode === String(currentProfile.friendCode || '').toUpperCase()) {
+      throw new Error('不能添加自己为好友');
+    }
 
-  if (isSupabaseConfigured()) {
-    const data = await requestFriendApi('/api/friends/add', {
-      method: 'POST',
-      body: { targetFriendCode: normalizedCode },
-    });
+    const currentFriends = readStoredFriends();
+
+    if (currentFriends.some((item) => item.friendCode.toUpperCase() === normalizedCode)) {
+      throw new Error('该好友已经在列表中了');
+    }
+
+    const targetUser = findUserByFriendCode(normalizedCode);
+
+    if (!targetUser) {
+      throw new Error('没有找到该好友码对应的用户');
+    }
+
+    const nextFriends = sortFriends([{ ...targetUser }, ...currentFriends]);
+    saveStoredFriends(nextFriends);
 
     return {
       success: true,
-      message: data.message || '好友添加成功。',
-      friend: data.friend ? cloneFriend(data.friend) : null,
+      message: `已将 ${targetUser.username} 加入好友列表。当前为前端原型，结果保存在本地浏览器。`,
+      friend: cloneFriend(targetUser),
     };
   }
 
-  const currentFriends = readStoredFriends();
+  const authUser = await getAuthenticatedUser();
+  const currentProfile = await findProfileById(authUser.id);
 
-  if (currentFriends.some((item) => item.friendCode.toUpperCase() === normalizedCode)) {
-    throw new Error('该好友已经在列表中了');
+  if (!currentProfile) {
+    throw new Error('当前登录用户缺少 user_profiles 资料，请先检查数据库初始化。');
   }
 
-  const targetUser = findUserByFriendCode(normalizedCode);
-
-  if (!targetUser) {
-    throw new Error('没有找到该好友码对应的用户');
+  if (normalizedCode === String(currentProfile.friend_code || '').toUpperCase()) {
+    throw new Error('不能添加自己为好友');
   }
 
-  const nextFriends = sortFriends([{ ...targetUser }, ...currentFriends]);
-  saveStoredFriends(nextFriends);
+  return requestFriendApi('/api/friends/add', { targetFriendCode: normalizedCode });
+}
 
-  return {
-    success: true,
-    message: `已将 ${targetUser.username} 加入好友列表。当前为前端原型，结果保存在本地浏览器。`,
-    friend: cloneFriend(targetUser),
-  };
+export async function respondToFriendRequest({ requestId, decision }) {
+  await wait(250);
+
+  if (!isSupabaseConfigured()) {
+    throw new Error('当前为前端原型模式，暂不支持处理好友请求。');
+  }
+
+  const result = await requestFriendApi('/api/friends/respond', {
+    requestId,
+    decision,
+  });
+
+  if (decision === 'accepted') {
+    notifyFriendDataChanged();
+  }
+
+  return result;
 }
 
 export async function getFriendLocation(friendId) {
