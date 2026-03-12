@@ -1,4 +1,4 @@
-// api/chat.js - 纯净 ES Module 版
+﻿// api/chat.js - 纯净 ES Module 版
 import fetch from 'node-fetch';
 
 export default async function handler(req, res) {
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: "qwen-max",
+        model: "qwen-turbo",
         input: {
           messages: [
             { role: "system", content: systemPrompt },
