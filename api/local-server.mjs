@@ -26,17 +26,27 @@ if (fs.existsSync(envPath)) {
   console.error(`❌ 环境文件不存在: ${envPath}`);
 }
 
-import handler from './chat.js';
+import chatHandler from './chat.js';
+import { authHandlers } from './auth.js';
+import { friendHandlers } from './friends.js';
+
+const routeHandlers = {
+  '/api/chat': chatHandler,
+  ...authHandlers,
+  ...friendHandlers,
+};
 
 const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url);
   console.log(`[local-api] ${req.method} ${parsedUrl.pathname}`);
 
-  if (parsedUrl.pathname === '/api/chat') {
+  const routeHandler = routeHandlers[parsedUrl.pathname];
+
+  if (routeHandler) {
     if (req.method === 'OPTIONS') {
       res.writeHead(200, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       });
       res.end();
@@ -52,7 +62,7 @@ const server = http.createServer(async (req, res) => {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
       writeHead(statusCode, headers) {
@@ -78,7 +88,7 @@ const server = http.createServer(async (req, res) => {
     };
 
     try {
-      await handler(req, vercelRes);
+      await routeHandler(req, vercelRes);
     } catch (error) {
       console.error('Handler error:', error);
       vercelRes.status(500).json({ error: 'Internal Server Error' });

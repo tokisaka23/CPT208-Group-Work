@@ -1,7 +1,7 @@
-import { createApp } from 'vue';
-import App from './App.vue';
-import { Button, Field, CellGroup, NavBar } from 'vant';
+﻿import { createApp } from 'vue';
+import 'vant/lib/index.css';
 
-const app = createApp(App);
-app.use(Button).use(Field).use(CellGroup).use(NavBar);
-app.mount('#app');
+// 默认使用邮箱 + 密码的 Supabase Auth 入口；如需单独预览好友页原型，可改为 ./AppFriends.vue
+import App from './AppUsernameAuth.vue';
+
+createApp(App).mount('#app');

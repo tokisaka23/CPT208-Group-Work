@@ -1,10 +1,15 @@
-﻿<script setup>
-import { onMounted, reactive, ref } from 'vue';
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue';
 import { Button, CellGroup, Field, showFailToast, showSuccessToast } from 'vant';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase/clientRuntime';
 
-// TODO: 登录模块接入后，替换成真实登录用户的 user.id。
-const TEMP_UPLOADER_ID = '00000000-0000-0000-0000-000000000001';
+const props = defineProps({
+  uploaderId: {
+    type: String,
+    default: '',
+  },
+});
+
 const MAX_IMAGE_SIZE_MB = 5;
 const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
 
@@ -15,6 +20,7 @@ const locationText = ref('');
 const selectedImage = ref(null);
 const imagePreviewUrl = ref('');
 const fileInputRef = ref(null);
+const canSubmit = computed(() => Boolean(props.uploaderId));
 
 const form = reactive({
   name: '',
@@ -126,9 +132,17 @@ onMounted(() => {
   getCurrentLocation();
 });
 
-const resolveUploaderId = () => TEMP_UPLOADER_ID;
-
 const handleSubmit = async () => {
+  if (!isSupabaseConfigured()) {
+    showFailToast('未检测到 Supabase 配置，请检查 .env.local');
+    return;
+  }
+
+  if (!canSubmit.value) {
+    showFailToast('请先登录后再上传');
+    return;
+  }
+
   if (!form.name.trim()) {
     showFailToast('请输入景点名称');
     return;
@@ -157,48 +171,40 @@ const handleSubmit = async () => {
     return;
   }
 
-  const uploaderId = resolveUploaderId();
-
-  if (!uploaderId) {
-    showFailToast('请先登录后再上传');
-    return;
-  }
-
+  const supabase = getSupabaseClient();
   submitting.value = true;
   submitResult.value = '';
 
   let imageUrl = null;
 
-  if (selectedImage.value) {
-    const fileExt = selectedImage.value.name.split('.').pop() || 'jpg';
-    const filePath = `ugc/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+  const fileExt = selectedImage.value.name.split('.').pop() || 'jpg';
+  const filePath = `ugc/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('ugc-images')
-      .upload(filePath, selectedImage.value, {
-        cacheControl: '3600',
-        upsert: false,
-      });
+  const { error: uploadError } = await supabase.storage
+    .from('ugc-images')
+    .upload(filePath, selectedImage.value, {
+      cacheControl: '3600',
+      upsert: false,
+    });
 
-    if (uploadError) {
-      submitting.value = false;
-      submitResult.value = `图片上传失败：${uploadError.message}`;
-      showFailToast('图片上传失败');
-      return;
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from('ugc-images')
-      .getPublicUrl(filePath);
-
-    imageUrl = publicUrlData.publicUrl;
+  if (uploadError) {
+    submitting.value = false;
+    submitResult.value = `图片上传失败：${uploadError.message}`;
+    showFailToast('图片上传失败');
+    return;
   }
+
+  const { data: publicUrlData } = supabase.storage
+    .from('ugc-images')
+    .getPublicUrl(filePath);
+
+  imageUrl = publicUrlData.publicUrl;
 
   const { data, error } = await supabase
     .from('ugc_pois')
     .insert([
       {
-        user_id: uploaderId,
+        user_id: props.uploaderId,
         name: form.name.trim(),
         lat,
         lng,
@@ -226,8 +232,8 @@ const handleSubmit = async () => {
 <template>
   <section class="ugc-submit">
     <h2 class="title">上传新景点</h2>
-    <p class="subtitle">页面加载后会自动获取当前位置，图片上传后面再接。</p>
-    <p class="auth-note">当前使用测试上传身份，接入登录模块后会切换成真实用户。</p>
+    <p class="subtitle">页面加载后会自动获取当前位置，提交后写入 `ugc_pois`。</p>
+    <p v-if="!canSubmit" class="auth-note">当前未登录，无法提交景点。</p>
 
     <CellGroup inset>
       <Field v-model="form.name" label="景点名" placeholder="例如：平江路小众茶馆" />
@@ -267,7 +273,7 @@ const handleSubmit = async () => {
       </div>
     </div>
 
-    <Button block type="primary" :loading="submitting || locating" @click="handleSubmit">
+    <Button block type="primary" :loading="submitting || locating" :disabled="!canSubmit" @click="handleSubmit">
       提交景点
     </Button>
 
