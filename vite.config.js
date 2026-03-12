@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     proxy: {
       // 本地开发时直接代理到 Vercel 服务
       '/api': {

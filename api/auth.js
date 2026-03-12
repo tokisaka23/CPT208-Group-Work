@@ -30,6 +30,34 @@ async function handleDeleteAccount(req, res) {
   }
 }
 
+function resolveAuthAction(req) {
+  const requestUrl = new URL(req.url || '/', 'http://localhost');
+  const queryAction = requestUrl.searchParams.get('action');
+
+  if (queryAction) {
+    return queryAction;
+  }
+
+  const pathnameParts = requestUrl.pathname.split('/').filter(Boolean);
+  return pathnameParts[pathnameParts.length - 1] || '';
+}
+
+const authActionHandlers = {
+  'delete-account': handleDeleteAccount,
+};
+
+export default async function authHandler(req, res) {
+  const action = resolveAuthAction(req);
+  const routeHandler = authActionHandlers[action];
+
+  if (!routeHandler) {
+    buildJsonResponse(res, 404, { error: 'Auth route not found' });
+    return;
+  }
+
+  await routeHandler(req, res);
+}
+
 export const authHandlers = {
   '/api/auth/delete-account': handleDeleteAccount,
 };

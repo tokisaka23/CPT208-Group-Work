@@ -439,6 +439,37 @@ async function handleRespondFriendRequest(req, res) {
   }
 }
 
+function resolveFriendAction(req) {
+  const requestUrl = new URL(req.url || '/', 'http://localhost');
+  const queryAction = requestUrl.searchParams.get('action');
+
+  if (queryAction) {
+    return queryAction;
+  }
+
+  const pathnameParts = requestUrl.pathname.split('/').filter(Boolean);
+  return pathnameParts[pathnameParts.length - 1] || '';
+}
+
+const friendActionHandlers = {
+  add: handleAddFriend,
+  list: handleFriendList,
+  'pending-list': handlePendingFriendList,
+  respond: handleRespondFriendRequest,
+};
+
+export default async function friendHandler(req, res) {
+  const action = resolveFriendAction(req);
+  const routeHandler = friendActionHandlers[action];
+
+  if (!routeHandler) {
+    buildJsonResponse(res, 404, { error: 'Friend route not found' });
+    return;
+  }
+
+  await routeHandler(req, res);
+}
+
 export const friendHandlers = {
   '/api/friends/add': handleAddFriend,
   '/api/friends/list': handleFriendList,
