@@ -9,6 +9,7 @@ import {
 } from 'vant';
 import QwenChat from './components/QwenChat.vue';
 import SupabaseAuthPanel from './components/SupabaseAuthPanel.vue';
+import UgcMyList from './components/UgcMyList.vue';
 import UgcSubmit from './components/UgcSubmit.vue';
 import FriendRequestDialog from './components/friends/FriendRequestDialog.vue';
 import FriendsPage from './pages/friends/FriendsPage.vue';
@@ -33,6 +34,7 @@ const pendingFriendRequests = ref([]);
 const pendingRequestPopupVisible = ref(false);
 const processingRequestId = ref('');
 const pendingRequestSignature = ref('');
+const ugcRefreshKey = ref(0);
 
 let authSubscription = null;
 let pendingRequestPollTimer = null;
@@ -249,6 +251,10 @@ function openChatPage() {
   activeView.value = 'chat';
 }
 
+function refreshUgcRecords() {
+  ugcRefreshKey.value += 1;
+}
+
 onMounted(async () => {
   try {
     await restoreRegisteredSession();
@@ -376,8 +382,19 @@ onUnmounted(() => {
       <template v-else>
         <div class="chat-main">
           <section class="ugc-panel">
-            <UgcSubmit v-if="currentSession.mode === 'registered'" :uploader-id="currentSession.user.id" />
+            <UgcSubmit
+              v-if="currentSession.mode === 'registered'"
+              :uploader-id="currentSession.user.id"
+              @submitted="refreshUgcRecords"
+            />
             <div v-else class="guest-hint">游客模式下不可上传景点，请先登录账号。</div>
+          </section>
+
+          <section v-if="currentSession.mode === 'registered'" class="ugc-panel">
+            <UgcMyList
+              :uploader-id="currentSession.user.id"
+              :refresh-key="ugcRefreshKey"
+            />
           </section>
 
           <section class="chat-panel">

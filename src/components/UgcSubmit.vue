@@ -1,5 +1,5 @@
-<script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+﻿<script setup>
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Button, CellGroup, Field, showFailToast, showSuccessToast } from 'vant';
 import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase/clientRuntime';
 
@@ -10,17 +10,13 @@ const props = defineProps({
   },
 });
 
-const MAX_IMAGE_SIZE_MB = 5;
-const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const emit = defineEmits(['submitted']);
 
-const submitting = ref(false);
-const submitResult = ref('');
-const locating = ref(false);
-const locationText = ref('');
-const selectedImage = ref(null);
-const imagePreviewUrl = ref('');
-const fileInputRef = ref(null);
-const canSubmit = computed(() => Boolean(props.uploaderId));
+const MAX_IMAGE_SIZE_MB = 1;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const COMPRESS_THRESHOLD_BYTES = MAX_IMAGE_SIZE_BYTES;
+const MAX_IMAGE_DIMENSION = 1600;
+const COMPRESS_QUALITY = 0.82;
 
 const form = reactive({
   name: '',
@@ -29,60 +25,252 @@ const form = reactive({
   lng: null,
 });
 
-const resetForm = () => {
-  form.name = '';
-  form.description = '';
-  form.lat = null;
-  form.lng = null;
-  locationText.value = '';
-  clearSelectedImage();
-  getCurrentLocation();
-};
+const submitting = ref(false);
+const locating = ref(false);
+const locationText = ref('');
+const submitResult = ref('');
+const selectedImage = ref(null);
+const imagePreviewUrl = ref('');
+const fileInputRef = ref(null);
+const canSubmit = computed(() => Boolean(props.uploaderId));
 
-const clearSelectedImage = () => {
+const cropOpen = ref(false);
+const cropImageRef = ref(null);
+const cropContainerRef = ref(null);
+const cropSourceUrl = ref('');
+const cropDragging = ref(false);
+const cropSelection = reactive({ x: 0, y: 0, width: 0, height: 0 });
+const cropStart = reactive({ x: 0, y: 0 });
+
+function revokePreviewUrl() {
   if (imagePreviewUrl.value) {
     URL.revokeObjectURL(imagePreviewUrl.value);
   }
+}
 
+function closeCrop() {
+  cropOpen.value = false;
+  cropDragging.value = false;
+
+  if (cropSourceUrl.value) {
+    URL.revokeObjectURL(cropSourceUrl.value);
+  }
+
+  cropSourceUrl.value = '';
+  cropSelection.x = 0;
+  cropSelection.y = 0;
+  cropSelection.width = 0;
+  cropSelection.height = 0;
+}
+
+function clearSelectedImage() {
+  revokePreviewUrl();
   selectedImage.value = null;
   imagePreviewUrl.value = '';
 
   if (fileInputRef.value) {
     fileInputRef.value.value = '';
   }
-};
 
-const handleImageChange = (event) => {
-  const [file] = event.target.files || [];
+  closeCrop();
+}
 
-  if (!file) {
-    clearSelectedImage();
+function loadImageFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('图片读取失败'));
+    image.src = url;
+  });
+}
+
+async function compressImage(file) {
+  const sourceUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await loadImageFromUrl(sourceUrl);
+    let targetWidth = image.naturalWidth;
+    let targetHeight = image.naturalHeight;
+
+    if (targetWidth > MAX_IMAGE_DIMENSION || targetHeight > MAX_IMAGE_DIMENSION) {
+      const ratio = Math.min(MAX_IMAGE_DIMENSION / targetWidth, MAX_IMAGE_DIMENSION / targetHeight);
+      targetWidth = Math.round(targetWidth * ratio);
+      targetHeight = Math.round(targetHeight * ratio);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('当前浏览器不支持图片压缩');
+    }
+
+    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', COMPRESS_QUALITY));
+    if (!blob) {
+      throw new Error('图片压缩失败');
+    }
+
+    return new File([blob], `compressed-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+function getPointerPosition(event) {
+  const container = cropContainerRef.value;
+  if (!container) {
+    return { x: 0, y: 0 };
+  }
+
+  const rect = container.getBoundingClientRect();
+  return {
+    x: Math.min(Math.max(event.clientX - rect.left, 0), rect.width),
+    y: Math.min(Math.max(event.clientY - rect.top, 0), rect.height),
+  };
+}
+
+function startCrop(event) {
+  const point = getPointerPosition(event);
+  cropDragging.value = true;
+  cropStart.x = point.x;
+  cropStart.y = point.y;
+  cropSelection.x = point.x;
+  cropSelection.y = point.y;
+  cropSelection.width = 0;
+  cropSelection.height = 0;
+}
+
+function updateCrop(event) {
+  if (!cropDragging.value) {
     return;
   }
 
-  if (!file.type.startsWith('image/')) {
-    showFailToast('请选择图片文件');
-    event.target.value = '';
-    clearSelectedImage();
+  const point = getPointerPosition(event);
+  cropSelection.x = Math.min(cropStart.x, point.x);
+  cropSelection.y = Math.min(cropStart.y, point.y);
+  cropSelection.width = Math.abs(point.x - cropStart.x);
+  cropSelection.height = Math.abs(point.y - cropStart.y);
+}
+
+function endCrop() {
+  cropDragging.value = false;
+}
+
+function openCropper() {
+  if (!selectedImage.value) {
+    showFailToast('请先选择图片');
     return;
   }
 
-  if (file.size > MAX_IMAGE_SIZE_BYTES) {
-    showFailToast(`图片不能超过 ${MAX_IMAGE_SIZE_MB}MB`);
-    event.target.value = '';
-    clearSelectedImage();
+  closeCrop();
+  cropSourceUrl.value = URL.createObjectURL(selectedImage.value);
+  cropOpen.value = true;
+}
+
+async function applyCrop() {
+  if (!cropImageRef.value || !selectedImage.value) {
     return;
   }
 
-  if (imagePreviewUrl.value) {
-    URL.revokeObjectURL(imagePreviewUrl.value);
+  if (cropSelection.width < 8 || cropSelection.height < 8) {
+    showFailToast('请先框选裁剪范围');
+    return;
   }
 
-  selectedImage.value = file;
-  imagePreviewUrl.value = URL.createObjectURL(file);
-};
+  const image = cropImageRef.value;
+  const imageRect = image.getBoundingClientRect();
+  const scaleX = image.naturalWidth / imageRect.width;
+  const scaleY = image.naturalHeight / imageRect.height;
 
-const getCurrentLocation = () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(cropSelection.width * scaleX);
+  canvas.height = Math.round(cropSelection.height * scaleY);
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    showFailToast('当前浏览器不支持图片裁剪');
+    return;
+  }
+
+  context.drawImage(
+    image,
+    Math.round(cropSelection.x * scaleX),
+    Math.round(cropSelection.y * scaleY),
+    Math.round(cropSelection.width * scaleX),
+    Math.round(cropSelection.height * scaleY),
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  if (!blob) {
+    showFailToast('裁剪失败，请重试');
+    return;
+  }
+
+  const croppedFile = new File([blob], `cropped-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  if (croppedFile.size > MAX_IMAGE_SIZE_BYTES) {
+    showFailToast('裁剪后的图片仍超过 1MB，请重新框选');
+    return;
+  }
+
+  revokePreviewUrl();
+  selectedImage.value = croppedFile;
+  imagePreviewUrl.value = URL.createObjectURL(croppedFile);
+  closeCrop();
+  showSuccessToast('已应用裁剪');
+}
+
+function handleImageChange(event) {
+  void (async () => {
+    const [file] = event.target.files || [];
+
+    if (!file) {
+      clearSelectedImage();
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showFailToast('请选择图片文件');
+      event.target.value = '';
+      clearSelectedImage();
+      return;
+    }
+
+    let nextFile = file;
+
+    if (file.size > COMPRESS_THRESHOLD_BYTES) {
+      try {
+        nextFile = await compressImage(file);
+        showSuccessToast('图片已自动压缩');
+      } catch (error) {
+        showFailToast(error.message || '图片压缩失败');
+        event.target.value = '';
+        clearSelectedImage();
+        return;
+      }
+    }
+
+    if (nextFile.size > MAX_IMAGE_SIZE_BYTES) {
+      showFailToast('图片压缩后仍超过 1MB，请换一张图片');
+      event.target.value = '';
+      clearSelectedImage();
+      return;
+    }
+
+    revokePreviewUrl();
+    selectedImage.value = nextFile;
+    imagePreviewUrl.value = URL.createObjectURL(nextFile);
+  })();
+}
+
+function getCurrentLocation() {
   if (!navigator.geolocation) {
     showFailToast('当前浏览器不支持定位');
     return;
@@ -95,8 +283,8 @@ const getCurrentLocation = () => {
     ({ coords }) => {
       form.lat = coords.latitude;
       form.lng = coords.longitude;
-      locationText.value = '';
       locating.value = false;
+      locationText.value = '';
       showSuccessToast('定位成功');
     },
     (error) => {
@@ -126,13 +314,20 @@ const getCurrentLocation = () => {
       maximumAge: 0,
     }
   );
-};
+}
 
-onMounted(() => {
+function resetForm() {
+  form.name = '';
+  form.description = '';
+  form.lat = null;
+  form.lng = null;
+  submitResult.value = '';
+  locationText.value = '';
+  clearSelectedImage();
   getCurrentLocation();
-});
+}
 
-const handleSubmit = async () => {
+async function handleSubmit() {
   if (!isSupabaseConfigured()) {
     showFailToast('未检测到 Supabase 配置，请检查 .env.local');
     return;
@@ -165,18 +360,14 @@ const handleSubmit = async () => {
 
   const lat = Number(form.lat);
   const lng = Number(form.lng);
-
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     showFailToast('定位结果无效，请刷新重试');
     return;
   }
 
-  const supabase = getSupabaseClient();
   submitting.value = true;
   submitResult.value = '';
-
-  let imageUrl = null;
-
+  const supabase = getSupabaseClient();
   const fileExt = selectedImage.value.name.split('.').pop() || 'jpg';
   const filePath = `ugc/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
 
@@ -189,16 +380,13 @@ const handleSubmit = async () => {
 
   if (uploadError) {
     submitting.value = false;
-    submitResult.value = `图片上传失败：${uploadError.message}`;
+    submitResult.value = `图片上传失败: ${uploadError.message}`;
     showFailToast('图片上传失败');
     return;
   }
 
-  const { data: publicUrlData } = supabase.storage
-    .from('ugc-images')
-    .getPublicUrl(filePath);
-
-  imageUrl = publicUrlData.publicUrl;
+  const { data: publicUrlData } = supabase.storage.from('ugc-images').getPublicUrl(filePath);
+  const imageUrl = publicUrlData.publicUrl;
 
   const { data, error } = await supabase
     .from('ugc_pois')
@@ -208,7 +396,7 @@ const handleSubmit = async () => {
         name: form.name.trim(),
         lat,
         lng,
-        description: form.description.trim() || null,
+        description: form.description.trim(),
         image_url: imageUrl,
       },
     ])
@@ -218,15 +406,25 @@ const handleSubmit = async () => {
   submitting.value = false;
 
   if (error) {
-    submitResult.value = `提交失败：${error.message}`;
+    submitResult.value = `提交失败: ${error.message}`;
     showFailToast('提交失败');
     return;
   }
 
-  submitResult.value = `提交成功：${data.name}`;
+  submitResult.value = `提交成功: ${data.name}`;
   showSuccessToast('提交成功');
+  emit('submitted', data);
   resetForm();
-};
+}
+
+onMounted(() => {
+  getCurrentLocation();
+});
+
+onBeforeUnmount(() => {
+  revokePreviewUrl();
+  closeCrop();
+});
 </script>
 
 <template>
@@ -253,7 +451,7 @@ const handleSubmit = async () => {
       <label class="upload-card" for="ugc-image-input">
         <span class="upload-title">{{ selectedImage ? '更换图片' : '上传图片' }}</span>
         <span class="upload-hint">
-          {{ selectedImage ? selectedImage.name : '选择一张景点照片作为预览图（5MB以内）' }}
+          {{ selectedImage ? selectedImage.name : '选择一张景点照片作为预览图（1MB以内，超过将自动压缩）' }}
         </span>
       </label>
       <input
@@ -267,9 +465,10 @@ const handleSubmit = async () => {
 
       <div v-if="imagePreviewUrl" class="preview-wrap">
         <img :src="imagePreviewUrl" alt="景点预览图" class="image-preview" />
-        <Button plain type="default" size="small" @click="clearSelectedImage">
-          撤回图片
-        </Button>
+        <div class="preview-actions">
+          <Button plain type="primary" size="small" @click="openCropper">框选裁剪</Button>
+          <Button plain type="default" size="small" @click="clearSelectedImage">撤回图片</Button>
+        </div>
       </div>
     </div>
 
@@ -278,13 +477,42 @@ const handleSubmit = async () => {
     </Button>
 
     <p v-if="submitResult" class="result">{{ submitResult }}</p>
+
+    <div v-if="cropOpen" class="crop-mask" @pointerup="endCrop">
+      <div class="crop-dialog">
+        <div
+          ref="cropContainerRef"
+          class="crop-stage"
+          @pointerdown.prevent="startCrop"
+          @pointermove.prevent="updateCrop"
+          @pointerleave="endCrop"
+        >
+          <img ref="cropImageRef" :src="cropSourceUrl" alt="裁剪图片" class="crop-image" draggable="false" />
+          <div
+            v-if="cropSelection.width > 0 && cropSelection.height > 0"
+            class="crop-box"
+            :style="{
+              left: `${cropSelection.x}px`,
+              top: `${cropSelection.y}px`,
+              width: `${cropSelection.width}px`,
+              height: `${cropSelection.height}px`,
+            }"
+          />
+        </div>
+        <p class="crop-tip">在图片上拖动鼠标框选要保留的区域。</p>
+        <div class="crop-actions">
+          <Button plain type="default" @click="closeCrop">取消</Button>
+          <Button type="primary" @click="applyCrop">应用裁剪</Button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .ugc-submit {
   padding: 16px;
-  background: #ffffff;
+  background: #fff;
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
@@ -355,15 +583,76 @@ const handleSubmit = async () => {
 .image-preview {
   display: block;
   width: 100%;
-  max-height: 220px;
-  margin-top: 12px;
-  object-fit: cover;
+  max-height: 260px;
+  object-fit: contain;
+  background: #f8fafc;
   border-radius: 12px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .result {
   margin: 12px 0 0;
   font-size: 14px;
   color: #2563eb;
+}
+
+.crop-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.crop-dialog {
+  width: min(720px, 100%);
+  padding: 16px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
+}
+
+.crop-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #0f172a;
+  touch-action: none;
+}
+
+.crop-image {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  user-select: none;
+}
+
+.crop-box {
+  position: absolute;
+  border: 2px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.18);
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.35);
+}
+
+.crop-tip {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 </style>
