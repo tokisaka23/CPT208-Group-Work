@@ -85,7 +85,7 @@ const isPlaceholder = computed(() => currentImage.value === placeholderImage.val
       <span v-if="item.badge" class="ink-card__badge">{{ item.badge }}</span>
     </div>
 
-    <div class="ink-card__body">
+    <div :class="['ink-card__body', { 'ink-card__body--with-detail': item.path }]">
       <div class="ink-card__meta">
         <span v-if="item.eyebrow" class="meta-chip">{{ item.eyebrow }}</span>
         <span v-for="meta in item.meta || []" :key="meta" class="meta-chip">{{ meta }}</span>
@@ -94,6 +94,7 @@ const isPlaceholder = computed(() => currentImage.value === placeholderImage.val
       <h3 class="ink-card__title">{{ item.title }}</h3>
       <p v-if="item.subtitle" class="ink-card__subtitle">{{ item.subtitle }}</p>
       <p class="ink-card__description">{{ item.description }}</p>
+      <RouterLink v-if="item.path" :to="item.path" class="garden-detail-link">入园游览 <span>➔</span></RouterLink>
 
       <ul v-if="visibleHighlights.length" class="ink-card__highlights">
         <li v-for="highlight in visibleHighlights" :key="highlight">{{ highlight }}</li>
@@ -111,6 +112,8 @@ const isPlaceholder = computed(() => currentImage.value === placeholderImage.val
   --card-accent: rgba(61, 55, 51, 0.7);
   --card-soft: rgba(61, 55, 51, 0.08);
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line-soft);
   border-radius: 28px;
@@ -222,6 +225,9 @@ const isPlaceholder = computed(() => currentImage.value === placeholderImage.val
 }
 
 .ink-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   padding: 1.3rem 1.3rem 1.45rem;
 }
 
@@ -257,7 +263,34 @@ const isPlaceholder = computed(() => currentImage.value === placeholderImage.val
 
 .ink-card__description {
   margin: 0.8rem 0 0;
+  flex-grow: 1;
   color: var(--ink-700);
+}
+
+.garden-detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  align-self: flex-end;
+  margin-top: 16px;
+  color: var(--celadon-700);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.garden-detail-link span {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.garden-detail-link:hover {
+  color: var(--cinnabar-600);
+}
+
+.garden-detail-link:hover span {
+  transform: translateX(4px);
 }
 
 .ink-card__highlights {

@@ -24,9 +24,11 @@ const gardenMethods = [
       <div class="section-header">
         <div>
           <p class="eyebrow">Classical Gardens</p>
-          <h1 class="section-title">古典园林页，把青瓷绿轻轻铺进纸面，让苏州的生机带一点幽润。</h1>
+          <div class="gardens-title-frame">
+            <h1 class="section-title">借一窗幽绿，藏半部江南</h1>
+          </div>
           <p class="section-lead">
-            延续平江主线的静气，但把整体纸色微微推向幽绿：让白墙、水石、树影与花窗，在更柔和的底色里显得清朗而有呼吸感。
+            不出城郭而获山水之怡。将自然山水浓缩于方寸之间，让脚步和心跳随着回廊一起慢下来。
           </p>
         </div>
         <div class="section-note garden-note">
@@ -62,6 +64,7 @@ const gardenMethods = [
 
 <style scoped>
 .gardens-page {
+  --garden-accent: 95, 127, 114;
   position: relative;
 }
 
@@ -72,8 +75,8 @@ const gardenMethods = [
   height: 16rem;
   border-radius: 32px;
   background:
-    radial-gradient(circle at 20% 30%, rgba(95, 127, 114, 0.18), transparent 44%),
-    linear-gradient(180deg, rgba(95, 127, 114, 0.08), rgba(95, 127, 114, 0));
+    radial-gradient(circle at 20% 30%, rgba(var(--garden-accent), 0.18), transparent 44%),
+    linear-gradient(180deg, rgba(var(--garden-accent), 0.08), rgba(var(--garden-accent), 0));
   pointer-events: none;
   z-index: -1;
 }
@@ -82,9 +85,53 @@ const gardenMethods = [
   padding: 1.2rem 0 0;
 }
 
+.gardens-title-frame {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  margin-top: 0.1rem;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem 2rem;
+  border: 1px solid rgba(var(--garden-accent), 0.22);
+  border-radius: 26px;
+  background: linear-gradient(135deg, rgba(var(--garden-accent), 0.08), rgba(255, 255, 255, 0.78));
+  box-shadow: 0 20px 44px rgba(95, 127, 114, 0.08);
+  box-sizing: border-box;
+}
+
+.gardens-title-frame::before,
+.gardens-title-frame::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  opacity: 0.9;
+}
+
+.gardens-title-frame::before {
+  top: 12px;
+  left: 12px;
+  border-top: 1px solid rgba(var(--garden-accent), 0.72);
+  border-left: 1px solid rgba(var(--garden-accent), 0.72);
+}
+
+.gardens-title-frame::after {
+  right: 12px;
+  bottom: 12px;
+  border-right: 1px solid rgba(var(--garden-accent), 0.72);
+  border-bottom: 1px solid rgba(var(--garden-accent), 0.72);
+}
+
+.gardens-title-frame .section-title {
+  color: rgb(54, 82, 70);
+  margin: 0;
+  font-size: clamp(32px, 4vw, 46px);
+  letter-spacing: 0.05em;
+}
+
 .garden-note {
-  border-left-color: rgba(95, 127, 114, 0.32);
-  background: rgba(95, 127, 114, 0.06);
+  border-left-color: rgba(var(--garden-accent), 0.32);
+  background: rgba(var(--garden-accent), 0.06);
 }
 
 .garden-note strong {
@@ -103,7 +150,7 @@ const gardenMethods = [
 
 .method-note {
   padding: 1.15rem 1.2rem;
-  border: 1px solid rgba(95, 127, 114, 0.16);
+  border: 1px solid rgba(var(--garden-accent), 0.16);
   border-radius: 24px;
   background: rgba(248, 252, 249, 0.9);
   box-shadow: 0 18px 36px rgba(95, 127, 114, 0.08);
@@ -123,6 +170,17 @@ const gardenMethods = [
 @media (max-width: 980px) {
   .three-notes-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .gardens-title-frame {
+    max-width: 100%;
+    padding: 1.2rem 1.5rem;
+  }
+
+  .gardens-title-frame .section-title {
+    font-size: 28px;
   }
 }
 </style>

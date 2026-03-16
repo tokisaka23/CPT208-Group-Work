@@ -1,5 +1,8 @@
 <script setup>
 import GardenDetailPage from '../components/GardenDetailPage.vue';
+import { resolveGardenGalleryImage, resolveGardenHeroImage } from '../data/gardenImages';
+
+const slug = 'zhuozhengyuan';
 
 const garden = {
   kicker: '经典入门园林',
@@ -7,10 +10,28 @@ const garden = {
   englishName: 'The Humble Administrator’s Garden',
   intro:
     '如果你想第一次就看懂苏州园林，拙政园很适合作为起点。它的水面开阔、亭榭舒展，适合先从大空间建立整体感，再慢慢进入细部。',
-  heroImage:
+  heroImage: resolveGardenHeroImage(
+    slug,
     'https://images.unsplash.com/photo-1611288618898-e2a93f848cf6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600&dpr=2&auto=format',
+  ),
   heroAlt: '拙政园园林景观',
-  backHref: '#home',
+  design: {
+    variant: 'zhuozheng',
+    accent: '#5F7F72',
+    accentRgb: '95, 127, 114',
+    secondary: '#7B9A8D',
+    secondaryRgb: '123, 154, 141',
+    watermark: '闊',
+    heroImagePosition: 'center 42%',
+    heroQuote: '水面先开，心也就慢下来。',
+    heroCaption: '拙政园适合先看“大势”，再回头读细节与框景。',
+    galleryTitle: '横向展开：一卷水院',
+    galleryIntro: '横向轻扫，像展开手卷一样，让视线沿水面与亭榭慢慢延伸。',
+    highlightIntro: '它的“开阔”并不是空，而是让景与人都有喘息空间。',
+    stepperIntro: '把行走当作呼吸：先展开，再收拢，再停顿。',
+    tipsIntro: '拙政园的美常在“回头一眼”。给自己留一点停顿的空白。',
+  },
+  backHref: '/',
   badges: ['适合第一次来苏州', '水院视野开阔', '慢游友好'],
   facts: [
     { label: '推荐停留', value: '2 - 3 小时' },
@@ -54,29 +75,71 @@ const garden = {
     '如果人流较多，尽量不要跟着人群节奏赶路，慢下来会更容易发现细节。',
     '拍照时可多利用窗框、廊柱和倒影，它们能自然形成东方画面的层次。',
   ],
+  gallery: [
+    {
+      ratio: 'panorama',
+      title: '水院开卷',
+      caption: '先把视线放远，池水会替你把空间拉开。',
+      src: resolveGardenGalleryImage(
+        slug,
+        0,
+        'https://images.unsplash.com/photo-1611288618898-e2a93f848cf6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=2400&dpr=2&auto=format',
+      ),
+    },
+    {
+      ratio: 'portrait',
+      title: '窗下取景',
+      caption: '贴近长窗与廊柱，细节会自然出现。',
+      src: resolveGardenGalleryImage(
+        slug,
+        1,
+        'https://images.unsplash.com/photo-1564495562478-5d593d7a7d2f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600&dpr=2&auto=format',
+      ),
+    },
+    {
+      ratio: 'landscape',
+      title: '亭榭停顿',
+      caption: '停下 30 秒，你会听见水面把节奏放慢。',
+      src: resolveGardenGalleryImage(
+        slug,
+        2,
+        'https://images.unsplash.com/photo-1508599589929-6d3d118b5043?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800&dpr=2&auto=format',
+      ),
+    },
+    {
+      ratio: 'square',
+      title: '借景与留白',
+      caption: '把留白当成画面的呼吸，它会让景更有层次。',
+      src: resolveGardenGalleryImage(
+        slug,
+        3,
+        'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1400&dpr=2&auto=format',
+      ),
+    },
+  ],
   relatedGardens: [
     {
       kicker: '下一站推荐',
       label: '留园',
       description: '如果你想看更连续的廊道和更强的转折感，接着看留园会很顺。',
-      href: '#/gardens/liuyuan',
+      href: '/liu',
     },
     {
       kicker: '夜游气质',
       label: '网师园',
       description: '想体验更静的尺度和更含蓄的空间气质，可以继续看网师园。',
-      href: '#/gardens/wangshiyuan',
+      href: '/wangshi',
     },
     {
       kicker: '回到首页',
       label: '继续浏览主页面',
       description: '返回首页后，你还可以查看推荐路线、园林札记与更多服务。',
-      href: '#home',
+      href: '/',
     },
   ],
   nextGarden: {
     label: '留园',
-    href: '#/gardens/liuyuan',
+    href: '/liu',
   },
 };
 </script>

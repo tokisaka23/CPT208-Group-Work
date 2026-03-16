@@ -1,5 +1,6 @@
 // --- 原始卡片数据（来自你原先单页的 featuredGardens / museumsData / heritageData） ---
 import kunquMuseumImage from '../assets/kunqu-museum.jpg';
+import { resolveGardenCardImage ,resolveGardenGalleryImage} from './gardenImages';
 
 export const featuredGardens = [
   {
@@ -11,8 +12,11 @@ export const featuredGardens = [
     distance: '📍 距主街 50米',
     rating: '4.9',
     description: '以水为脉、以亭为骨，园内形成“虽由人作，宛自天开”的经典空间秩序。',
-    image:
+    path: '/zhuozheng',
+    image: resolveGardenCardImage(
+      'zhuozhengyuan',
       'https://images.unsplash.com/photo-1611288618898-e2a93f848cf6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600&dpr=2&auto=format',
+    ),
   },
   {
     slug: 'liuyuan',
@@ -23,8 +27,12 @@ export const featuredGardens = [
     distance: '📍 距主街 900米',
     rating: '4.8',
     description: '长廊串联山水、厅堂与花木，节奏舒展，层次细腻，是“移步换景”的代表。',
-    image:
+    path: '/liu',
+    gallery: [0, 1, 2].map(i => resolveGardenGalleryImage('liuyuan', i)),
+    image: resolveGardenCardImage(
+      'liuyuan',
       'https://images.unsplash.com/photo-1771937820345-6aced121dba7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600&dpr=2&auto=format',
+    ),
   },
   {
     slug: 'wangshiyuan',
@@ -35,8 +43,12 @@ export const featuredGardens = [
     distance: '📍 距主街 650米',
     rating: '4.9',
     description: '以紧凑尺度营造出丰富景深，夜游时更显静谧含蓄，极具东方诗性。',
-    image:
+    path: '/wangshi',
+    gallery: [0, 1, 2, 3].map(i => resolveGardenGalleryImage('wangshiyuan', i)),
+    image: resolveGardenCardImage(
+      'wangshiyuan',
       'https://images.unsplash.com/photo-1697832245666-78c870b29813?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600&dpr=2&auto=format',
+    ),
   },
 ];
 
@@ -111,8 +123,10 @@ export const gardenCards = featuredGardens.map((garden) => ({
   subtitle: garden.location,
   meta: [garden.distance, `评分 ${garden.rating}`],
   description: garden.description,
+  path: garden.path,
   image: garden.image,
   slug: garden.slug,
+  gallery: garden.gallery,
 }));
 
 export const museumCards = museumsData.map((museum) => ({
@@ -146,8 +160,10 @@ export const chapterCards = [
     subtitle: '在花窗与水院之间读懂苏州的静',
     meta: ['框景', '回廊', '移步换景'],
     description: '从拙政园、留园到网师园，建立一条由开阔到幽深、由大景到细部的观看路径。',
-    image:
+    image: resolveGardenCardImage(
+      'zhuozhengyuan',
       'https://images.unsplash.com/photo-1611288618898-e2a93f848cf6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600&dpr=2&auto=format',
+    ),
     to: '/gardens',
     actionLabel: '步入园林',
   },

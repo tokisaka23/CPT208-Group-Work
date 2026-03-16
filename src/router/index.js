@@ -14,6 +14,24 @@ const routes = [
     meta: { title: '古典园林' },
   },
   {
+    path: '/zhuozheng',
+    name: 'zhuozhengyuan',
+    component: () => import('../views/ZhuozhengyuanView.vue'),
+    meta: { title: '拙政园' },
+  },
+  {
+    path: '/liu',
+    name: 'liuyuan',
+    component: () => import('../views/LiuyuanView.vue'),
+    meta: { title: '留园' },
+  },
+  {
+    path: '/wangshi',
+    name: 'wangshiyuan',
+    component: () => import('../views/WangshiyuanView.vue'),
+    meta: { title: '网师园' },
+  },
+  {
     path: '/museums',
     name: 'museums',
     component: () => import('../views/Museums.vue'),

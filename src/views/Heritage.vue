@@ -9,9 +9,11 @@ import { heritageCards, heritageSteps } from '../data/siteContent';
       <div class="section-header heritage-header__grid">
         <div>
           <p class="eyebrow">Living Heritage</p>
-          <h1 class="section-title">非遗市井页，把版式收紧一些，让平江路的烟火气更贴身、更热闹。</h1>
+          <div class="heritage-title-frame">
+            <h1 class="section-title">巷陌藏烟火，吴侬软语醉人</h1>
+          </div>
           <p class="section-lead">
-            这里不再强调大留白，而是适度提高信息密度：让吃、听、买、逛的节奏更像真实街巷，保留繁华却不失秩序。
+            街巷深处是传了几代的非遗手艺与老字号。在升腾的热气与喧闹声中，感受苏州最抚凡人心的烟火气。
           </p>
         </div>
         <div class="heritage-steps">
@@ -62,10 +64,87 @@ import { heritageCards, heritageSteps } from '../data/siteContent';
 <style scoped>
 .heritage-page {
   --tight-gap: 0.95rem;
+  --market-accent: 146, 98, 55;
+  position: relative;
+}
+
+.heritage-page::before {
+  content: '';
+  position: absolute;
+  inset: 1.1rem 0 auto;
+  height: 17rem;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(var(--market-accent), 0.22), transparent 38%),
+    linear-gradient(180deg, rgba(var(--market-accent), 0.08), rgba(var(--market-accent), 0));
+  pointer-events: none;
+  z-index: -1;
+}
+
+.heritage-header {
+  position: relative;
+  padding-top: 0.9rem;
+}
+
+.heritage-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.45rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--market-accent), 0.38), transparent);
 }
 
 .heritage-header__grid {
   align-items: start;
+}
+
+.heritage-title-frame {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  writing-mode: horizontal-tb;
+  -webkit-writing-mode: horizontal-tb;
+  margin-top: 0.1rem;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem 2rem;
+  border: 1px solid rgba(var(--market-accent), 0.22);
+  border-radius: 26px;
+  background: linear-gradient(135deg, rgba(var(--market-accent), 0.14), rgba(255, 255, 255, 0.78));
+  box-shadow: 0 20px 44px rgba(146, 98, 55, 0.1);
+  box-sizing: border-box;
+}
+
+.heritage-title-frame::before,
+.heritage-title-frame::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  opacity: 0.9;
+}
+
+.heritage-title-frame::before {
+  top: 12px;
+  left: 12px;
+  border-top: 1px solid rgba(var(--market-accent), 0.72);
+  border-left: 1px solid rgba(var(--market-accent), 0.72);
+}
+
+.heritage-title-frame::after {
+  right: 12px;
+  bottom: 12px;
+  border-right: 1px solid rgba(var(--market-accent), 0.72);
+  border-bottom: 1px solid rgba(var(--market-accent), 0.72);
+}
+
+.heritage-title-frame .section-title {
+  color: rgb(109, 67, 36);
+  writing-mode: horizontal-tb;
+  margin: 0;
+  font-size: clamp(32px, 4vw, 46px);
+  letter-spacing: 0.05em;
 }
 
 .heritage-steps {
@@ -134,6 +213,15 @@ import { heritageCards, heritageSteps } from '../data/siteContent';
 }
 
 @media (max-width: 640px) {
+  .heritage-title-frame {
+    max-width: 100%;
+    padding: 1.2rem 1.5rem;
+  }
+
+  .heritage-title-frame .section-title {
+    font-size: 28px;
+  }
+
   .bustle-grid {
     grid-template-columns: 1fr;
   }

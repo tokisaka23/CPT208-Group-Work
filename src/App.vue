@@ -253,36 +253,6 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
         </RouterLink>
 
         <nav class="site-nav" aria-label="主导航">
-          <button
-            v-for="feature in featureButtons"
-            :key="feature.id"
-            type="button"
-            class="nav-link"
-            @click="openFeature(feature.id)"
-          >
-            <span class="nav-link__icon" aria-hidden="true">
-              <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M8.75 10.25a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5Zm6.5 1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm-10 7a4.75 4.75 0 0 1 7 0m1.5 0a4 4 0 0 1 5.75-.75"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.6"
-                />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 4.75 13.68 8.7l4.27.36-3.25 2.77.98 4.12L12 13.8l-3.68 2.15.98-4.12-3.25-2.77 4.27-.36L12 4.75Zm0 0v-1.5m0 17.5v-1.5m8-7.25h1.5m-19 0H4"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.6"
-                />
-              </svg>
-            </span>
-            <span class="nav-link__text">{{ feature.label }}</span>
-          </button>
-
           <RouterLink v-for="item in navItems" :key="item.to" :to="item.to" class="nav-link">
             <span class="nav-link__icon" aria-hidden="true">
               <svg v-if="item.icon === 'pingjiang'" viewBox="0 0 24 24" fill="none">
@@ -363,6 +333,36 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
             </span>
             <span class="nav-link__text">{{ item.label }}</span>
           </RouterLink>
+
+          <button
+            v-for="feature in featureButtons"
+            :key="feature.id"
+            type="button"
+            class="nav-link"
+            @click="openFeature(feature.id)"
+          >
+            <span class="nav-link__icon" aria-hidden="true">
+              <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M8.75 10.25a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5Zm6.5 1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm-10 7a4.75 4.75 0 0 1 7 0m1.5 0a4 4 0 0 1 5.75-.75"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.6"
+                />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 4.75 13.68 8.7l4.27.36-3.25 2.77.98 4.12L12 13.8l-3.68 2.15.98-4.12-3.25-2.77 4.27-.36L12 4.75Zm0 0v-1.5m0 17.5v-1.5m8-7.25h1.5m-19 0H4"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.6"
+                />
+              </svg>
+            </span>
+            <span class="nav-link__text">{{ feature.label }}</span>
+          </button>
         </nav>
 
         <div class="header-actions">
@@ -393,10 +393,25 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
       </RouterView>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <p class="footer-title">一街读姑苏，四页见气韵。</p>
-        <p class="footer-copy">以宣纸白为底，以水墨黑为骨，以青瓷绿与朱砂红轻轻点醒苏州的静与雅。</p>
+    <footer class="global-footer">
+      <div class="footer-content">
+        <section class="footer-signature" aria-label="页脚落款">
+          <div class="footer-signature__headline">
+            <span class="seal-stamp">苏</span>
+            <h3>一街读姑苏，四页见气韵。</h3>
+          </div>
+          <p>以宣纸白为底，以水墨黑为骨，以青瓷绿与朱砂红轻轻点醒苏州的静与雅。</p>
+        </section>
+
+        <nav class="footer-nav" aria-label="页脚导航">
+          <RouterLink v-for="item in navItems" :key="`footer-${item.to}`" :to="item.to" class="footer-link">
+            {{ item.label }}
+          </RouterLink>
+        </nav>
+      </div>
+
+      <div class="footer-bottom">
+        <p>© 2026 Jiangnan Gardens. 姑苏漫游指南 保留所有权利。</p>
       </div>
     </footer>
 
@@ -560,6 +575,131 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
 </template>
 
 <style>
+.global-footer {
+  --accent-red: #a33b29;
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid rgba(28, 25, 23, 0.06);
+  padding-top: 64px;
+  background: rgba(250, 250, 249, 0.78);
+}
+
+.global-footer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-radial-gradient(circle at 0 0, rgba(28, 25, 23, 0.02) 0 1px, transparent 1px 6px),
+    radial-gradient(circle at 18% 22%, rgba(159, 63, 52, 0.06), transparent 54%),
+    radial-gradient(circle at 84% 12%, rgba(95, 127, 114, 0.055), transparent 52%),
+    repeating-linear-gradient(18deg, rgba(28, 25, 23, 0.028) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(-14deg, rgba(28, 25, 23, 0.022) 0 1px, transparent 1px 11px);
+  opacity: 0.78;
+  mix-blend-mode: multiply;
+}
+
+.footer-content,
+.footer-bottom {
+  width: min(100%, calc(var(--max-width) + 3rem));
+  margin: 0 auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.footer-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  gap: 2.5rem;
+  align-items: start;
+  padding-bottom: 2rem;
+}
+
+.footer-signature {
+  display: grid;
+  gap: 0.85rem;
+  padding-left: 20px;
+  border-left: 1px solid rgba(28, 25, 23, 0.1);
+}
+
+.footer-signature__headline {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.seal-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 4px;
+  background: var(--accent-red, #a33b29);
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 0.88rem;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(163, 59, 41, 0.18);
+}
+
+.footer-signature h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.footer-signature p {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--ink-600);
+}
+
+.footer-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1.6rem;
+  align-content: start;
+  justify-items: start;
+  padding-top: 0.1rem;
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-600);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  transition:
+    color 0.32s ease,
+    transform 0.32s ease;
+}
+
+.footer-link:hover,
+.footer-link.router-link-exact-active {
+  color: var(--celadon-700);
+  transform: translateX(-4px);
+}
+
+.footer-bottom {
+  padding-top: 1rem;
+  padding-bottom: 1.6rem;
+  border-top: 1px solid rgba(28, 25, 23, 0.06);
+}
+
+.footer-bottom p {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+}
+
 .fade-enter-active {
   transition:
     opacity 0.96s cubic-bezier(0.22, 1, 0.36, 1),
@@ -934,6 +1074,22 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
   .dialog__primary,
   .dialog__ghost {
     width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .global-footer {
+    padding-top: 52px;
+  }
+
+  .footer-content {
+    grid-template-columns: 1fr;
+    gap: 1.8rem;
+  }
+
+  .footer-nav {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 }
 </style>
