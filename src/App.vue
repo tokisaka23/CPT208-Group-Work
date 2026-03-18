@@ -1,8 +1,12 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+import FriendsPage from './pages/friends/FriendsPage.vue';
+import { aiApi, authApi, uploadApi } from './services/api';
+import { isSupabaseConfigured } from './services/supabase/clientRuntime';
 
 const route = useRoute();
+const router = useRouter();
 
 const navItems = [
   { label: '平江古街', to: '/', icon: 'pingjiang' },
@@ -14,6 +18,7 @@ const navItems = [
 const featureButtons = [
   { id: 'friends', label: '好友同游' },
   { id: 'ai', label: 'AI 伴游' },
+  { id: 'upload', label: '上传照片' },
 ];
 
 const featurePanels = {
@@ -26,6 +31,11 @@ const featurePanels = {
     label: 'AI 伴游',
     eyebrow: 'Smart Guide',
     description: '根据你当前打开的页面给出导览建议，也可以直接问它“先看哪里、怎么走更顺”。',
+  },
+  upload: {
+    label: '上传照片',
+    eyebrow: 'Photo Upload',
+    description: '把你在园林里的随手拍传上来，上传成功后会在这里回显。',
   },
 };
 
@@ -74,42 +84,214 @@ const friendTrip = reactive({
 const inviteFeedback = ref('');
 const friendHighlights = computed(() => currentJourney.value.focus);
 const friendSummary = computed(() => `${pageContextLabel.value} · ${currentJourney.value.pace}`);
-const guidePrompts = computed(() => currentJourney.value.prompts);
-
 const aiDraft = ref('');
-const aiMessages = ref([]);
-const isAiLoading = ref(false);
+const aiConversations = ref([]);
+const activeAiConversationId = ref('');
+const aiLoadingConversationId = ref('');
 const aiError = ref('');
+const aiChatScroller = ref(null);
+const aiComposerInput = ref(null);
+const isAiComposing = ref(false);
 
-const buildAiGreeting = () =>
-  `你现在浏览的是「${pageContextLabel.value}」。我可以按当前页面告诉你先看哪里、怎么走更顺，以及哪些细节最值得慢下来。`;
+const MAX_AI_CONTEXT_MESSAGES = 12;
+const AI_GREETING_HINT = '当前页智能导览';
+const DEFAULT_AI_CONVERSATION_TITLE = '新建对话';
 
-const buildOfflineAiReply = (prompt) => {
+function createAiMessageId(prefix) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function focusAiComposer() {
+  nextTick(() => {
+    aiComposerInput.value?.focus?.();
+  });
+}
+
+function normalizeAiText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateAiText(value, maxLength = 20) {
+  const normalized = normalizeAiText(value);
+
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
+}
+
+function getJourneyByContextKey(contextKey) {
+  return routeJourneys[contextKey] || routeJourneys['/'];
+}
+
+const activeAiConversation = computed(
+  () => aiConversations.value.find((item) => item.id === activeAiConversationId.value) || null,
+);
+const aiMessages = computed(() => activeAiConversation.value?.messages || []);
+const isAiLoading = computed(() => Boolean(aiLoadingConversationId.value));
+const isActiveAiConversationLoading = computed(
+  () => aiLoadingConversationId.value === activeAiConversationId.value,
+);
+const activeAiJourney = computed(() => getJourneyByContextKey(activeAiConversation.value?.contextKey || route.fullPath));
+const activeAiPageLabel = computed(() => activeAiConversation.value?.pageLabel || pageContextLabel.value);
+const activeAiPrompts = computed(() => activeAiJourney.value.prompts || currentJourney.value.prompts);
+const aiShouldShowStarter = computed(() => !aiMessages.value.some((item) => item.role === 'user'));
+
+function buildAiGreeting(pageLabel = pageContextLabel.value) {
+  return `你现在浏览的是「${pageLabel}」。我可以按当前页面告诉你先看哪里、怎么走更顺，以及哪些细节最值得慢下来。`;
+}
+
+function buildOfflineAiReply(prompt, conversation = activeAiConversation.value) {
+  const pageLabel = conversation?.pageLabel || pageContextLabel.value;
+  const journey = getJourneyByContextKey(conversation?.contextKey || route.fullPath);
+
   if (prompt.includes('先') || prompt.includes('怎么走')) {
-    return `如果你现在在「${pageContextLabel.value}」，建议 ${currentJourney.value.pace} 重点可以放在：${currentJourney.value.focus.slice(0, 2).join('、')}。`;
+    return `如果你现在在「${pageLabel}」，建议 ${journey.pace} 重点可以放在：${journey.focus.slice(0, 2).join('、')}。`;
   }
 
   if (prompt.includes('拍') || prompt.includes('照片') || prompt.includes('好看')) {
-    return `在「${pageContextLabel.value}」里，更耐看的往往不是正面大景，而是 ${currentJourney.value.focus[0]} 这类有层次的角度。可以先停一分钟，再决定从哪里拍。`;
+    return `在「${pageLabel}」里，更耐看的往往不是正面大景，而是 ${journey.focus[0]} 这类有层次的角度。可以先停一分钟，再决定从哪里拍。`;
   }
 
-  return `现在这页是「${pageContextLabel.value}」。如果想慢游得更顺，可以记住这三个重点：${currentJourney.value.focus.join('、')}。`;
-};
+  return `现在这页是「${pageLabel}」。如果想慢游得更顺，可以记住这三个重点：${journey.focus.join('、')}。`;
+}
+
+function createAiGreetingMessage(pageLabel = pageContextLabel.value) {
+  return {
+    id: createAiMessageId('assistant'),
+    role: 'assistant',
+    content: buildAiGreeting(pageLabel),
+    hint: AI_GREETING_HINT,
+  };
+}
+
+function deriveAiConversationTitle(messages, pageLabel) {
+  const firstUserMessage = messages.find((item) => item.role === 'user');
+  return truncateAiText(firstUserMessage?.content, 18) || `${pageLabel} 导览`;
+}
+
+function deriveAiConversationPreview(conversation) {
+  const lastMessage = [...conversation.messages]
+    .reverse()
+    .find((item) => item.role === 'user' || item.role === 'assistant');
+
+  return truncateAiText(lastMessage?.content, 28) || '从这里继续聊苏州园林。';
+}
+
+function buildConversationMessagesForApi(conversation = activeAiConversation.value) {
+  if (!conversation) {
+    return [];
+  }
+
+  return conversation.messages
+    .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
+    // 初始欢迎语只是 UI 引导，不必回传给模型，避免噪音。
+    .filter((item) => item.hint !== AI_GREETING_HINT)
+    .map((item) => ({ role: item.role, content: item.content }))
+    .filter((item) => String(item.content || '').trim())
+    .slice(-MAX_AI_CONTEXT_MESSAGES);
+}
+
+function scrollAiConversationToBottom(behavior = 'smooth') {
+  nextTick(() => {
+    const scroller = aiChatScroller.value;
+
+    if (!scroller) {
+      return;
+    }
+
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
+      behavior,
+    });
+  });
+}
 
 const ensureAiConversation = (forceReset = false) => {
-  if (forceReset || !aiMessages.value.length) {
-    aiMessages.value = [
-      {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: buildAiGreeting(),
-        hint: '当前页智能导览',
-      },
-    ];
+  if (forceReset || !activeAiConversation.value) {
+    const nextConversation = {
+      id: createAiMessageId('conversation'),
+      title: DEFAULT_AI_CONVERSATION_TITLE,
+      contextKey: route.fullPath,
+      pageLabel: pageContextLabel.value,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [createAiGreetingMessage(pageContextLabel.value)],
+    };
+
+    aiConversations.value = [nextConversation, ...aiConversations.value];
+    activeAiConversationId.value = nextConversation.id;
   }
 
   aiError.value = '';
+  scrollAiConversationToBottom('auto');
+  return activeAiConversation.value;
 };
+
+function ensureAiConversationForCurrentPage(forceReset = false) {
+  if (
+    forceReset ||
+    !activeAiConversation.value ||
+    activeAiConversation.value.contextKey !== route.fullPath
+  ) {
+    return ensureAiConversation(true);
+  }
+
+  return ensureAiConversation();
+}
+
+function moveAiConversationToTop(conversationId) {
+  const conversationIndex = aiConversations.value.findIndex((item) => item.id === conversationId);
+
+  if (conversationIndex <= 0) {
+    return;
+  }
+
+  const nextConversations = [...aiConversations.value];
+  const [conversation] = nextConversations.splice(conversationIndex, 1);
+  nextConversations.unshift(conversation);
+  aiConversations.value = nextConversations;
+}
+
+function syncAiConversationMeta(conversation) {
+  if (!conversation) {
+    return;
+  }
+
+  conversation.updatedAt = Date.now();
+  conversation.title = deriveAiConversationTitle(conversation.messages, conversation.pageLabel);
+  moveAiConversationToTop(conversation.id);
+}
+
+function selectAiConversation(conversationId) {
+  activeAiConversationId.value = conversationId;
+  moveAiConversationToTop(conversationId);
+  aiError.value = '';
+  scrollAiConversationToBottom('auto');
+  focusAiComposer();
+}
+
+function startNewAiConversation() {
+  aiDraft.value = '';
+  ensureAiConversation(true);
+  focusAiComposer();
+}
+
+function handleAiComposerKeydown(event) {
+  if (event?.key !== 'Enter' || event?.shiftKey || event?.isComposing || isAiComposing.value) {
+    return;
+  }
+
+  event.preventDefault();
+  sendAiMessage();
+}
 
 const openFeature = (featureId) => {
   activeFeature.value = featureId;
@@ -120,13 +302,19 @@ const openFeature = (featureId) => {
   }
 
   if (featureId === 'ai') {
-    ensureAiConversation(true);
+    ensureAiConversationForCurrentPage();
+    focusAiComposer();
+  }
+
+  if (featureId === 'upload') {
+    uploadError.value = '';
   }
 };
 
 const closeFeature = () => {
   activeFeature.value = '';
   aiDraft.value = '';
+  uploadError.value = '';
 };
 
 const regenerateInviteCode = () => {
@@ -156,42 +344,52 @@ const sendAiMessage = async (prefilledPrompt = '') => {
     return;
   }
 
-  ensureAiConversation();
-  aiMessages.value = [...aiMessages.value, { id: `user-${Date.now()}`, role: 'user', content: question }];
+  const conversation = ensureAiConversation();
+
+  if (!conversation) {
+    return;
+  }
+
+  conversation.messages.push({ id: createAiMessageId('user'), role: 'user', content: question });
+  syncAiConversationMeta(conversation);
   aiDraft.value = '';
   aiError.value = '';
-  isAiLoading.value = true;
+  aiLoadingConversationId.value = conversation.id;
+  scrollAiConversationToBottom();
+  focusAiComposer();
 
   try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: question,
-        gpsLocation: pageContextLabel.value,
-      }),
+    // 中文注释：这里连接后端千问接口 /api/chat，把用户输入发给后端并拿到 AI 回复。
+    const data = await aiApi.askQianwen({
+      message: question,
+      messages: buildConversationMessagesForApi(conversation),
+      gpsLocation: conversation.pageLabel,
     });
 
-    const data = await response.json().catch(() => ({}));
+    conversation.messages.push({ id: createAiMessageId('assistant'), role: 'assistant', content: data.response });
+    syncAiConversationMeta(conversation);
 
-    if (!response.ok || !data?.response) {
-      throw new Error(data?.error || 'AI 服务暂不可用');
+    if (activeAiConversationId.value === conversation.id) {
+      scrollAiConversationToBottom();
     }
-
-    aiMessages.value = [...aiMessages.value, { id: `assistant-${Date.now()}`, role: 'assistant', content: data.response }];
-  } catch {
-    aiMessages.value = [
-      ...aiMessages.value,
-      {
-        id: `assistant-offline-${Date.now()}`,
-        role: 'assistant',
-        content: buildOfflineAiReply(question),
-        hint: '已切换本地伴游建议',
-      },
-    ];
+  } catch (error) {
+    console.error('[AI] 调用 /api/chat 失败', error);
+    conversation.messages.push({
+      id: createAiMessageId('assistant-offline'),
+      role: 'assistant',
+      content: buildOfflineAiReply(question, conversation),
+      hint: '已切换本地伴游建议',
+    });
+    syncAiConversationMeta(conversation);
     aiError.value = 'AI 接口暂时不可用，已先给你本地伴游建议。';
+    if (activeAiConversationId.value === conversation.id) {
+      scrollAiConversationToBottom();
+    }
   } finally {
-    isAiLoading.value = false;
+    if (aiLoadingConversationId.value === conversation.id) {
+      aiLoadingConversationId.value = '';
+    }
+    focusAiComposer();
   }
 };
 
@@ -202,10 +400,33 @@ watch(
     inviteFeedback.value = '';
 
     if (activeFeature.value === 'ai') {
-      ensureAiConversation(true);
+      ensureAiConversationForCurrentPage(true);
+      focusAiComposer();
     }
   },
 );
+
+watch(
+  activeAiConversationId,
+  () => {
+    scrollAiConversationToBottom('auto');
+  },
+);
+
+watch(
+  () => aiMessages.value.length,
+  (nextLength, prevLength) => {
+    if (nextLength > prevLength) {
+      scrollAiConversationToBottom();
+    }
+  },
+);
+
+watch(isActiveAiConversationLoading, (loading) => {
+  if (loading) {
+    scrollAiConversationToBottom();
+  }
+});
 
 const currentUser = ref(null);
 const isAuthOpen = ref(false);
@@ -214,11 +435,17 @@ const authForm = reactive({
   displayName: '',
   account: '',
   password: '',
+  confirmPassword: '',
 });
+const authSubmitting = ref(false);
+const authFeedback = ref('');
+const authFeedbackType = ref('info');
 
 const openAuthDialog = (mode = 'login') => {
   authMode.value = mode;
   isAuthOpen.value = true;
+  authFeedback.value = '';
+  authFeedbackType.value = 'info';
 };
 
 const closeAuthDialog = () => {
@@ -226,18 +453,194 @@ const closeAuthDialog = () => {
   authForm.displayName = '';
   authForm.account = '';
   authForm.password = '';
+  authForm.confirmPassword = '';
+  authFeedback.value = '';
+  authFeedbackType.value = 'info';
 };
 
-const submitAuth = () => {
-  currentUser.value = {
-    name: authMode.value === 'register' ? authForm.displayName || '平江旅人' : '平江旅人',
-  };
-  closeAuthDialog();
-};
+function validateEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
 
-const avatarLabel = computed(() => currentUser.value?.name?.slice(0, 1) || '游');
-const profileLabel = computed(() => currentUser.value?.name || '登录 / 注册');
-const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客模式'));
+function setAuthFeedback(message, type = 'info') {
+  authFeedback.value = message;
+  authFeedbackType.value = type;
+}
+
+async function submitAuth() {
+  if (authSubmitting.value) {
+    return;
+  }
+
+  const email = authForm.account.trim();
+  const password = authForm.password;
+
+  if (!email) {
+    setAuthFeedback('请输入邮箱。', 'error');
+    return;
+  }
+
+  if (!validateEmail(email)) {
+    setAuthFeedback('邮箱格式不正确。', 'error');
+    return;
+  }
+
+  if (!password) {
+    setAuthFeedback('请输入密码。', 'error');
+    return;
+  }
+
+  if (authMode.value === 'register') {
+    if (!authForm.displayName.trim()) {
+      setAuthFeedback('注册时需要填写昵称。', 'error');
+      return;
+    }
+
+    if (password.length < 6) {
+      setAuthFeedback('密码长度至少 6 位。', 'error');
+      return;
+    }
+
+    if (authForm.confirmPassword && password !== authForm.confirmPassword) {
+      setAuthFeedback('两次输入的密码不一致。', 'error');
+      return;
+    }
+  }
+
+  if (!isSupabaseConfigured()) {
+    setAuthFeedback(
+      '当前还没有配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
+      'warning'
+    );
+    return;
+  }
+
+  authSubmitting.value = true;
+  setAuthFeedback('');
+
+  try {
+    if (authMode.value === 'login') {
+      // 中文注释：这里执行 Supabase Auth 真实登录，并把 access_token 等信息写入 localStorage。
+      const authState = await authApi.login({ email, password });
+      currentUser.value = authState;
+      setAuthFeedback('登录成功，正在进入好友功能。', 'success');
+    } else {
+      // 中文注释：这里执行 Supabase Auth 真实注册，并把会话信息写入 localStorage。
+      const authState = await authApi.register({
+        displayName: authForm.displayName.trim(),
+        email,
+        password,
+      });
+
+      if (authState.requiresEmailConfirmation) {
+        authMode.value = 'login';
+        setAuthFeedback('注册已提交，请先完成邮箱验证，然后再登录。', 'success');
+        return;
+      }
+
+      currentUser.value = authState;
+      setAuthFeedback('注册成功，正在进入好友功能。', 'success');
+    }
+
+    closeAuthDialog();
+    // 中文注释：登录成功后做一次“页面跳转/切换”，这里直接打开好友面板作为跳转效果。
+    openFeature('friends');
+    await router.push(route.fullPath || '/').catch(() => {});
+  } catch (error) {
+    console.error('[Auth] 登录/注册失败', error);
+    setAuthFeedback(error.message || '登录/注册失败，请稍后重试。', 'error');
+  } finally {
+    authSubmitting.value = false;
+  }
+}
+
+async function logout() {
+  try {
+    await authApi.logout();
+  } catch (error) {
+    console.error('[Auth] 退出登录失败', error);
+  } finally {
+    currentUser.value = null;
+    closeAuthDialog();
+  }
+}
+
+const avatarLabel = computed(() => currentUser.value?.username?.slice(0, 1) || '游');
+const profileLabel = computed(() => currentUser.value?.username || '登录 / 注册');
+const profileStatus = computed(() => {
+  if (currentUser.value) {
+    return '已登录';
+  }
+
+  return isSupabaseConfigured() ? '未登录' : '未配置认证';
+});
+
+// 上传图片相关状态
+const selectedImageFile = ref(null);
+const uploadedImageUrl = ref('');
+const isUploadingImage = ref(false);
+const uploadError = ref('');
+
+function handleSelectImage(event) {
+  const file = event?.target?.files?.[0];
+
+  if (!file) {
+    selectedImageFile.value = null;
+    return;
+  }
+
+  selectedImageFile.value = file;
+  uploadError.value = '';
+}
+
+async function submitUploadImage() {
+  if (!selectedImageFile.value || isUploadingImage.value) {
+    return;
+  }
+
+  isUploadingImage.value = true;
+  uploadError.value = '';
+
+  try {
+    const formData = new FormData();
+    formData.append('image', selectedImageFile.value);
+
+    // 中文注释：这里连接后端图片上传接口 /api/ugc，使用 FormData 以 multipart/form-data 发送图片文件。
+    // 注意：使用 fetch/axios 发送 FormData 时，不要手动写死 Content-Type，浏览器会自动补上 boundary。
+    const result = await uploadApi.uploadGardenImage(formData);
+    uploadedImageUrl.value = result?.image_url || result?.imageUrl || '';
+
+    if (!uploadedImageUrl.value) {
+      throw new Error('上传成功但未拿到图片地址，请检查后端返回字段 image_url/imageUrl。');
+    }
+  } catch (error) {
+    console.error('[Upload] 上传图片失败', error);
+    uploadError.value = error.message || '上传失败，请稍后再试。';
+  } finally {
+    isUploadingImage.value = false;
+  }
+}
+
+let authSubscription = null;
+
+onMounted(async () => {
+  try {
+    const restored = await authApi.restore();
+    if (restored?.id) {
+      currentUser.value = restored;
+    }
+  } catch {
+    // 这里不打断用户浏览体验，详细错误在 authApi 内部已有 console.error
+  }
+
+  authSubscription = authApi.subscribe((nextUser) => {
+    currentUser.value = nextUser;
+  });
+});
+
+onUnmounted(() => {
+  authSubscription?.data?.subscription?.unsubscribe?.();
+});
 </script>
 
 <template>
@@ -370,7 +773,7 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
             type="button"
             class="profile-button"
             :aria-label="currentUser ? '打开账户信息' : '打开登录弹窗'"
-            @click="openAuthDialog('login')"
+            @click="openAuthDialog(currentUser ? 'profile' : 'login')"
           >
             <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
               <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
@@ -417,7 +820,7 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
 
     <transition name="veil" appear>
       <div v-if="isFeatureOpen" class="overlay" role="dialog" aria-modal="true" @click.self="closeFeature">
-        <section class="dialog dialog--feature" @click.stop>
+        <section class="dialog dialog--feature" :class="{ 'dialog--ai': activeFeature === 'ai' }" @click.stop>
           <header class="dialog__header">
             <div class="dialog__intro">
               <p class="dialog__eyebrow">{{ activeFeatureInfo?.eyebrow }}</p>
@@ -429,87 +832,168 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
           <p class="dialog__copy">{{ activeFeatureInfo?.description }}</p>
 
           <template v-if="activeFeature === 'friends'">
-            <div class="feature-context">
-              <span>当前同步页面</span>
-              <strong>{{ pageContextLabel }}</strong>
-              <p>{{ friendSummary }}</p>
+            <div v-if="!currentUser" class="feature-context">
+              <span>需要登录</span>
+              <strong>好友功能需要先登录</strong>
+              <p>请先完成真实登录后再添加好友、查看好友列表。</p>
+
+              <div class="dialog__actions">
+                <button type="button" class="dialog__primary" @click="openAuthDialog('login')">去登录</button>
+                <button type="button" class="dialog__ghost" @click="openAuthDialog('register')">去注册</button>
+              </div>
             </div>
 
-            <div class="feature-stat-grid">
-              <article class="feature-stat-card">
-                <span>同游房间</span>
-                <strong>{{ friendTrip.roomCode }}</strong>
-              </article>
-              <article class="feature-stat-card">
-                <span>建议人数</span>
-                <strong>{{ friendTrip.members }} - 4 人</strong>
-              </article>
-              <article class="feature-stat-card">
-                <span>集合点</span>
-                <strong>{{ friendTrip.meetingPoint }}</strong>
-              </article>
-            </div>
-
-            <label class="field field--full">
-              <span>自定义集合点</span>
-              <input v-model.trim="friendTrip.meetingPoint" type="text" placeholder="例如：白塔东路桥边" />
-            </label>
-
-            <ul class="dialog__list">
-              <li v-for="item in friendHighlights" :key="item">{{ item }}</li>
-            </ul>
-
-            <p v-if="inviteFeedback" class="feature-feedback">{{ inviteFeedback }}</p>
-
-            <div class="dialog__actions">
-              <button type="button" class="dialog__primary" @click="copyInviteCode">复制邀请口令</button>
-              <button type="button" class="dialog__ghost" @click="regenerateInviteCode">刷新房间号</button>
+            <div v-else class="friends-embed">
+              <!-- 中文注释：这里嵌入好友页面组件，它会调用后端接口 /api/friends/add 与 /api/friends/list 完成加好友与好友列表。 -->
+              <FriendsPage :show-nav-bar="false" />
             </div>
           </template>
 
           <template v-else-if="activeFeature === 'ai'">
+            <div class="ai-shell">
+              <aside class="ai-sidebar" aria-label="历史会话">
+                <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">
+                  <span aria-hidden="true">+</span>
+                  新建对话
+                </button>
+
+                <div class="ai-sidebar__list" role="list">
+                  <button
+                    v-for="conversation in aiConversations"
+                    :key="conversation.id"
+                    type="button"
+                    role="listitem"
+                    class="ai-sidebar__item"
+                    :class="{ 'is-active': conversation.id === activeAiConversationId }"
+                    @click="selectAiConversation(conversation.id)"
+                  >
+                    <strong class="ai-sidebar__title">{{ conversation.title }}</strong>
+                    <span class="ai-sidebar__subtitle">{{ deriveAiConversationPreview(conversation) }}</span>
+                  </button>
+                </div>
+              </aside>
+
+              <section class="ai-main" aria-label="AI 伴游对话">
+                <header class="ai-main__header">
+                  <div class="ai-main__context">
+                    <span>当前导览页面</span>
+                    <strong>{{ activeAiPageLabel }}</strong>
+                    <p>{{ activeAiJourney.pace }}</p>
+                  </div>
+
+                  <button type="button" class="ai-main__reset" :disabled="isAiLoading" @click="startNewAiConversation">
+                    重置
+                  </button>
+                </header>
+
+                <div class="ai-main__body">
+                  <div class="ai-starters" v-if="aiShouldShowStarter">
+                    <p class="ai-starters__label">你可以从这些问题开始</p>
+                    <div class="prompt-chips">
+                      <button
+                        v-for="prompt in activeAiPrompts"
+                        :key="prompt"
+                        type="button"
+                        class="prompt-chip"
+                        @click="sendAiMessage(prompt)"
+                      >
+                        {{ prompt }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div ref="aiChatScroller" class="ai-chat ai-chat--main" aria-live="polite">
+                    <article
+                      v-for="message in aiMessages"
+                      :key="message.id"
+                      :class="[
+                        'message-row',
+                        message.role === 'user' ? 'message-row--user' : 'message-row--assistant',
+                      ]"
+                    >
+                      <div class="message-avatar" aria-hidden="true">
+                        {{ message.role === 'user' ? '我' : 'AI' }}
+                      </div>
+                      <div
+                        :class="[
+                          'message-bubble',
+                          message.role === 'user' ? 'message-bubble--user' : 'message-bubble--assistant',
+                        ]"
+                      >
+                        <span class="message-bubble__role">{{ message.role === 'user' ? '我' : 'AI 伴游' }}</span>
+                        <p>{{ message.content }}</p>
+                        <small v-if="message.hint">{{ message.hint }}</small>
+                      </div>
+                    </article>
+
+                    <article
+                      v-if="isActiveAiConversationLoading"
+                      class="message-row message-row--assistant message-row--loading"
+                    >
+                      <div class="message-avatar" aria-hidden="true">AI</div>
+                      <div class="message-bubble message-bubble--assistant is-loading">
+                        <span class="message-bubble__role">AI 伴游</span>
+                        <p>正在整理当前页面的慢游建议…</p>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+
+                <p v-if="aiError" class="feature-feedback feature-feedback--ai">{{ aiError }}</p>
+
+                <form class="ai-composer" @submit.prevent="sendAiMessage()">
+                  <label class="ai-composer__field">
+                    <textarea
+                      ref="aiComposerInput"
+                      v-model="aiDraft"
+                      rows="1"
+                      aria-label="输入你的问题"
+                      placeholder="输入问题，Enter 发送，Shift + Enter 换行"
+                      @compositionstart="isAiComposing = true"
+                      @compositionend="isAiComposing = false"
+                      @keydown="handleAiComposerKeydown"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    class="dialog__primary ai-composer__send"
+                    :disabled="isAiLoading || !aiDraft.trim()"
+                  >
+                    发送
+                  </button>
+                </form>
+              </section>
+            </div>
+          </template>
+
+          <template v-else-if="activeFeature === 'upload'">
             <div class="feature-context">
-              <span>当前导览页面</span>
-              <strong>{{ pageContextLabel }}</strong>
-              <p>{{ currentJourney.pace }}</p>
+              <span>上传提示</span>
+              <strong>上传园林照片</strong>
+              <p>选择一张图片后点击上传，后端返回图片地址后会在下方回显。</p>
             </div>
 
-            <div class="prompt-chips">
-              <button v-for="prompt in guidePrompts" :key="prompt" type="button" class="prompt-chip" @click="sendAiMessage(prompt)">
-                {{ prompt }}
-              </button>
-            </div>
-
-            <div class="ai-chat" aria-live="polite">
-              <article
-                v-for="message in aiMessages"
-                :key="message.id"
-                :class="['message-bubble', message.role === 'user' ? 'message-bubble--user' : 'message-bubble--assistant']"
-              >
-                <span class="message-bubble__role">{{ message.role === 'user' ? '我' : 'AI 伴游' }}</span>
-                <p>{{ message.content }}</p>
-                <small v-if="message.hint">{{ message.hint }}</small>
-              </article>
-
-              <article v-if="isAiLoading" class="message-bubble message-bubble--assistant is-loading">
-                <span class="message-bubble__role">AI 伴游</span>
-                <p>正在整理当前页面的慢游建议…</p>
-              </article>
-            </div>
-
-            <p v-if="aiError" class="feature-feedback">{{ aiError }}</p>
-
-            <form class="dialog__form dialog__form--ai" @submit.prevent="sendAiMessage()">
+            <form class="dialog__form" @submit.prevent="submitUploadImage">
               <label class="field field--full">
-                <span>问问当前页面</span>
-                <input v-model.trim="aiDraft" type="text" placeholder="比如：我现在应该先看哪里？" />
+                <span>选择图片文件</span>
+                <input type="file" accept="image/*" @change="handleSelectImage" />
               </label>
 
               <div class="dialog__actions dialog__actions--compact">
-                <button type="submit" class="dialog__primary" :disabled="isAiLoading">发送问题</button>
-                <button type="button" class="dialog__ghost" @click="ensureAiConversation(true)">重置对话</button>
+                <button type="submit" class="dialog__primary" :disabled="!selectedImageFile || isUploadingImage">
+                  {{ isUploadingImage ? '正在上传…' : '开始上传' }}
+                </button>
+                <button type="button" class="dialog__ghost" @click="uploadedImageUrl = ''">清空回显</button>
               </div>
             </form>
+
+            <p v-if="uploadError" class="feature-feedback">{{ uploadError }}</p>
+
+            <div v-if="uploadedImageUrl" class="upload-preview">
+              <p class="upload-preview__label">上传成功回显</p>
+              <img :src="uploadedImageUrl" alt="uploaded" class="upload-preview__image" />
+            </div>
           </template>
         </section>
       </div>
@@ -519,11 +1003,13 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
       <div v-if="isAuthOpen" class="overlay" role="dialog" aria-modal="true" @click.self="closeAuthDialog">
         <section class="dialog" @click.stop>
           <header class="dialog__header">
-            <h2 class="dialog__title">{{ authMode === 'login' ? '登录账户' : '创建账户' }}</h2>
+            <h2 class="dialog__title">
+              {{ currentUser ? '账户信息' : authMode === 'login' ? '登录账户' : '创建账户' }}
+            </h2>
             <button type="button" class="dialog__close" @click="closeAuthDialog">关闭</button>
           </header>
 
-          <div class="dialog__tabs">
+          <div v-if="!currentUser" class="dialog__tabs">
             <button
               type="button"
               class="tab-button"
@@ -542,15 +1028,44 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
             </button>
           </div>
 
-          <form class="dialog__form" @submit.prevent="submitAuth">
+          <p v-if="!currentUser && !isSupabaseConfigured()" class="auth-feedback is-warning">
+            当前尚未配置真实 Supabase 登录环境变量，所以注册和登录现在不可用。请在 `.env.local` 中填写
+            `VITE_FY_SUPABASE_URL` 和 `VITE_FY_SUPABASE_ANON_KEY`，或填写 `VITE_SUPABASE_URL` 和
+            `VITE_SUPABASE_ANON_KEY` 后重启前端。
+          </p>
+
+          <template v-if="currentUser">
+            <div class="feature-context">
+              <span>当前账户</span>
+              <strong>{{ currentUser.username }}</strong>
+              <p>{{ currentUser.email }}</p>
+            </div>
+
+            <div class="dialog__actions">
+              <button type="button" class="dialog__primary" @click="logout">退出登录</button>
+              <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
+            </div>
+          </template>
+
+          <form v-else class="dialog__form" @submit.prevent="submitAuth">
             <label v-if="authMode === 'register'" class="field">
               <span>昵称</span>
-              <input v-model.trim="authForm.displayName" type="text" placeholder="平江旅人" autocomplete="nickname" />
+              <input
+                v-model.trim="authForm.displayName"
+                type="text"
+                placeholder="平江旅人"
+                autocomplete="nickname"
+              />
             </label>
 
             <label class="field">
-              <span>账号</span>
-              <input v-model.trim="authForm.account" type="text" placeholder="邮箱或手机号" autocomplete="username" />
+              <span>邮箱</span>
+              <input
+                v-model.trim="authForm.account"
+                type="email"
+                placeholder="例如：you@example.com"
+                autocomplete="username"
+              />
             </label>
 
             <label class="field">
@@ -563,9 +1078,25 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
               />
             </label>
 
+            <label v-if="authMode === 'register'" class="field">
+              <span>确认密码（可选）</span>
+              <input
+                v-model="authForm.confirmPassword"
+                type="password"
+                placeholder="再次输入密码"
+                autocomplete="new-password"
+              />
+            </label>
+
+            <p v-if="authFeedback" :class="['auth-feedback', `is-${authFeedbackType}`]">
+              {{ authFeedback }}
+            </p>
+
             <div class="dialog__actions">
-              <button type="submit" class="dialog__primary">{{ authMode === 'login' ? '立即登录' : '创建账号' }}</button>
-              <button type="button" class="dialog__ghost" @click="closeAuthDialog">取消</button>
+              <button type="submit" class="dialog__primary" :disabled="authSubmitting">
+                {{ authSubmitting ? '提交中…' : authMode === 'login' ? '立即登录' : '创建账号' }}
+              </button>
+              <button type="button" class="dialog__ghost" @click="closeAuthDialog" :disabled="authSubmitting">取消</button>
             </div>
           </form>
         </section>
@@ -750,6 +1281,8 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
   display: grid;
   place-items: center;
   padding: 1.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(28, 25, 23, 0.5);
   backdrop-filter: blur(16px);
   z-index: 80;
@@ -757,15 +1290,45 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
 
 .dialog {
   width: min(92vw, 500px);
+  max-height: calc(100dvh - 3rem);
   border-radius: 28px;
   border: 1px solid rgba(250, 250, 249, 0.18);
   background: rgba(250, 250, 249, 0.94);
   box-shadow: 0 32px 72px rgba(28, 25, 23, 0.22);
   padding: 1.25rem 1.3rem 1.35rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dialog--feature {
   width: min(94vw, 680px);
+}
+
+.dialog--ai {
+  width: min(98vw, 1120px);
+  height: calc(100dvh - 3rem);
+  max-height: calc(100dvh - 3rem);
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  scrollbar-gutter: stable both-edges;
+}
+
+.dialog--ai .dialog__header {
+  padding: 1.15rem 1.2rem 0.85rem;
+}
+
+.dialog--ai .dialog__copy {
+  display: none;
+}
+
+.ai-shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  border-top: 1px solid rgba(28, 25, 23, 0.06);
 }
 
 .dialog__header {
@@ -905,8 +1468,271 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
   gap: 0.9rem;
 }
 
-.dialog__form--ai {
-  margin-top: 1.1rem;
+.ai-sidebar {
+  background: rgba(28, 25, 23, 0.06);
+  border-right: 1px solid rgba(28, 25, 23, 0.08);
+  padding: 1rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+}
+
+.ai-sidebar__new {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.14);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink-900);
+  letter-spacing: 0.08em;
+  transition:
+    transform 0.25s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.ai-sidebar__new:hover {
+  transform: translateY(-1px);
+}
+
+.ai-sidebar__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 0.5rem;
+  padding-right: 0.2rem;
+}
+
+.ai-sidebar__item {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.8rem;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background: rgba(255, 255, 255, 0.55);
+  display: grid;
+  gap: 0.28rem;
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.ai-sidebar__item:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ai-sidebar__item.is-active {
+  border-color: rgba(95, 127, 114, 0.34);
+  background: rgba(95, 127, 114, 0.12);
+}
+
+.ai-sidebar__title {
+  font-weight: 600;
+  color: var(--ink-900);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-sidebar__subtitle {
+  color: var(--ink-600);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(250, 250, 249, 0.94);
+}
+
+.ai-main__header {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid rgba(28, 25, 23, 0.06);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(250, 250, 249, 0.9);
+  backdrop-filter: blur(12px);
+}
+
+.ai-main__context {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ai-main__context span {
+  color: var(--ink-500);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ai-main__context strong {
+  font-size: 1.05rem;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-main__context p {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 0.92rem;
+}
+
+.ai-main__reset {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.14);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink-800);
+}
+
+.ai-main__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-starters {
+  padding: 1rem 1.2rem 0;
+}
+
+.ai-starters__label {
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
+.ai-chat.ai-chat--main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.15rem 1.2rem;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.message-row--user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-900);
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.message-row--assistant .message-avatar {
+  background: rgba(95, 127, 114, 0.12);
+  border-color: rgba(95, 127, 114, 0.18);
+}
+
+.message-row--user .message-avatar {
+  background: rgba(159, 63, 52, 0.1);
+  border-color: rgba(159, 63, 52, 0.14);
+}
+
+.message-bubble {
+  max-width: min(80%, 36rem);
+}
+
+.message-bubble--user {
+  margin-left: 0;
+}
+
+.message-row--loading .message-avatar {
+  opacity: 0.85;
+}
+
+.ai-composer {
+  padding: 0.95rem 1.2rem calc(0.95rem + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(28, 25, 23, 0.06);
+  background: linear-gradient(
+    to bottom,
+    rgba(250, 250, 249, 0) 0%,
+    rgba(250, 250, 249, 0.9) 20%,
+    rgba(250, 250, 249, 0.96) 100%
+  );
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.ai-composer__field {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-composer__field textarea {
+  width: 100%;
+  min-height: 2.85rem;
+  max-height: 9.5rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  outline: none;
+  resize: none;
+  line-height: 1.45;
+  font-family: inherit;
+}
+
+.ai-composer__field textarea:focus {
+  border-color: rgba(95, 127, 114, 0.42);
+  box-shadow: 0 0 0 4px rgba(95, 127, 114, 0.12);
+}
+
+.dialog__primary.ai-composer__send {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  padding: 0 1.15rem;
+}
+
+.feature-feedback--ai {
+  margin-bottom: 0.35rem;
 }
 
 .field {
@@ -1010,10 +1836,15 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
 
 .ai-chat {
   margin-top: 1rem;
+  min-height: min(38vh, 280px);
   max-height: min(46vh, 360px);
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: grid;
   gap: 0.75rem;
+  align-content: start;
+  padding-bottom: 0.35rem;
   padding-right: 0.15rem;
 }
 
@@ -1057,7 +1888,75 @@ const profileStatus = computed(() => (currentUser.value ? '已登录' : '游客�
   color: var(--cinnabar-700);
 }
 
+.friends-embed {
+  margin-top: 1rem;
+}
+
+.upload-preview {
+  margin-top: 1rem;
+  padding: 1rem 1.05rem;
+  border-radius: 22px;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.upload-preview__label {
+  margin: 0;
+  color: var(--ink-600);
+  letter-spacing: 0.12em;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+.upload-preview__image {
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  object-fit: cover;
+}
+
+.auth-feedback {
+  margin: 0;
+  padding: 0.8rem 0.95rem;
+  border-radius: 18px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.auth-feedback.is-info {
+  background: rgba(95, 127, 114, 0.08);
+  color: var(--ink-700);
+}
+
+.auth-feedback.is-success {
+  background: rgba(24, 121, 78, 0.12);
+  color: rgba(24, 121, 78, 0.98);
+}
+
+.auth-feedback.is-warning {
+  background: rgba(225, 165, 0, 0.12);
+  color: rgba(132, 97, 0, 0.95);
+}
+
+.auth-feedback.is-error {
+  background: rgba(159, 63, 52, 0.08);
+  color: var(--cinnabar-700);
+}
+
 @media (max-width: 720px) {
+  .overlay {
+    place-items: start center;
+    padding: 1rem 0.8rem;
+  }
+
+  .dialog {
+    width: min(100%, 680px);
+    max-height: calc(100dvh - 2rem);
+  }
+
   .dialog--feature {
     padding: 1.1rem;
   }

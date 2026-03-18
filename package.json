@@ -11,6 +11,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@supabase/supabase-js": "^2.56.1",
         "abort-controller": "^3.0.0",
         "dotenv": "^16.4.5",
         "fs": "^0.0.1-security",
@@ -26,3 +27,4 @@
         "vite": "^7.3.1"
     }
 }
+    

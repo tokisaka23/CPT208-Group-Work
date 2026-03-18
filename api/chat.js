@@ -16,15 +16,33 @@ export default async function handler(req, res) {
       try { bodyData = JSON.parse(req.body); } catch(e) {}
     }
 
-    const message = bodyData?.message || '你好';
+    const normalizeConversationMessages = (messages) => {
+      if (!Array.isArray(messages)) {
+        return [];
+      }
+
+      return messages
+        .map((item) => ({
+          role: item?.role === 'assistant' ? 'assistant' : item?.role === 'user' ? 'user' : '',
+          content: String(item?.content || '').trim(),
+        }))
+        .filter((item) => item.role && item.content)
+        .slice(-12);
+    };
+
+    const message = String(bodyData?.message || '你好').trim() || '你好';
     const gpsLocation = bodyData?.gpsLocation || '未知';
+    const conversationMessages = normalizeConversationMessages(bodyData?.messages);
+    const promptMessages = conversationMessages.length
+      ? conversationMessages
+      : [{ role: 'user', content: message }];
 
     const API_KEY = process.env.QWEN_API_KEY;
     if (!API_KEY) throw new Error('未检测到 QWEN_API_KEY 环境变量');
 
     const systemPrompt = `你是苏州本地资深向导，精通吴文化。用户位置: ${gpsLocation}。用亲切口语化中文回复，带1个历史细节或实用提示。字数控制在150字以内。`;
 
-    console.log(`[User] ${message}`);
+    console.log(`[User] ${promptMessages[promptMessages.length - 1]?.content || message}`);
 
     // 2. 发射火力
     const aiResponse = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
@@ -38,7 +56,7 @@ export default async function handler(req, res) {
         input: {
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: message }
+            ...promptMessages
           ]
         },
         parameters: { result_format: "message" }
