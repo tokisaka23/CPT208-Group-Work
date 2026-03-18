@@ -138,10 +138,21 @@ export async function deleteCurrentAccount() {
     },
   });
 
-  const result = await response.json().catch(() => null);
+  const rawText = await response.text();
+  let result = null;
+
+  try {
+    result = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    result = null;
+  }
 
   if (!response.ok || !result?.success) {
-    throw new Error(result?.error || `注销账号失败，状态码：${response.status}`);
+    throw new Error(
+      result?.error ||
+      (rawText && rawText.length < 200 ? rawText : '') ||
+      `注销账号失败，状态码：${response.status}`
+    );
   }
 
   await supabase.auth.signOut({ scope: 'local' }).catch(() => {});

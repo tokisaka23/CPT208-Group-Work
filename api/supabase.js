@@ -50,11 +50,11 @@ function getSupabaseEnv() {
       '',
     supabaseAnonKey:
       process.env.SUPABASE_ANON_KEY ||
+      process.env.FY_SUPABASE_ANON_KEY ||
       process.env.VITE_FY_SUPABASE_ANON_KEY ||
       process.env.VITE_SUPABASE_ANON_KEY ||
       '',
-    supabaseServiceRoleKey:
-      process.env.FY_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    supabaseServiceRoleKey: process.env.FY_SUPABASE_SERVICE_ROLE_KEY || '',
   };
 }
 
@@ -72,7 +72,7 @@ export async function getAuthenticatedUser(req) {
 
   if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
     throw new Error(
-      '缺少 Supabase 服务端环境变量。请在 .env.local 中配置 FY_SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_SERVICE_ROLE_KEY，并确认 Supabase URL 与匿名 Key 已存在。'
+      '缺少 Supabase 服务端环境变量。请在 .env.local 中配置 FY_SUPABASE_SERVICE_ROLE_KEY，并确认 Supabase URL 与匿名 Key 已存在。'
     );
   }
 
@@ -85,10 +85,21 @@ export async function getAuthenticatedUser(req) {
   }
 
   const authClient = createSupabaseClient(supabaseUrl, supabaseAnonKey);
-  const {
-    data: { user },
-    error,
-  } = await authClient.auth.getUser(accessToken);
+  let authPayload = null;
+  let error = null;
+
+  try {
+    authPayload = await authClient.auth.getUser(accessToken);
+    error = authPayload.error;
+  } catch (requestError) {
+    const authError = new Error(
+      `认证服务暂时不可用，请稍后重试。原始错误：${requestError.message || 'Unknown error'}`
+    );
+    authError.statusCode = 503;
+    throw authError;
+  }
+
+  const user = authPayload?.data?.user || null;
 
   if (error || !user) {
     const authError = new Error(
