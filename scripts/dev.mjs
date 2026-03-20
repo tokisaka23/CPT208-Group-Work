@@ -24,6 +24,10 @@ function runScript(scriptName, label) {
   children.push(child);
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function killChildTree(child) {
   if (!child || child.killed) {
     return;
@@ -56,4 +60,5 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
 runScript('dev:backend', 'backend');
+await delay(1200);
 runScript('dev:frontend', 'frontend');

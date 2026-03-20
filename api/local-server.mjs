@@ -111,9 +111,16 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Not Found' }));
 });
 
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`✅ 本地API服务启动: http://localhost:${PORT}/api/chat`);
+const PORT = Number(process.env.PORT || 3000);
+const HOST = '127.0.0.1';
+
+server.on('error', (error) => {
+  console.error(`❌ 本地API服务启动失败: ${error.message}`);
+  process.exit(1);
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`✅ 本地API服务启动: http://${HOST}:${PORT}/api/chat`);
   console.log(`🔑 QWEN_API_KEY状态: ${process.env.QWEN_API_KEY ? '已加载✅' : '缺失❌'}`);
   console.log(`📂 项目根目录: ${rootDir}`);
 });

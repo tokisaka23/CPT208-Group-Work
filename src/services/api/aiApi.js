@@ -1,8 +1,10 @@
 import { requestAuthorizedJson } from './httpClient';
 
 export const aiApi = {
-  async askQianwen({ message, messages, gpsLocation }) {
+  async askQianwen({ conversationId, message, messages, gpsLocation }) {
     return requestAuthorizedJson('/api/chat', {
+      action: 'ask',
+      conversationId,
       message,
       messages,
       gpsLocation,
@@ -10,6 +12,15 @@ export const aiApi = {
   },
 
   async getChatHistory() {
-    return requestAuthorizedJson('/api/chat-history', {});
+    return requestAuthorizedJson('/api/chat', {
+      action: 'history',
+    });
+  },
+
+  async deleteChatConversation({ conversationId }) {
+    return requestAuthorizedJson('/api/chat', {
+      action: 'delete',
+      conversationId,
+    });
   },
 };
