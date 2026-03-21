@@ -94,6 +94,7 @@ const aiError = ref('');
 const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
+const isAiFullscreen = ref(false);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
 const MAX_PERSISTED_CHAT_ROUNDS = 30;
@@ -194,6 +195,7 @@ function createAiConversation({
   title = DEFAULT_AI_CONVERSATION_TITLE,
   createdAt = Date.now(),
   updatedAt = Date.now(),
+  titleManuallyEdited = false,
   messages = null,
 } = {}) {
   return {
@@ -203,6 +205,7 @@ function createAiConversation({
     pageLabel,
     createdAt,
     updatedAt,
+    titleManuallyEdited,
     messages: messages?.length ? messages : [createAiGreetingMessage(pageLabel)],
   };
 }
@@ -280,6 +283,7 @@ function buildConversationFromHistoryItem(item) {
     pageLabel: pageContextLabel.value,
     createdAt: item?.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
     updatedAt: item?.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
+    titleManuallyEdited: Boolean(item?.title),
     messages: historyMessages.length ? historyMessages : [createAiGreetingMessage(pageContextLabel.value)],
   });
 }
@@ -332,8 +336,34 @@ function syncAiConversationMeta(conversation) {
   }
 
   conversation.updatedAt = Date.now();
-  conversation.title = deriveAiConversationTitle(conversation.messages, conversation.pageLabel);
+  if (!conversation.titleManuallyEdited || !currentUser.value?.id) {
+    conversation.title = deriveAiConversationTitle(conversation.messages, conversation.pageLabel);
+  }
   moveAiConversationToTop(conversation.id);
+}
+
+async function renameAiConversation(conversation, nextTitle) {
+  if (!conversation) {
+    return;
+  }
+
+  const normalizedTitle = normalizeAiText(nextTitle);
+
+  if (!normalizedTitle) {
+    return;
+  }
+
+  const trimmedTitle = truncateAiText(normalizedTitle, 24);
+
+  if (currentUser.value?.id) {
+    await aiApi.renameChatConversation({
+      conversationId: conversation.id,
+      conversationName: trimmedTitle,
+    });
+  }
+
+  conversation.title = trimmedTitle;
+  conversation.titleManuallyEdited = true;
 }
 
 async function loadAiConversations(forceReload = false) {
@@ -382,6 +412,26 @@ async function startNewAiConversation() {
   focusAiComposer();
 }
 
+async function promptRenameAiConversation(conversation) {
+  if (!conversation) {
+    return;
+  }
+
+  const nextTitle = window.prompt('请输入新的对话标题', conversation.title || DEFAULT_AI_CONVERSATION_TITLE);
+
+  if (nextTitle === null) {
+    return;
+  }
+
+  try {
+    await renameAiConversation(conversation, nextTitle);
+    aiError.value = '';
+  } catch (error) {
+    console.error('[AI] 修改会话标题失败', error);
+    aiError.value = error.message || '修改会话标题失败，请稍后再试。';
+  }
+}
+
 async function deleteAiConversation(conversationId) {
   if (!conversationId || aiConversationDeletingId.value) {
     return;
@@ -413,6 +463,14 @@ async function deleteAiConversation(conversationId) {
   }
 
   focusAiComposer();
+}
+
+function toggleAiFullscreen() {
+  isAiFullscreen.value = !isAiFullscreen.value;
+  nextTick(() => {
+    scrollAiConversationToBottom('auto');
+    focusAiComposer();
+  });
 }
 
 function handleAiComposerKeydown(event) {
@@ -518,6 +576,7 @@ const sendAiMessage = async (prefilledPrompt = '') => {
     // 中文注释：这里连接后端千问接口 /api/chat，把用户输入发给后端并拿到 AI 回复。
     const data = await aiApi.askQianwen({
       conversationId: conversation.id,
+      conversationName: conversation.title,
       message: question,
       messages: buildConversationMessagesForApi(conversation),
       gpsLocation: conversation.pageLabel,
@@ -702,8 +761,6 @@ async function submitAuth() {
     }
 
     closeAuthDialog();
-    // 中文注释：登录成功后做一次“页面跳转/切换”，这里直接打开好友面板作为跳转效果。
-    openFeature('friends');
     await router.push(route.fullPath || '/').catch(() => {});
   } catch (error) {
     console.error('[Auth] 登录/注册失败', error);
@@ -1004,8 +1061,19 @@ watch(
     </footer>
 
     <transition name="veil" appear>
-      <div v-if="isFeatureOpen" class="overlay" role="dialog" aria-modal="true" @click.self="closeFeature">
-        <section class="dialog dialog--feature" :class="{ 'dialog--ai': activeFeature === 'ai' }" @click.stop>
+      <div
+        v-if="isFeatureOpen"
+        class="overlay"
+        :class="{ 'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen }"
+        role="dialog"
+        aria-modal="true"
+        @click.self="closeFeature"
+      >
+        <section
+          class="dialog dialog--feature"
+          :class="{ 'dialog--ai': activeFeature === 'ai', 'dialog--ai-fullscreen': activeFeature === 'ai' && isAiFullscreen }"
+          @click.stop
+        >
           <header class="dialog__header">
             <div class="dialog__intro">
               <p class="dialog__eyebrow">{{ activeFeatureInfo?.eyebrow }}</p>
@@ -1058,15 +1126,26 @@ watch(
                       <strong class="ai-sidebar__title">{{ conversation.title }}</strong>
                       <span class="ai-sidebar__subtitle">{{ deriveAiConversationPreview(conversation) }}</span>
                     </button>
-                    <button
-                      type="button"
-                      class="ai-sidebar__delete"
-                      :disabled="isAiLoading || aiConversationDeletingId === conversation.id"
-                      :aria-label="`删除会话 ${conversation.title}`"
-                      @click="deleteAiConversation(conversation.id)"
-                    >
-                      {{ aiConversationDeletingId === conversation.id ? '...' : '删' }}
-                    </button>
+                    <div class="ai-sidebar__actions">
+                      <button
+                        type="button"
+                        class="ai-sidebar__rename"
+                        :disabled="isAiLoading"
+                        :aria-label="`重命名会话 ${conversation.title}`"
+                        @click="promptRenameAiConversation(conversation)"
+                      >
+                        改
+                      </button>
+                      <button
+                        type="button"
+                        class="ai-sidebar__delete"
+                        :disabled="isAiLoading || aiConversationDeletingId === conversation.id"
+                        :aria-label="`删除会话 ${conversation.title}`"
+                        @click="deleteAiConversation(conversation.id)"
+                      >
+                        {{ aiConversationDeletingId === conversation.id ? '...' : '删' }}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </aside>
@@ -1079,9 +1158,14 @@ watch(
                     <p>{{ activeAiJourney.pace }}</p>
                   </div>
 
-                  <button type="button" class="ai-main__reset" :disabled="isAiLoading" @click="startNewAiConversation">
-                    重置
-                  </button>
+                  <div class="ai-main__header-actions">
+                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
+                      {{ isAiFullscreen ? '退出全屏' : '全屏放大' }}
+                    </button>
+                    <button type="button" class="ai-main__reset" :disabled="isAiLoading" @click="startNewAiConversation">
+                      重置
+                    </button>
+                  </div>
                 </header>
 
                 <div class="ai-main__body">
@@ -1486,6 +1570,11 @@ watch(
   z-index: 80;
 }
 
+.overlay--fullscreen {
+  place-items: stretch;
+  padding: 0;
+}
+
 .dialog {
   width: min(92vw, 500px);
   max-height: calc(100dvh - 3rem);
@@ -1513,6 +1602,15 @@ watch(
   scrollbar-gutter: stable both-edges;
 }
 
+.dialog--ai-fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+}
+
 .dialog--ai .dialog__header {
   padding: 1.15rem 1.2rem 0.85rem;
 }
@@ -1525,7 +1623,7 @@ watch(
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   border-top: 1px solid rgba(28, 25, 23, 0.06);
 }
 
@@ -1704,7 +1802,9 @@ watch(
   overflow-y: auto;
   overscroll-behavior: contain;
   display: grid;
+  grid-auto-rows: min-content;
   gap: 0.5rem;
+  align-content: start;
   padding-right: 0.2rem;
 }
 
@@ -1713,6 +1813,12 @@ watch(
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.45rem;
   align-items: stretch;
+}
+
+.ai-sidebar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .ai-sidebar__item {
@@ -1740,6 +1846,7 @@ watch(
   background: rgba(95, 127, 114, 0.12);
 }
 
+.ai-sidebar__rename,
 .ai-sidebar__delete {
   width: 2.5rem;
   border-radius: 16px;
@@ -1753,6 +1860,13 @@ watch(
     transform 0.25s ease;
 }
 
+.ai-sidebar__rename:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(95, 127, 114, 0.28);
+  background: rgba(95, 127, 114, 0.1);
+  color: var(--ink-900);
+}
+
 .ai-sidebar__delete:hover:not(:disabled) {
   transform: translateY(-1px);
   border-color: rgba(159, 63, 52, 0.22);
@@ -1760,6 +1874,7 @@ watch(
   color: var(--cinnabar-700);
 }
 
+.ai-sidebar__rename:disabled,
 .ai-sidebar__delete:disabled {
   opacity: 0.56;
   cursor: not-allowed;
@@ -1801,6 +1916,12 @@ watch(
   backdrop-filter: blur(12px);
 }
 
+.ai-main__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
 .ai-main__context {
   display: grid;
   gap: 0.25rem;
@@ -1828,6 +1949,17 @@ watch(
   font-size: 0.92rem;
 }
 
+.ai-main__reset {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.14);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink-800);
+}
+
+.ai-main__resize,
 .ai-main__reset {
   flex: 0 0 auto;
   min-height: 2.35rem;
@@ -1867,6 +1999,20 @@ watch(
   flex-direction: column;
   gap: 0.9rem;
   padding: 1.15rem 1.2rem;
+}
+
+.dialog--ai-fullscreen .ai-chat.ai-chat--main {
+  padding: 1.35rem 1.5rem;
+}
+
+.dialog--ai-fullscreen .ai-composer {
+  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.dialog--ai-fullscreen .ai-main__header,
+.dialog--ai-fullscreen .dialog__header {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .message-row {
@@ -2203,6 +2349,26 @@ watch(
   .dialog__primary,
   .dialog__ghost {
     width: 100%;
+  }
+
+  .ai-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(28, 25, 23, 0.08);
+  }
+
+  .ai-main__header,
+  .dialog__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ai-main__header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
