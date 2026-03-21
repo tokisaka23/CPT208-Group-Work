@@ -116,6 +116,61 @@ export async function signOut() {
   }
 }
 
+export async function updateCurrentUserProfile({ displayName }) {
+  const supabase = getSupabaseClient();
+  const normalizedDisplayName = String(displayName || '').trim();
+
+  if (!normalizedDisplayName) {
+    throw new Error('昵称不能为空。');
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    throw userError;
+  }
+
+  if (!user) {
+    throw new Error('当前没有可用的登录用户。');
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    data: {
+      ...user.user_metadata,
+      display_name: normalizedDisplayName,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  await ensureUserProfile(data.user || user, normalizedDisplayName);
+  return data;
+}
+
+export async function updateCurrentUserPassword({ password }) {
+  const supabase = getSupabaseClient();
+  const normalizedPassword = String(password || '');
+
+  if (normalizedPassword.length < 6) {
+    throw new Error('新密码长度至少 6 位。');
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    password: normalizedPassword,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function deleteCurrentAccount() {
   const supabase = getSupabaseClient();
   const {

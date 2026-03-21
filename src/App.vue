@@ -95,6 +95,7 @@ const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
 const isAiFullscreen = ref(false);
+const profileMenuRef = ref(null);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
 const MAX_PERSISTED_CHAT_ROUNDS = 30;
@@ -647,6 +648,7 @@ watch(isActiveAiConversationLoading, (loading) => {
 });
 
 const currentUser = ref(null);
+const isProfileMenuOpen = ref(false);
 const isAuthOpen = ref(false);
 const authMode = ref('login');
 const authForm = reactive({
@@ -658,6 +660,14 @@ const authForm = reactive({
 const authSubmitting = ref(false);
 const authFeedback = ref('');
 const authFeedbackType = ref('info');
+const profileForm = reactive({
+  displayName: '',
+  password: '',
+  confirmPassword: '',
+});
+const profileSubmitting = ref(false);
+const profileFeedback = ref('');
+const profileFeedbackType = ref('info');
 
 const openAuthDialog = (mode = 'login') => {
   authMode.value = mode;
@@ -665,6 +675,45 @@ const openAuthDialog = (mode = 'login') => {
   authFeedback.value = '';
   authFeedbackType.value = 'info';
 };
+
+function toggleProfileMenu() {
+  if (!currentUser.value) {
+    openAuthDialog('login');
+    return;
+  }
+
+  isProfileMenuOpen.value = !isProfileMenuOpen.value;
+
+  if (isProfileMenuOpen.value) {
+    profileForm.displayName = currentUser.value.username || '';
+    profileForm.password = '';
+    profileForm.confirmPassword = '';
+    profileFeedback.value = '';
+    profileFeedbackType.value = 'info';
+  }
+}
+
+function closeProfileMenu() {
+  isProfileMenuOpen.value = false;
+  profileFeedback.value = '';
+  profileFeedbackType.value = 'info';
+  profileForm.password = '';
+  profileForm.confirmPassword = '';
+}
+
+function handleWindowClickForProfileMenu(event) {
+  if (!isProfileMenuOpen.value) {
+    return;
+  }
+
+  const menuRoot = profileMenuRef.value;
+
+  if (!menuRoot || menuRoot.contains(event.target)) {
+    return;
+  }
+
+  closeProfileMenu();
+}
 
 const closeAuthDialog = () => {
   isAuthOpen.value = false;
@@ -777,7 +826,59 @@ async function logout() {
     console.error('[Auth] 退出登录失败', error);
   } finally {
     currentUser.value = null;
+    closeProfileMenu();
     closeAuthDialog();
+  }
+}
+
+function setProfileFeedback(message, type = 'info') {
+  profileFeedback.value = message;
+  profileFeedbackType.value = type;
+}
+
+async function submitProfileUpdate() {
+  if (profileSubmitting.value || !currentUser.value) {
+    return;
+  }
+
+  const displayName = profileForm.displayName.trim();
+  const password = profileForm.password;
+  const confirmPassword = profileForm.confirmPassword;
+
+  if (!displayName) {
+    setProfileFeedback('昵称不能为空。', 'error');
+    return;
+  }
+
+  if (password && password.length < 6) {
+    setProfileFeedback('新密码长度至少 6 位。', 'error');
+    return;
+  }
+
+  if (password && password !== confirmPassword) {
+    setProfileFeedback('两次输入的新密码不一致。', 'error');
+    return;
+  }
+
+  profileSubmitting.value = true;
+  setProfileFeedback('');
+
+  try {
+    const nextAuthState = await authApi.updateProfile({ displayName });
+    currentUser.value = nextAuthState;
+
+    if (password) {
+      await authApi.updatePassword({ password });
+    }
+
+    profileForm.password = '';
+    profileForm.confirmPassword = '';
+    setProfileFeedback(password ? '昵称和密码已更新。' : '昵称已更新。', 'success');
+  } catch (error) {
+    console.error('[Auth] 更新账户信息失败', error);
+    setProfileFeedback(error.message || '更新账户信息失败，请稍后再试。', 'error');
+  } finally {
+    profileSubmitting.value = false;
   }
 }
 
@@ -852,10 +953,18 @@ onMounted(async () => {
   authSubscription = authApi.subscribe((nextUser) => {
     currentUser.value = nextUser;
   });
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('click', handleWindowClickForProfileMenu);
+  }
 });
 
 onUnmounted(() => {
   authSubscription?.data?.subscription?.unsubscribe?.();
+
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('click', handleWindowClickForProfileMenu);
+  }
 });
 
 watch(
@@ -1011,21 +1120,75 @@ watch(
         </nav>
 
         <div class="header-actions">
-          <button
-            type="button"
-            class="profile-button"
-            :aria-label="currentUser ? '打开账户信息' : '打开登录弹窗'"
-            @click="openAuthDialog(currentUser ? 'profile' : 'login')"
-          >
-            <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
-              <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
-              <span>{{ avatarLabel }}</span>
-            </span>
-            <span class="profile-copy">
-              <span class="profile-label">{{ profileLabel }}</span>
-              <small class="profile-note">{{ profileStatus }}</small>
-            </span>
-          </button>
+          <div ref="profileMenuRef" class="profile-menu-wrap">
+            <button
+              type="button"
+              class="profile-button"
+              :aria-label="currentUser ? '打开账户菜单' : '打开登录弹窗'"
+              @click.stop="toggleProfileMenu"
+            >
+              <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
+                <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
+                <span>{{ avatarLabel }}</span>
+              </span>
+              <span class="profile-copy">
+                <span class="profile-label">{{ profileLabel }}</span>
+                <small class="profile-note">{{ profileStatus }}</small>
+              </span>
+            </button>
+
+            <div v-if="currentUser && isProfileMenuOpen" class="profile-dropdown" @click.stop>
+              <div class="profile-dropdown__head">
+                <strong>{{ currentUser.username }}</strong>
+                <span>{{ currentUser.email }}</span>
+              </div>
+
+              <form class="profile-dropdown__form" @submit.prevent="submitProfileUpdate">
+                <label class="field">
+                  <span>昵称</span>
+                  <input
+                    v-model.trim="profileForm.displayName"
+                    type="text"
+                    placeholder="输入新的昵称"
+                    autocomplete="nickname"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>新密码</span>
+                  <input
+                    v-model="profileForm.password"
+                    type="password"
+                    placeholder="留空则不修改密码"
+                    autocomplete="new-password"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>确认新密码</span>
+                  <input
+                    v-model="profileForm.confirmPassword"
+                    type="password"
+                    placeholder="再次输入新密码"
+                    autocomplete="new-password"
+                  />
+                </label>
+
+                <p v-if="profileFeedback" :class="['auth-feedback', `is-${profileFeedbackType}`]">
+                  {{ profileFeedback }}
+                </p>
+
+                <div class="profile-dropdown__actions">
+                  <button type="submit" class="dialog__primary" :disabled="profileSubmitting">
+                    {{ profileSubmitting ? '保存中…' : '保存修改' }}
+                  </button>
+                  <button type="button" class="dialog__ghost" @click="logout" :disabled="profileSubmitting">
+                    退出登录
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -1161,9 +1324,6 @@ watch(
                   <div class="ai-main__header-actions">
                     <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
                       {{ isAiFullscreen ? '退出全屏' : '全屏放大' }}
-                    </button>
-                    <button type="button" class="ai-main__reset" :disabled="isAiLoading" @click="startNewAiConversation">
-                      重置
                     </button>
                   </div>
                 </header>
@@ -1659,6 +1819,50 @@ watch(
   background: rgba(255, 255, 255, 0.7);
 }
 
+.profile-menu-wrap {
+  position: relative;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 0.8rem);
+  right: 0;
+  width: min(88vw, 360px);
+  padding: 1rem;
+  border-radius: 24px;
+  border: 1px solid rgba(28, 25, 23, 0.1);
+  background: rgba(250, 250, 249, 0.98);
+  box-shadow: 0 24px 56px rgba(28, 25, 23, 0.18);
+  display: grid;
+  gap: 0.9rem;
+  z-index: 30;
+}
+
+.profile-dropdown__head {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.profile-dropdown__head strong {
+  color: var(--ink-900);
+  font-size: 1rem;
+}
+
+.profile-dropdown__head span {
+  color: var(--ink-600);
+  font-size: 0.88rem;
+}
+
+.profile-dropdown__form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.profile-dropdown__actions {
+  display: grid;
+  gap: 0.7rem;
+}
+
 .dialog__copy {
   margin-top: 0.9rem;
   color: rgba(68, 64, 60, 0.92);
@@ -1949,18 +2153,7 @@ watch(
   font-size: 0.92rem;
 }
 
-.ai-main__reset {
-  flex: 0 0 auto;
-  min-height: 2.35rem;
-  padding: 0 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(28, 25, 23, 0.14);
-  background: rgba(255, 255, 255, 0.65);
-  color: var(--ink-800);
-}
-
-.ai-main__resize,
-.ai-main__reset {
+.ai-main__resize {
   flex: 0 0 auto;
   min-height: 2.35rem;
   padding: 0 1rem;

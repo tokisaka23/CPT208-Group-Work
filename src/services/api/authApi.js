@@ -5,6 +5,8 @@ import {
   signInWithEmail,
   signOut,
   signUpWithEmail,
+  updateCurrentUserPassword,
+  updateCurrentUserProfile,
 } from '../supabase/authRuntime';
 import { isSupabaseConfigured } from '../supabase/clientRuntime';
 import {
@@ -126,6 +128,28 @@ export const authApi = {
       clearStoredAuthState();
       emitLocalAuthChanged(null);
     }
+  },
+
+  async updateProfile({ displayName }) {
+    if (!isSupabaseConfigured()) {
+      throw new Error('尚未配置真实 Supabase 环境变量。');
+    }
+
+    const data = await updateCurrentUserProfile({ displayName });
+    const session = await getCurrentSession();
+    const authState = normalizeRegisteredUser(data.user, session);
+    persistAuthState(authState);
+    emitLocalAuthChanged(authState);
+    return authState;
+  },
+
+  async updatePassword({ password }) {
+    if (!isSupabaseConfigured()) {
+      throw new Error('尚未配置真实 Supabase 环境变量。');
+    }
+
+    await updateCurrentUserPassword({ password });
+    return { success: true };
   },
 
   subscribe(callback) {
