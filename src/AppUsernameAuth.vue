@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   Button,
   CellGroup,
@@ -17,6 +17,7 @@ import {
   getPendingFriendRequests,
   respondToFriendRequest,
 } from './services/friends/friendServiceRuntime';
+import { getGroupChats } from './services/friends/groupChatService';
 import {
   deleteCurrentAccount,
   getCurrentSession,
@@ -39,9 +40,14 @@ const pendingFriendRequests = ref([]);
 const pendingRequestPopupVisible = ref(false);
 const processingRequestId = ref('');
 const pendingRequestSignature = ref('');
+const unreadGroupChatCount = ref(0);
+const hasUnreadGroupChats = computed(() => unreadGroupChatCount.value > 0);
 
 let authSubscription = null;
 let pendingRequestPollTimer = null;
+let groupChatUnreadPollTimer = null;
+
+const GROUP_CHAT_POLL_INTERVAL = 12000;
 
 function getRegisteredUsername(user) {
   return user?.user_metadata?.display_name || user?.email || '已登录用户';
@@ -79,6 +85,17 @@ function stopPendingRequestPolling() {
   }
 }
 
+function clearGroupChatUnreadState() {
+  unreadGroupChatCount.value = 0;
+}
+
+function stopGroupChatUnreadPolling() {
+  if (groupChatUnreadPollTimer) {
+    window.clearInterval(groupChatUnreadPollTimer);
+    groupChatUnreadPollTimer = null;
+  }
+}
+
 function startPendingRequestPolling() {
   stopPendingRequestPolling();
 
@@ -89,6 +106,18 @@ function startPendingRequestPolling() {
   pendingRequestPollTimer = window.setInterval(() => {
     loadPendingRequests({ silent: true });
   }, 10000);
+}
+
+function startGroupChatUnreadPolling() {
+  stopGroupChatUnreadPolling();
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  groupChatUnreadPollTimer = window.setInterval(() => {
+    loadGroupChatUnreadState({ silent: true });
+  }, GROUP_CHAT_POLL_INTERVAL);
 }
 
 function applyPendingRequests(requests, { forceOpen = false } = {}) {
@@ -127,6 +156,29 @@ async function loadPendingRequests({ silent = false, forceOpen = false } = {}) {
   }
 }
 
+async function loadGroupChatUnreadState({ silent = false } = {}) {
+  if (currentSession.value?.mode !== 'registered' || !currentSession.value?.user?.id) {
+    stopGroupChatUnreadPolling();
+    clearGroupChatUnreadState();
+    return;
+  }
+
+  try {
+    const groups = await getGroupChats({
+      currentUserId: currentSession.value.user.id,
+    });
+    unreadGroupChatCount.value = groups.filter((group) => group?.hasUnread).length;
+  } catch (error) {
+    if (!silent) {
+      showFailToast(error.message || '读取群聊未读状态失败，请稍后再试');
+    }
+  }
+}
+
+function handleGroupChatUnreadChanged() {
+  loadGroupChatUnreadState({ silent: true });
+}
+
 async function handleFriendRequestDecision(request, decision) {
   processingRequestId.value = request.id;
 
@@ -151,9 +203,11 @@ async function handleFriendRequestDecision(request, decision) {
 function applySupabaseSession(session, user) {
   if (!session || !user) {
     stopPendingRequestPolling();
+    stopGroupChatUnreadPolling();
     currentSession.value = null;
     activeView.value = 'chat';
     clearPendingRequestState();
+    clearGroupChatUnreadState();
     return;
   }
 
@@ -171,10 +225,13 @@ function applySupabaseSession(session, user) {
   resetMessages(currentSession.value);
   startPendingRequestPolling();
   loadPendingRequests({ silent: true, forceOpen: true });
+  startGroupChatUnreadPolling();
+  loadGroupChatUnreadState({ silent: true });
 }
 
 function enterChat(session) {
   if (session.mode === 'guest') {
+    stopGroupChatUnreadPolling();
     currentSession.value = {
       mode: 'guest',
       id: session.id,
@@ -187,6 +244,7 @@ function enterChat(session) {
     activeView.value = 'chat';
     resetMessages(currentSession.value);
     clearPendingRequestState();
+    clearGroupChatUnreadState();
     return;
   }
 
@@ -203,6 +261,8 @@ function enterChat(session) {
   resetMessages(currentSession.value);
   startPendingRequestPolling();
   loadPendingRequests({ silent: true, forceOpen: true });
+  startGroupChatUnreadPolling();
+  loadGroupChatUnreadState({ silent: true });
 }
 
 async function exitChat() {
@@ -217,7 +277,9 @@ async function exitChat() {
 
   clearGuestSession();
   stopPendingRequestPolling();
+  stopGroupChatUnreadPolling();
   currentSession.value = null;
+  clearGroupChatUnreadState();
   activeView.value = 'chat';
   userInput.value = '';
   isLoading.value = false;
@@ -247,11 +309,13 @@ async function deleteAccount() {
     const result = await deleteCurrentAccount();
     clearGuestSession();
     stopPendingRequestPolling();
+    stopGroupChatUnreadPolling();
     currentSession.value = null;
     activeView.value = 'chat';
     userInput.value = '';
     isLoading.value = false;
     clearPendingRequestState();
+    clearGroupChatUnreadState();
     resetMessages();
     showSuccessToast(result.message || '账号已注销');
   } catch (error) {
@@ -296,9 +360,11 @@ onMounted(async () => {
       if (!session) {
         if (currentSession.value?.mode === 'registered') {
           stopPendingRequestPolling();
+          stopGroupChatUnreadPolling();
           currentSession.value = null;
           activeView.value = 'chat';
           clearPendingRequestState();
+          clearGroupChatUnreadState();
           resetMessages();
         }
         return;
@@ -313,11 +379,15 @@ onMounted(async () => {
 
     authSubscription = data.subscription;
   }
+
+  window.addEventListener('group-chats-updated', handleGroupChatUnreadChanged);
 });
 
 onUnmounted(() => {
   authSubscription?.unsubscribe();
   stopPendingRequestPolling();
+  stopGroupChatUnreadPolling();
+  window.removeEventListener('group-chats-updated', handleGroupChatUnreadChanged);
 });
 
 async function sendMessage() {
@@ -421,7 +491,8 @@ async function sendMessage() {
             type="primary"
             @click="openFriendsPage"
           >
-            好友
+            <span class="action-button__label">好友</span>
+            <span v-if="hasUnreadGroupChats" class="action-button__dot" aria-label="存在未读群消息" />
           </Button>
         </div>
       </section>
@@ -522,6 +593,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.action-button__label {
+  position: relative;
+}
+
+.action-button__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 999px;
+  background: #ee4f44;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.92);
 }
 
 .chat-window {

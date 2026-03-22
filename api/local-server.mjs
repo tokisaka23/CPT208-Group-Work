@@ -29,12 +29,14 @@ if (fs.existsSync(envPath)) {
 import chatHandler from './chat.js';
 import { authHandlers } from './auth.js';
 import { friendHandlers } from './friends.js';
+import { groupHandlers } from './groups.js';
 import ugcHandler from './ugc.js';
 
 const routeHandlers = {
   '/api/chat': chatHandler,
   ...authHandlers,
   ...friendHandlers,
+  ...groupHandlers,
   '/api/ugc': ugcHandler,
 };
 

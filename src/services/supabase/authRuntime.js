@@ -1,5 +1,10 @@
 ﻿import { getSupabaseClient } from './clientRuntime';
 import { clearGuestSession, ensureGuestSession } from '../../utils/guestSession';
+import {
+  SECURITY_QUESTION_COLUMNS,
+  SECURITY_QUESTION_FIELDS,
+  normalizeSecurityAnswers,
+} from '../../shared/securityQuestions';
 
 function readEmailLocalPart(email) {
   return String(email || '').split('@')[0] || '';
@@ -21,6 +26,16 @@ function buildProfileUsername(user) {
   return `${basePart.slice(0, 20)}_${suffix}`;
 }
 
+function resolveSecurityAnswerHashes(user) {
+  const hashes = user?.user_metadata?.security_answer_hashes || {};
+
+  return {
+    [SECURITY_QUESTION_COLUMNS.favoriteColor]: hashes.favoriteColor || null,
+    [SECURITY_QUESTION_COLUMNS.birthday]: hashes.birthday || null,
+    [SECURITY_QUESTION_COLUMNS.studentId]: hashes.studentId || null,
+  };
+}
+
 function buildProfilePayload(user, displayName) {
   if (!user.email) {
     throw new Error('当前账号缺少邮箱信息，无法初始化用户资料。');
@@ -31,6 +46,7 @@ function buildProfilePayload(user, displayName) {
     username: buildProfileUsername(user),
     auth_email: user.email,
     display_name: displayName,
+    ...resolveSecurityAnswerHashes(user),
     avatar_url: null,
     role: 'user',
     status: 'active',
@@ -58,9 +74,43 @@ async function ensureUserProfile(user, displayName) {
   }
 }
 
-export async function signUpWithEmail({ email, password, displayName }) {
+async function hashSecurityAnswer(value) {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('当前浏览器不支持安全问题加密，请更换浏览器后重试。');
+  }
+
+  const bytes = new TextEncoder().encode(value);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (item) => item.toString(16).padStart(2, '0')).join('');
+}
+
+async function buildSecurityAnswerHashes(securityAnswers = {}) {
+  const normalizedAnswers = normalizeSecurityAnswers(securityAnswers);
+  const entries = await Promise.all(
+    SECURITY_QUESTION_FIELDS.map(async (field) => [field, await hashSecurityAnswer(normalizedAnswers[field])]),
+  );
+
+  return Object.fromEntries(entries);
+}
+
+function attachSecurityAnswerHashes(user, securityAnswerHashes) {
+  if (!user) {
+    return user;
+  }
+
+  return {
+    ...user,
+    user_metadata: {
+      ...(user.user_metadata || {}),
+      security_answer_hashes: securityAnswerHashes,
+    },
+  };
+}
+
+export async function signUpWithEmail({ email, password, displayName, securityAnswers }) {
   const supabase = getSupabaseClient();
   const emailRedirectTo = buildEmailRedirectTo();
+  const securityAnswerHashes = await buildSecurityAnswerHashes(securityAnswers);
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -70,6 +120,7 @@ export async function signUpWithEmail({ email, password, displayName }) {
       data: {
         display_name: displayName,
         auth_provider: 'email',
+        security_answer_hashes: securityAnswerHashes,
       },
     },
   });
@@ -79,7 +130,7 @@ export async function signUpWithEmail({ email, password, displayName }) {
   }
 
   if (data.user && data.session) {
-    await ensureUserProfile(data.user, displayName);
+    await ensureUserProfile(attachSecurityAnswerHashes(data.user, securityAnswerHashes), displayName);
   }
 
   clearGuestSession();

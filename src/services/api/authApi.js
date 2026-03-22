@@ -1,4 +1,4 @@
-import {
+﻿import {
   getCurrentSession,
   getCurrentUser,
   onAuthStateChange,
@@ -11,6 +11,7 @@ import {
   clearStoredAuthState,
   persistAuthState,
 } from './authStorage';
+import { requestJson } from './httpClient';
 
 const LOCAL_AUTH_EVENT = 'suzhou-local-auth-changed';
 
@@ -44,7 +45,7 @@ export const authApi = {
   async login({ email, password }) {
     if (!isSupabaseConfigured()) {
       throw new Error(
-        '尚未配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。'
+        '尚未配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。',
       );
     }
 
@@ -63,15 +64,15 @@ export const authApi = {
     }
   },
 
-  async register({ displayName, email, password }) {
+  async register({ displayName, email, password, securityAnswers }) {
     if (!isSupabaseConfigured()) {
       throw new Error(
-        '尚未配置真实 Supabase 注册环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。'
+        '尚未配置真实 Supabase 注册环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。',
       );
     }
 
     try {
-      const data = await signUpWithEmail({ displayName, email, password });
+      const data = await signUpWithEmail({ displayName, email, password, securityAnswers });
       const authState = data.session ? normalizeRegisteredUser(data.user, data.session) : null;
 
       if (authState) {
@@ -86,6 +87,27 @@ export const authApi = {
       };
     } catch (error) {
       console.error('[authApi.register] 注册失败', error);
+      throw error;
+    }
+  },
+
+  async resetPassword({ email, newPassword, securityAnswers }) {
+    if (!isSupabaseConfigured()) {
+      throw new Error(
+        '当前尚未配置真实 Supabase 环境变量。请先完成 `.env.local` 配置后再重试。',
+      );
+    }
+
+    try {
+      return await requestJson('/api/auth/reset-password', {
+        body: {
+          email,
+          newPassword,
+          securityAnswers,
+        },
+      });
+    } catch (error) {
+      console.error('[authApi.resetPassword] 重置密码失败', error);
       throw error;
     }
   },
@@ -152,4 +174,3 @@ export const authApi = {
     });
   },
 };
-

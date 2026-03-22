@@ -1,7 +1,8 @@
 ﻿<script setup>
-import { Button, CellGroup, Field } from 'vant';
+import { computed } from 'vue';
+import { Button, CellGroup, Field, Icon } from 'vant';
 
-defineProps({
+const props = defineProps({
   modelValue: {
     type: String,
     default: '',
@@ -21,6 +22,15 @@ defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'submit']);
+
+const friendCodeValue = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value),
+});
+
+function clearFriendCode() {
+  emit('update:modelValue', '');
+}
 </script>
 
 <template>
@@ -34,13 +44,23 @@ const emit = defineEmits(['update:modelValue', 'submit']);
 
     <CellGroup inset class="input-group">
       <Field
-        :model-value="modelValue"
-        clearable
+        v-model="friendCodeValue"
         label="好友码"
         maxlength="20"
         placeholder="例如 FIND-8842"
-        @update:model-value="emit('update:modelValue', $event)"
-      />
+        @keyup.enter="emit('submit')"
+      >
+        <template v-if="friendCodeValue" #right-icon>
+          <button
+            type="button"
+            class="field-clear-button"
+            aria-label="清空好友码"
+            @click="clearFriendCode"
+          >
+            <Icon name="clear" />
+          </button>
+        </template>
+      </Field>
     </CellGroup>
 
     <Button block round type="primary" native-type="submit" :loading="submitting">
@@ -85,6 +105,17 @@ const emit = defineEmits(['update:modelValue', 'submit']);
 
 .input-group {
   margin: 0 -4px;
+}
+
+.field-clear-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--van-gray-5, #c8c9cc);
+  cursor: pointer;
 }
 
 .feedback-text {

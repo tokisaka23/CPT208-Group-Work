@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router';
+﻿import { createRouter, createWebHistory } from 'vue-router';
 
 const routes = [
   {
@@ -55,7 +55,7 @@ const router = createRouter({
 
 router.afterEach((to) => {
   if (typeof document !== 'undefined') {
-    document.title = `${to.meta.title || '江南慢游'} · Jiangnan`; 
+    document.title = `${to.meta.title || '江南慢游'} · Jiangnan`;
   }
 });
 

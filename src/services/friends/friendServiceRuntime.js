@@ -3,6 +3,7 @@ import { requestAuthorizedJson } from '../api';
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase/clientRuntime';
 
 const friendStorageKey = 'cpt208_mock_friends';
+const blockedFriendStorageKey = 'cpt208_mock_blocked_friends';
 const currentProfileCacheKey = 'cpt208_current_profile_cache';
 
 function wait(ms = 400) {
@@ -60,6 +61,37 @@ function saveStoredFriends(friends) {
   }
 
   storage.setItem(friendStorageKey, JSON.stringify(friends));
+}
+
+function readStoredBlockedFriends() {
+  const storage = getStorage();
+
+  if (!storage) {
+    return [];
+  }
+
+  try {
+    const rawValue = storage.getItem(blockedFriendStorageKey);
+
+    if (!rawValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    return Array.isArray(parsedValue) ? parsedValue : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredBlockedFriends(friends) {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
+  storage.setItem(blockedFriendStorageKey, JSON.stringify(friends));
 }
 
 function readCachedCurrentProfile() {
@@ -222,6 +254,17 @@ export async function getPendingFriendRequests() {
   return Array.isArray(result.requests) ? result.requests.map(cloneFriend) : [];
 }
 
+export async function getBlockedFriendList() {
+  await wait(250);
+
+  if (!isSupabaseConfigured()) {
+    return sortFriends(readStoredBlockedFriends()).map(cloneFriend);
+  }
+
+  const result = await requestFriendApi('/api/friends/blocked-list');
+  return sortFriends((result.blockedUsers || []).map(cloneFriend));
+}
+
 export async function sendFriendRequest({ targetFriendCode }) {
   const normalizedCode = targetFriendCode.trim().toUpperCase();
 
@@ -239,9 +282,14 @@ export async function sendFriendRequest({ targetFriendCode }) {
     }
 
     const currentFriends = readStoredFriends();
+    const blockedFriends = readStoredBlockedFriends();
 
     if (currentFriends.some((item) => item.friendCode.toUpperCase() === normalizedCode)) {
       throw new Error('该好友已经在列表中了');
+    }
+
+    if (blockedFriends.some((item) => item.friendCode.toUpperCase() === normalizedCode)) {
+      throw new Error('该用户已在黑名单中，请先移出黑名单后再添加');
     }
 
     const targetUser = findUserByFriendCode(normalizedCode);
@@ -290,6 +338,138 @@ export async function respondToFriendRequest({ requestId, decision }) {
     notifyFriendDataChanged();
   }
 
+  return result;
+}
+
+export async function removeFriend({ friendUserId }) {
+  const normalizedFriendUserId = String(friendUserId || '').trim();
+
+  if (!normalizedFriendUserId) {
+    throw new Error('缺少好友用户 ID');
+  }
+
+  await wait(250);
+
+  if (!isSupabaseConfigured()) {
+    const currentFriends = readStoredFriends();
+    const nextFriends = currentFriends.filter((item) => item.id !== normalizedFriendUserId);
+
+    if (nextFriends.length === currentFriends.length) {
+      throw new Error('没有找到可删除的好友');
+    }
+
+    saveStoredFriends(nextFriends);
+    notifyFriendDataChanged();
+
+    return {
+      success: true,
+      message: '已将该用户从好友列表中删除。',
+    };
+  }
+
+  const result = await requestFriendApi('/api/friends/remove', {
+    friendUserId: normalizedFriendUserId,
+  });
+
+  notifyFriendDataChanged();
+  return result;
+}
+
+export async function blockFriend({ friendUserId }) {
+  const normalizedFriendUserId = String(friendUserId || '').trim();
+
+  if (!normalizedFriendUserId) {
+    throw new Error('缺少好友用户 ID');
+  }
+
+  await wait(250);
+
+  if (!isSupabaseConfigured()) {
+    const currentFriends = readStoredFriends();
+    const blockedFriends = readStoredBlockedFriends();
+    const targetFriend = currentFriends.find((item) => item.id === normalizedFriendUserId);
+
+    if (!targetFriend) {
+      throw new Error('没有找到可拉黑的好友');
+    }
+
+    const nextFriends = currentFriends.filter((item) => item.id !== normalizedFriendUserId);
+    const nextBlockedFriends = sortFriends([
+      {
+        id: targetFriend.id,
+        username: targetFriend.username,
+        friendCode: targetFriend.friendCode,
+        blockedAt: new Date().toISOString(),
+      },
+      ...blockedFriends.filter((item) => item.id !== normalizedFriendUserId),
+    ]);
+
+    saveStoredFriends(nextFriends);
+    saveStoredBlockedFriends(nextBlockedFriends);
+    notifyFriendDataChanged();
+
+    return {
+      success: true,
+      message: `已将 ${targetFriend.username} 拉入黑名单。`,
+    };
+  }
+
+  const result = await requestFriendApi('/api/friends/block', {
+    friendUserId: normalizedFriendUserId,
+  });
+
+  notifyFriendDataChanged();
+  return result;
+}
+
+export async function unblockFriend({ friendUserId }) {
+  const normalizedFriendUserId = String(friendUserId || '').trim();
+
+  if (!normalizedFriendUserId) {
+    throw new Error('缺少好友用户 ID');
+  }
+
+  await wait(250);
+
+  if (!isSupabaseConfigured()) {
+    const blockedFriends = readStoredBlockedFriends();
+    const targetBlockedFriend = blockedFriends.find((item) => item.id === normalizedFriendUserId);
+    const nextBlockedFriends = blockedFriends.filter((item) => item.id !== normalizedFriendUserId);
+
+    if (nextBlockedFriends.length === blockedFriends.length) {
+      throw new Error('没有找到可移出的黑名单用户');
+    }
+
+    const currentFriends = readStoredFriends();
+    const nextFriends = sortFriends([
+      ...currentFriends.filter((item) => item.id !== normalizedFriendUserId),
+      {
+        id: targetBlockedFriend.id,
+        username: targetBlockedFriend.username,
+        friendCode: targetBlockedFriend.friendCode,
+        isOnline: false,
+        isLocationSharingEnabled: false,
+        latitude: null,
+        longitude: null,
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+
+    saveStoredFriends(nextFriends);
+    saveStoredBlockedFriends(nextBlockedFriends);
+    notifyFriendDataChanged();
+
+    return {
+      success: true,
+      message: '已将该用户移出黑名单，并恢复为好友。',
+    };
+  }
+
+  const result = await requestFriendApi('/api/friends/unblock', {
+    friendUserId: normalizedFriendUserId,
+  });
+
+  notifyFriendDataChanged();
   return result;
 }
 

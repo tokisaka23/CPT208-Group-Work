@@ -8,6 +8,10 @@
     {
       "source": "/api/friends/:action",
       "destination": "/api/friends?action=:action"
+    },
+    {
+      "source": "/api/groups/:action",
+      "destination": "/api/groups?action=:action"
     }
   ]
 }

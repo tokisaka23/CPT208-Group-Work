@@ -90,6 +90,30 @@ async function loadLocationPermissions(adminClient, currentUserId, friendIds) {
   return data || [];
 }
 
+async function clearLocationPermissionsBetweenUsers(adminClient, leftUserId, rightUserId) {
+  const { error } = await adminClient
+    .from('location_share_permissions')
+    .delete()
+    .or(
+      `and(owner_user_id.eq.${leftUserId},viewer_user_id.eq.${rightUserId}),and(owner_user_id.eq.${rightUserId},viewer_user_id.eq.${leftUserId})`
+    );
+
+  if (error) {
+    if (
+      error.code === '42P01' ||
+      error.code === 'PGRST205' ||
+      error.message?.includes('relation') ||
+      error.message?.includes('does not exist') ||
+      error.message?.includes('schema cache') ||
+      error.message?.includes('Could not find the table')
+    ) {
+      return;
+    }
+
+    throw new Error(`清理位置共享权限失败：${error.message}`);
+  }
+}
+
 async function handleAddFriend(req, res) {
   if (req.method === 'OPTIONS') {
     buildJsonResponse(res, 200, { success: true });
@@ -368,6 +392,261 @@ async function handlePendingFriendList(req, res) {
   }
 }
 
+async function handleRemoveFriend(req, res) {
+  if (req.method === 'OPTIONS') {
+    buildJsonResponse(res, 200, { success: true });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    buildJsonResponse(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { friendUserId = '' } = readJsonBody(req);
+    const normalizedFriendUserId = String(friendUserId).trim();
+
+    if (!normalizedFriendUserId) {
+      buildJsonResponse(res, 400, { error: '缺少好友用户 ID' });
+      return;
+    }
+
+    if (normalizedFriendUserId === user.id) {
+      buildJsonResponse(res, 400, { error: '不能删除自己' });
+      return;
+    }
+
+    const relationship = await findExistingRelationship(adminClient, user.id, normalizedFriendUserId);
+
+    if (!relationship || relationship.status !== 'accepted') {
+      buildJsonResponse(res, 404, { error: '没有找到可删除的好友关系' });
+      return;
+    }
+
+    const { error: deleteError } = await adminClient
+      .from('user_relationships')
+      .delete()
+      .eq('id', relationship.id);
+
+    if (deleteError) {
+      throw new Error(`删除好友关系失败：${deleteError.message}`);
+    }
+
+    await clearLocationPermissionsBetweenUsers(adminClient, user.id, normalizedFriendUserId);
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      message: '已将该用户从好友列表中删除。',
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '删除好友失败，请稍后再试。',
+    });
+  }
+}
+
+async function handleBlockedFriendList(req, res) {
+  if (req.method === 'OPTIONS') {
+    buildJsonResponse(res, 200, { success: true });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    buildJsonResponse(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { data: relationships, error: relationshipError } = await adminClient
+      .from('user_relationships')
+      .select('id, target_user_id, updated_at')
+      .eq('requester_user_id', user.id)
+      .eq('status', 'blocked')
+      .order('updated_at', { ascending: false });
+
+    if (relationshipError) {
+      throw new Error(`读取黑名单失败：${relationshipError.message}`);
+    }
+
+    const blockedUserIds = [...new Set((relationships || []).map((item) => item.target_user_id))];
+
+    if (!blockedUserIds.length) {
+      buildJsonResponse(res, 200, {
+        success: true,
+        blockedUsers: [],
+      });
+      return;
+    }
+
+    const { data: profiles, error: profileError } = await adminClient
+      .from('user_profiles')
+      .select('id, username, display_name, friend_code')
+      .in('id', blockedUserIds);
+
+    if (profileError) {
+      throw new Error(`读取黑名单用户资料失败：${profileError.message}`);
+    }
+
+    const profileMap = new Map((profiles || []).map((item) => [item.id, item]));
+    const blockedUsers = (relationships || [])
+      .map((item) => {
+        const profile = profileMap.get(item.target_user_id);
+
+        if (!profile) {
+          return null;
+        }
+
+        return {
+          id: profile.id,
+          username: profile.display_name || profile.username || '未命名用户',
+          friendCode: profile.friend_code,
+          blockedAt: item.updated_at,
+        };
+      })
+      .filter(Boolean);
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      blockedUsers,
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '读取黑名单失败，请稍后再试。',
+    });
+  }
+}
+
+async function handleBlockFriend(req, res) {
+  if (req.method === 'OPTIONS') {
+    buildJsonResponse(res, 200, { success: true });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    buildJsonResponse(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { friendUserId = '' } = readJsonBody(req);
+    const normalizedFriendUserId = String(friendUserId).trim();
+
+    if (!normalizedFriendUserId) {
+      buildJsonResponse(res, 400, { error: '缺少好友用户 ID' });
+      return;
+    }
+
+    if (normalizedFriendUserId === user.id) {
+      buildJsonResponse(res, 400, { error: '不能将自己拉入黑名单' });
+      return;
+    }
+
+    const targetProfile = await findProfileById(adminClient, normalizedFriendUserId);
+
+    if (!targetProfile) {
+      buildJsonResponse(res, 404, { error: '没有找到对应的用户' });
+      return;
+    }
+
+    const relationship = await findExistingRelationship(adminClient, user.id, normalizedFriendUserId);
+
+    if (relationship) {
+      const { error: updateError } = await adminClient
+        .from('user_relationships')
+        .update({
+          requester_user_id: user.id,
+          target_user_id: normalizedFriendUserId,
+          status: 'blocked',
+        })
+        .eq('id', relationship.id);
+
+      if (updateError) {
+        throw new Error(`更新黑名单关系失败：${updateError.message}`);
+      }
+    } else {
+      const { error: insertError } = await adminClient
+        .from('user_relationships')
+        .insert({
+          requester_user_id: user.id,
+          target_user_id: normalizedFriendUserId,
+          status: 'blocked',
+        });
+
+      if (insertError) {
+        throw new Error(`创建黑名单关系失败：${insertError.message}`);
+      }
+    }
+
+    await clearLocationPermissionsBetweenUsers(adminClient, user.id, normalizedFriendUserId);
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      message: `已将 ${targetProfile.display_name || targetProfile.username || '该用户'} 拉入黑名单。`,
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '拉黑好友失败，请稍后再试。',
+    });
+  }
+}
+
+async function handleUnblockFriend(req, res) {
+  if (req.method === 'OPTIONS') {
+    buildJsonResponse(res, 200, { success: true });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    buildJsonResponse(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { friendUserId = '' } = readJsonBody(req);
+    const normalizedFriendUserId = String(friendUserId).trim();
+
+    if (!normalizedFriendUserId) {
+      buildJsonResponse(res, 400, { error: '缺少好友用户 ID' });
+      return;
+    }
+
+    const relationship = await findExistingRelationship(adminClient, user.id, normalizedFriendUserId);
+
+    if (
+      !relationship ||
+      relationship.status !== 'blocked' ||
+      relationship.requester_user_id !== user.id ||
+      relationship.target_user_id !== normalizedFriendUserId
+    ) {
+      buildJsonResponse(res, 404, { error: '没有找到可解除的黑名单关系' });
+      return;
+    }
+
+    const { error: updateError } = await adminClient
+      .from('user_relationships')
+      .update({ status: 'accepted' })
+      .eq('id', relationship.id);
+
+    if (updateError) {
+      throw new Error(`恢复好友关系失败：${updateError.message}`);
+    }
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      message: '已将该用户移出黑名单，并恢复为好友。',
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '移出黑名单失败，请稍后再试。',
+    });
+  }
+}
+
 async function handleRespondFriendRequest(req, res) {
   if (req.method === 'OPTIONS') {
     buildJsonResponse(res, 200, { success: true });
@@ -453,9 +732,13 @@ function resolveFriendAction(req) {
 
 const friendActionHandlers = {
   add: handleAddFriend,
+  block: handleBlockFriend,
+  'blocked-list': handleBlockedFriendList,
   list: handleFriendList,
   'pending-list': handlePendingFriendList,
+  remove: handleRemoveFriend,
   respond: handleRespondFriendRequest,
+  unblock: handleUnblockFriend,
 };
 
 export default async function friendHandler(req, res) {
@@ -472,7 +755,11 @@ export default async function friendHandler(req, res) {
 
 export const friendHandlers = {
   '/api/friends/add': handleAddFriend,
+  '/api/friends/block': handleBlockFriend,
+  '/api/friends/blocked-list': handleBlockedFriendList,
   '/api/friends/list': handleFriendList,
   '/api/friends/pending-list': handlePendingFriendList,
+  '/api/friends/remove': handleRemoveFriend,
   '/api/friends/respond': handleRespondFriendRequest,
+  '/api/friends/unblock': handleUnblockFriend,
 };
