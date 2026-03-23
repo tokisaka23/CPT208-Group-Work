@@ -67,6 +67,18 @@ function createSupabaseClient(url, key) {
   });
 }
 
+export function getServiceRoleClient() {
+  const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseEnv();
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error(
+      '缺少 Supabase 服务端环境变量。请在 .env.local 中配置 FY_SUPABASE_SERVICE_ROLE_KEY。'
+    );
+  }
+
+  return createSupabaseClient(supabaseUrl, supabaseServiceRoleKey);
+}
+
 export async function getAuthenticatedUser(req) {
   const { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } = getSupabaseEnv();
 

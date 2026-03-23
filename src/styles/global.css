@@ -223,6 +223,7 @@ button {
 }
 
 .nav-link__icon {
+  position: relative;
   display: grid;
   place-items: center;
   width: 1.42rem;
@@ -234,6 +235,17 @@ button {
 .nav-link__icon svg {
   width: 0.78rem;
   height: 0.78rem;
+}
+
+.nav-link__dot {
+  position: absolute;
+  top: -0.16rem;
+  right: -0.12rem;
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+  background: #ee4f44;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.88);
 }
 
 .nav-link__text {
@@ -265,6 +277,7 @@ button {
 }
 
 .profile-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.48rem;
@@ -327,6 +340,24 @@ button {
   display: grid;
   gap: 0.06rem;
   text-align: left;
+}
+
+.profile-request-badge {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.25rem;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-red, #a33b29);
+  color: #fff;
+  font-size: 0.66rem;
+  line-height: 1;
+  box-shadow: 0 8px 16px rgba(163, 59, 41, 0.22);
 }
 
 .profile-label {

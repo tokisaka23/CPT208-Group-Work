@@ -1,9 +1,18 @@
-<script setup>
+﻿<script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+import { showFailToast, showSuccessToast } from 'vant';
+import FriendRequestPopup from './components/friends/FriendRequestPopup.vue';
 import FriendsPage from './pages/friends/FriendsPage.vue';
 import { aiApi, authApi, uploadApi } from './services/api';
+import {
+  getPendingFriendRequests,
+  respondToFriendRequest,
+} from './services/friends/friendServiceRuntime';
+import { getGroupChats } from './services/friends/groupChatService';
+import { SECURITY_QUESTION_FIELDS, SECURITY_QUESTION_PROMPTS } from './shared/securityQuestions';
 import { isSupabaseConfigured } from './services/supabase/clientRuntime';
+import { deleteCurrentAccount } from './services/supabase/authRuntime';
 
 const route = useRoute();
 const router = useRouter();
@@ -84,6 +93,11 @@ const friendTrip = reactive({
 const inviteFeedback = ref('');
 const friendHighlights = computed(() => currentJourney.value.focus);
 const friendSummary = computed(() => `${pageContextLabel.value} · ${currentJourney.value.pace}`);
+const pendingFriendRequests = ref([]);
+const pendingRequestPopupVisible = ref(false);
+const processingRequestId = ref('');
+const pendingRequestSignature = ref('');
+const unreadGroupChatCount = ref(0);
 const aiDraft = ref('');
 const aiConversations = ref([]);
 const activeAiConversationId = ref('');
@@ -160,6 +174,11 @@ const activeAiJourney = computed(() => getJourneyByContextKey(activeAiConversati
 const activeAiPageLabel = computed(() => activeAiConversation.value?.pageLabel || pageContextLabel.value);
 const activeAiPrompts = computed(() => activeAiJourney.value.prompts || currentJourney.value.prompts);
 const aiShouldShowStarter = computed(() => !aiMessages.value.some((item) => item.role === 'user'));
+const hasPendingFriendRequests = computed(() => pendingFriendRequests.value.length > 0);
+const hasUnreadGroupChats = computed(() => unreadGroupChatCount.value > 0);
+const hasFriendFeatureNotification = computed(
+  () => hasPendingFriendRequests.value || hasUnreadGroupChats.value,
+);
 
 function buildAiGreeting(pageLabel = pageContextLabel.value) {
   return `你现在浏览的是「${pageLabel}」。我可以按当前页面告诉你先看哪里、怎么走更顺，以及哪些细节最值得慢下来。`;
@@ -651,13 +670,23 @@ const currentUser = ref(null);
 const isProfileMenuOpen = ref(false);
 const isAuthOpen = ref(false);
 const authMode = ref('login');
+const securityQuestionItems = SECURITY_QUESTION_FIELDS.map((field) => ({
+  field,
+  prompt: SECURITY_QUESTION_PROMPTS[field],
+  type: field === 'birthday' ? 'date' : 'text',
+  autocomplete: field === 'birthday' ? 'bday' : 'off',
+}));
 const authForm = reactive({
   displayName: '',
   account: '',
   password: '',
   confirmPassword: '',
+  favoriteColor: '',
+  birthday: '',
+  studentId: '',
 });
 const authSubmitting = ref(false);
+const authDeletingAccount = ref(false);
 const authFeedback = ref('');
 const authFeedbackType = ref('info');
 const profileForm = reactive({
@@ -715,12 +744,157 @@ function handleWindowClickForProfileMenu(event) {
   closeProfileMenu();
 }
 
+function setAuthMode(mode) {
+  authMode.value = mode;
+  authForm.password = '';
+  authForm.confirmPassword = '';
+  authForm.favoriteColor = '';
+  authForm.birthday = '';
+  authForm.studentId = '';
+  authFeedback.value = '';
+  authFeedbackType.value = 'info';
+}
+
+function clearPendingRequestState() {
+  pendingFriendRequests.value = [];
+  pendingRequestPopupVisible.value = false;
+  processingRequestId.value = '';
+  pendingRequestSignature.value = '';
+}
+
+let pendingRequestPollTimer = null;
+let groupChatUnreadPollTimer = null;
+
+function stopPendingRequestPolling() {
+  if (pendingRequestPollTimer) {
+    window.clearInterval(pendingRequestPollTimer);
+    pendingRequestPollTimer = null;
+  }
+}
+
+function startPendingRequestPolling() {
+  stopPendingRequestPolling();
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  pendingRequestPollTimer = window.setInterval(() => {
+    loadPendingRequests({ silent: true });
+  }, 10000);
+}
+
+function clearGroupChatUnreadState() {
+  unreadGroupChatCount.value = 0;
+}
+
+function stopGroupChatUnreadPolling() {
+  if (groupChatUnreadPollTimer) {
+    window.clearInterval(groupChatUnreadPollTimer);
+    groupChatUnreadPollTimer = null;
+  }
+}
+
+function startGroupChatUnreadPolling() {
+  stopGroupChatUnreadPolling();
+
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  groupChatUnreadPollTimer = window.setInterval(() => {
+    loadGroupChatUnreadState({ silent: true });
+  }, 12000);
+}
+
+function applyPendingRequests(requests, { forceOpen = false } = {}) {
+  const nextRequests = Array.isArray(requests) ? requests : [];
+  const nextSignature = nextRequests.map((item) => item.id).join(',');
+  const hasNewRequests =
+    Boolean(nextSignature) && nextSignature !== pendingRequestSignature.value;
+
+  pendingFriendRequests.value = nextRequests;
+  pendingRequestSignature.value = nextSignature;
+
+  if (!nextRequests.length) {
+    pendingRequestPopupVisible.value = false;
+    return;
+  }
+
+  if (forceOpen || hasNewRequests) {
+    pendingRequestPopupVisible.value = true;
+  }
+}
+
+async function loadPendingRequests({ silent = false, forceOpen = false } = {}) {
+  if (!currentUser.value?.id || !isSupabaseConfigured()) {
+    stopPendingRequestPolling();
+    clearPendingRequestState();
+    return;
+  }
+
+  try {
+    const requests = await getPendingFriendRequests();
+    applyPendingRequests(requests, { forceOpen });
+  } catch (error) {
+    if (!silent) {
+      showFailToast(error.message || '读取好友请求失败，请稍后再试');
+    }
+  }
+}
+
+async function loadGroupChatUnreadState({ silent = false } = {}) {
+  if (!currentUser.value?.id) {
+    stopGroupChatUnreadPolling();
+    clearGroupChatUnreadState();
+    return;
+  }
+
+  try {
+    const groups = await getGroupChats({
+      currentUserId: currentUser.value.id,
+    });
+    unreadGroupChatCount.value = groups.filter((group) => group?.hasUnread).length;
+  } catch (error) {
+    if (!silent) {
+      showFailToast(error.message || '读取群聊未读状态失败，请稍后再试');
+    }
+  }
+}
+
+function handleGroupChatUnreadChanged() {
+  loadGroupChatUnreadState({ silent: true });
+}
+
+async function handleFriendRequestDecision(request, decision) {
+  processingRequestId.value = request.id;
+
+  try {
+    const result = await respondToFriendRequest({
+      requestId: request.id,
+      decision,
+    });
+
+    pendingFriendRequests.value = pendingFriendRequests.value.filter((item) => item.id !== request.id);
+    pendingRequestSignature.value = pendingFriendRequests.value.map((item) => item.id).join(',');
+    pendingRequestPopupVisible.value = pendingFriendRequests.value.length > 0;
+    showSuccessToast(result.message);
+  } catch (error) {
+    showFailToast(error.message || '处理好友请求失败，请稍后再试');
+  } finally {
+    processingRequestId.value = '';
+  }
+}
+
 const closeAuthDialog = () => {
   isAuthOpen.value = false;
   authForm.displayName = '';
   authForm.account = '';
   authForm.password = '';
   authForm.confirmPassword = '';
+  authForm.favoriteColor = '';
+  authForm.birthday = '';
+  authForm.studentId = '';
   authFeedback.value = '';
   authFeedbackType.value = 'info';
 };
@@ -732,6 +906,14 @@ function validateEmail(value) {
 function setAuthFeedback(message, type = 'info') {
   authFeedback.value = message;
   authFeedbackType.value = type;
+}
+
+function getSecurityAnswersPayload() {
+  return {
+    favoriteColor: authForm.favoriteColor,
+    birthday: authForm.birthday,
+    studentId: authForm.studentId,
+  };
 }
 
 async function submitAuth() {
@@ -753,8 +935,25 @@ async function submitAuth() {
   }
 
   if (!password) {
-    setAuthFeedback('请输入密码。', 'error');
+    setAuthFeedback(authMode.value === 'reset' ? '请输入新密码。' : '请输入密码。', 'error');
     return;
+  }
+
+  if (authMode.value === 'register' || authMode.value === 'reset') {
+    if (password.length < 6) {
+      setAuthFeedback(authMode.value === 'reset' ? '新密码长度至少 6 位。' : '密码长度至少 6 位。', 'error');
+      return;
+    }
+
+    if (!authForm.confirmPassword) {
+      setAuthFeedback(authMode.value === 'reset' ? '请再次输入新密码。' : '请再次输入密码。', 'error');
+      return;
+    }
+
+    if (password !== authForm.confirmPassword) {
+      setAuthFeedback('两次输入的密码不一致。', 'error');
+      return;
+    }
   }
 
   if (authMode.value === 'register') {
@@ -763,13 +962,23 @@ async function submitAuth() {
       return;
     }
 
-    if (password.length < 6) {
-      setAuthFeedback('密码长度至少 6 位。', 'error');
+    const hasMissingSecurityAnswer = SECURITY_QUESTION_FIELDS.some(
+      (field) => !String(authForm[field] || '').trim(),
+    );
+
+    if (hasMissingSecurityAnswer) {
+      setAuthFeedback('创建账号前请先完整回答三个安全问题。', 'error');
       return;
     }
+  }
 
-    if (authForm.confirmPassword && password !== authForm.confirmPassword) {
-      setAuthFeedback('两次输入的密码不一致。', 'error');
+  if (authMode.value === 'reset') {
+    const hasMissingSecurityAnswer = SECURITY_QUESTION_FIELDS.some(
+      (field) => !String(authForm[field] || '').trim(),
+    );
+
+    if (hasMissingSecurityAnswer) {
+      setAuthFeedback('重置密码前请先完整回答三个安全问题。', 'error');
       return;
     }
   }
@@ -791,29 +1000,50 @@ async function submitAuth() {
       const authState = await authApi.login({ email, password });
       currentUser.value = authState;
       setAuthFeedback('登录成功，正在进入好友功能。', 'success');
-    } else {
+    } else if (authMode.value === 'register') {
       // 中文注释：这里执行 Supabase Auth 真实注册，并把会话信息写入 localStorage。
       const authState = await authApi.register({
         displayName: authForm.displayName.trim(),
         email,
         password,
+        securityAnswers: getSecurityAnswersPayload(),
       });
 
       if (authState.requiresEmailConfirmation) {
         authMode.value = 'login';
+        authForm.password = '';
+        authForm.confirmPassword = '';
+        authForm.favoriteColor = '';
+        authForm.birthday = '';
+        authForm.studentId = '';
         setAuthFeedback('注册已提交，请先完成邮箱验证，然后再登录。', 'success');
         return;
       }
 
       currentUser.value = authState;
       setAuthFeedback('注册成功，正在进入好友功能。', 'success');
+    } else {
+      const result = await authApi.resetPassword({
+        email,
+        newPassword: password,
+        securityAnswers: getSecurityAnswersPayload(),
+      });
+
+      authMode.value = 'login';
+      authForm.password = '';
+      authForm.confirmPassword = '';
+      authForm.favoriteColor = '';
+      authForm.birthday = '';
+      authForm.studentId = '';
+      setAuthFeedback(result?.message || '安全问题验证通过，请使用新密码登录。', 'success');
+      return;
     }
 
     closeAuthDialog();
     await router.push(route.fullPath || '/').catch(() => {});
   } catch (error) {
-    console.error('[Auth] 登录/注册失败', error);
-    setAuthFeedback(error.message || '登录/注册失败，请稍后重试。', 'error');
+    console.error('[Auth] 认证请求失败', error);
+    setAuthFeedback(error.message || '认证请求失败，请稍后重试。', 'error');
   } finally {
     authSubmitting.value = false;
   }
@@ -825,6 +1055,10 @@ async function logout() {
   } catch (error) {
     console.error('[Auth] 退出登录失败', error);
   } finally {
+    stopPendingRequestPolling();
+    stopGroupChatUnreadPolling();
+    clearPendingRequestState();
+    clearGroupChatUnreadState();
     currentUser.value = null;
     closeProfileMenu();
     closeAuthDialog();
@@ -879,6 +1113,39 @@ async function submitProfileUpdate() {
     setProfileFeedback(error.message || '更新账户信息失败，请稍后再试。', 'error');
   } finally {
     profileSubmitting.value = false;
+  }
+}
+
+async function deleteAccount() {
+  if (!currentUser.value || authDeletingAccount.value) {
+    return;
+  }
+
+  const shouldDelete = globalThis.confirm?.(
+    '注销后将删除当前账号及其关联资料，且无法恢复。确定继续吗？',
+  );
+
+  if (!shouldDelete) {
+    return;
+  }
+
+  authDeletingAccount.value = true;
+  setAuthFeedback('');
+
+  try {
+    const result = await deleteCurrentAccount();
+    stopPendingRequestPolling();
+    stopGroupChatUnreadPolling();
+    clearPendingRequestState();
+    clearGroupChatUnreadState();
+    currentUser.value = null;
+    closeAuthDialog();
+    setAuthFeedback(result?.message || '账号已注销。', 'success');
+  } catch (error) {
+    console.error('[Auth] 注销账号失败', error);
+    setAuthFeedback(error.message || '注销账号失败，请稍后重试。', 'error');
+  } finally {
+    authDeletingAccount.value = false;
   }
 }
 
@@ -945,6 +1212,10 @@ onMounted(async () => {
     const restored = await authApi.restore();
     if (restored?.id) {
       currentUser.value = restored;
+      startPendingRequestPolling();
+      loadPendingRequests({ silent: true, forceOpen: true });
+      startGroupChatUnreadPolling();
+      loadGroupChatUnreadState({ silent: true });
     }
   } catch {
     // 这里不打断用户浏览体验，详细错误在 authApi 内部已有 console.error
@@ -952,14 +1223,31 @@ onMounted(async () => {
 
   authSubscription = authApi.subscribe((nextUser) => {
     currentUser.value = nextUser;
+
+    if (nextUser?.id) {
+      startPendingRequestPolling();
+      loadPendingRequests({ silent: true, forceOpen: true });
+      startGroupChatUnreadPolling();
+      loadGroupChatUnreadState({ silent: true });
+      return;
+    }
+
+    stopPendingRequestPolling();
+    stopGroupChatUnreadPolling();
+    clearPendingRequestState();
+    clearGroupChatUnreadState();
   });
 
   if (typeof window !== 'undefined') {
     window.addEventListener('click', handleWindowClickForProfileMenu);
   }
+  window.addEventListener('group-chats-updated', handleGroupChatUnreadChanged);
 });
 
 onUnmounted(() => {
+  stopPendingRequestPolling();
+  stopGroupChatUnreadPolling();
+  window.removeEventListener('group-chats-updated', handleGroupChatUnreadChanged);
   authSubscription?.data?.subscription?.unsubscribe?.();
 
   if (typeof window !== 'undefined') {
@@ -1114,6 +1402,11 @@ watch(
                   stroke-width="1.6"
                 />
               </svg>
+              <span
+                v-if="feature.id === 'friends' && hasFriendFeatureNotification"
+                class="nav-link__dot"
+                aria-label="存在好友或群聊未读提醒"
+              />
             </span>
             <span class="nav-link__text">{{ feature.label }}</span>
           </button>
@@ -1127,13 +1420,16 @@ watch(
               :aria-label="currentUser ? '打开账户菜单' : '打开登录弹窗'"
               @click.stop="toggleProfileMenu"
             >
-              <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
-                <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
-                <span>{{ avatarLabel }}</span>
-              </span>
-              <span class="profile-copy">
-                <span class="profile-label">{{ profileLabel }}</span>
-                <small class="profile-note">{{ profileStatus }}</small>
+                <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
+                  <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
+                  <span v-if="hasPendingFriendRequests" class="profile-request-badge">
+                    {{ pendingFriendRequests.length > 9 ? '9+' : pendingFriendRequests.length }}
+                  </span>
+                  <span>{{ avatarLabel }}</span>
+                </span>
+                <span class="profile-copy">
+                  <span class="profile-label">{{ profileLabel }}</span>
+                  <small class="profile-note">{{ profileStatus }}</small>
               </span>
             </button>
 
@@ -1184,6 +1480,11 @@ watch(
                   </button>
                   <button type="button" class="dialog__ghost" @click="logout" :disabled="profileSubmitting">
                     退出登录
+                  </button>
+                </div>
+                <div class="profile-dropdown__actions">
+                  <button type="button" class="dialog__ghost" @click="openAuthDialog('profile')">
+                    更多账户操作
                   </button>
                 </div>
               </form>
@@ -1446,7 +1747,15 @@ watch(
         <section class="dialog" @click.stop>
           <header class="dialog__header">
             <h2 class="dialog__title">
-              {{ currentUser ? '账户信息' : authMode === 'login' ? '登录账户' : '创建账户' }}
+              {{
+                currentUser
+                  ? '账户信息'
+                  : authMode === 'login'
+                    ? '登录账户'
+                    : authMode === 'register'
+                      ? '创建账户'
+                      : '重置密码'
+              }}
             </h2>
             <button type="button" class="dialog__close" @click="closeAuthDialog">关闭</button>
           </header>
@@ -1456,7 +1765,7 @@ watch(
               type="button"
               class="tab-button"
               :class="{ 'is-active': authMode === 'login' }"
-              @click="authMode = 'login'"
+              @click="setAuthMode('login')"
             >
               登录
             </button>
@@ -1464,16 +1773,24 @@ watch(
               type="button"
               class="tab-button"
               :class="{ 'is-active': authMode === 'register' }"
-              @click="authMode = 'register'"
+              @click="setAuthMode('register')"
             >
               注册
+            </button>
+            <button
+              type="button"
+              class="tab-button"
+              :class="{ 'is-active': authMode === 'reset' }"
+              @click="setAuthMode('reset')"
+            >
+              重置密码
             </button>
           </div>
 
           <p v-if="!currentUser && !isSupabaseConfigured()" class="auth-feedback is-warning">
-            当前尚未配置真实 Supabase 登录环境变量，所以注册和登录现在不可用。请在 `.env.local` 中填写
-            `VITE_FY_SUPABASE_URL` 和 `VITE_FY_SUPABASE_ANON_KEY`，或填写 `VITE_SUPABASE_URL` 和
-            `VITE_SUPABASE_ANON_KEY` 后重启前端。
+            当前尚未配置真实 Supabase 登录环境变量，所以登录、注册和重置密码现在都不可用。请在
+            `.env.local` 中填写 `VITE_FY_SUPABASE_URL` 和 `VITE_FY_SUPABASE_ANON_KEY`，或填写
+            `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 后重启前端。
           </p>
 
           <template v-if="currentUser">
@@ -1484,7 +1801,23 @@ watch(
             </div>
 
             <div class="dialog__actions">
+              <button
+                v-if="hasPendingFriendRequests"
+                type="button"
+                class="dialog__ghost"
+                @click="pendingRequestPopupVisible = true"
+              >
+                好友请求 {{ pendingFriendRequests.length }}
+              </button>
               <button type="button" class="dialog__primary" @click="logout">退出登录</button>
+              <button
+                type="button"
+                class="dialog__ghost"
+                :disabled="authDeletingAccount"
+                @click="deleteAccount"
+              >
+                {{ authDeletingAccount ? '注销中…' : '注销账号' }}
+              </button>
               <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
             </div>
           </template>
@@ -1511,24 +1844,48 @@ watch(
             </label>
 
             <label class="field">
-              <span>密码</span>
+              <span>{{ authMode === 'reset' ? '新密码' : '密码' }}</span>
               <input
                 v-model="authForm.password"
                 type="password"
-                placeholder="请输入密码"
+                :placeholder="authMode === 'reset' ? '请输入新密码' : '请输入密码'"
                 :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'"
               />
             </label>
 
-            <label v-if="authMode === 'register'" class="field">
-              <span>确认密码（可选）</span>
+            <label v-if="authMode === 'register' || authMode === 'reset'" class="field">
+              <span>{{ authMode === 'reset' ? '确认新密码' : '确认密码' }}</span>
               <input
                 v-model="authForm.confirmPassword"
                 type="password"
-                placeholder="再次输入密码"
+                :placeholder="authMode === 'reset' ? '再次输入新密码' : '再次输入密码'"
                 autocomplete="new-password"
               />
             </label>
+
+            <template v-if="authMode === 'register' || authMode === 'reset'">
+              <p class="auth-security-copy">
+                {{
+                  authMode === 'register'
+                    ? '创建账号时需要设置三个安全问题答案，后续忘记密码时会用它们进行核对。'
+                    : '请输入注册邮箱，并回答注册时设置的三个安全问题。验证通过后才能重置密码。'
+                }}
+              </p>
+
+              <label
+                v-for="item in securityQuestionItems"
+                :key="item.field"
+                class="field"
+              >
+                <span>{{ item.prompt }}</span>
+                <input
+                  v-model="authForm[item.field]"
+                  :type="item.type"
+                  :placeholder="item.type === 'date' ? '请选择日期' : '请输入答案'"
+                  :autocomplete="item.autocomplete"
+                />
+              </label>
+            </template>
 
             <p v-if="authFeedback" :class="['auth-feedback', `is-${authFeedbackType}`]">
               {{ authFeedback }}
@@ -1536,7 +1893,15 @@ watch(
 
             <div class="dialog__actions">
               <button type="submit" class="dialog__primary" :disabled="authSubmitting">
-                {{ authSubmitting ? '提交中…' : authMode === 'login' ? '立即登录' : '创建账号' }}
+                {{
+                  authSubmitting
+                    ? '提交中…'
+                    : authMode === 'login'
+                      ? '立即登录'
+                      : authMode === 'register'
+                        ? '创建账号'
+                        : '验证并重置'
+                }}
               </button>
               <button type="button" class="dialog__ghost" @click="closeAuthDialog" :disabled="authSubmitting">取消</button>
             </div>
@@ -1544,10 +1909,36 @@ watch(
         </section>
       </div>
     </transition>
+
+    <FriendRequestPopup
+      v-if="currentUser"
+      :show="pendingRequestPopupVisible"
+      :requests="pendingFriendRequests"
+      :processing-id="processingRequestId"
+      @update:show="pendingRequestPopupVisible = $event"
+      @accept="handleFriendRequestDecision($event, 'accepted')"
+      @reject="handleFriendRequestDecision($event, 'rejected')"
+    />
   </div>
 </template>
 
 <style>
+.profile-request-badge {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.55rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.24rem;
+  border-radius: 999px;
+  background: #ee4f44;
+  color: #fff;
+  font-size: 0.68rem;
+  line-height: 1.15rem;
+  text-align: center;
+  box-shadow: 0 0 0 2px rgba(250, 250, 249, 0.92);
+}
+
 .global-footer {
   --accent-red: #a33b29;
   position: relative;
@@ -1966,6 +2357,16 @@ watch(
   margin-top: 1rem;
   display: grid;
   gap: 0.9rem;
+}
+
+.auth-security-copy {
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: 18px;
+  background: rgba(95, 127, 114, 0.08);
+  color: var(--ink-700);
+  font-size: 0.92rem;
+  line-height: 1.6;
 }
 
 .ai-sidebar {

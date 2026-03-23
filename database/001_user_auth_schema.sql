@@ -23,6 +23,9 @@ create table if not exists public.user_profiles (
   friend_code text not null unique default public.generate_friend_code(),
   auth_email text not null unique,
   display_name text not null,
+  security_answer_favorite_color text,
+  security_answer_birthday text,
+  security_answer_student_id text,
   avatar_url text,
   role text not null default 'user',
   status text not null default 'active',
@@ -36,6 +39,15 @@ create table if not exists public.user_profiles (
 
 alter table public.user_profiles
 add column if not exists friend_code text;
+
+alter table public.user_profiles
+add column if not exists security_answer_favorite_color text;
+
+alter table public.user_profiles
+add column if not exists security_answer_birthday text;
+
+alter table public.user_profiles
+add column if not exists security_answer_student_id text;
 
 alter table public.user_profiles
 alter column friend_code set default public.generate_friend_code();

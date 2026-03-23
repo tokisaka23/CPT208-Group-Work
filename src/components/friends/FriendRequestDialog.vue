@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { Button, Empty, Popup, Tag } from 'vant';
 
 defineProps({
