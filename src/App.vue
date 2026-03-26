@@ -102,12 +102,17 @@ const aiDraft = ref('');
 const aiConversations = ref([]);
 const activeAiConversationId = ref('');
 const aiLoadingConversationId = ref('');
+const aiConversationDeletingId = ref('');
+const aiConversationsLoadedUserId = ref('');
 const aiError = ref('');
 const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
+const isAiFullscreen = ref(false);
+const profileMenuRef = ref(null);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
+const MAX_PERSISTED_CHAT_ROUNDS = 30;
 const AI_GREETING_HINT = '当前页智能导览';
 const DEFAULT_AI_CONVERSATION_TITLE = '新建对话';
 
@@ -117,6 +122,18 @@ function createAiMessageId(prefix) {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createAiConversationId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
 function focusAiComposer() {
@@ -191,6 +208,28 @@ function createAiGreetingMessage(pageLabel = pageContextLabel.value) {
   };
 }
 
+function createAiConversation({
+  id = createAiConversationId(),
+  pageLabel = pageContextLabel.value,
+  contextKey = route.fullPath,
+  title = DEFAULT_AI_CONVERSATION_TITLE,
+  createdAt = Date.now(),
+  updatedAt = Date.now(),
+  titleManuallyEdited = false,
+  messages = null,
+} = {}) {
+  return {
+    id,
+    title,
+    contextKey,
+    pageLabel,
+    createdAt,
+    updatedAt,
+    titleManuallyEdited,
+    messages: messages?.length ? messages : [createAiGreetingMessage(pageLabel)],
+  };
+}
+
 function deriveAiConversationTitle(messages, pageLabel) {
   const firstUserMessage = messages.find((item) => item.role === 'user');
   return truncateAiText(firstUserMessage?.content, 18) || `${pageLabel} 导览`;
@@ -202,6 +241,20 @@ function deriveAiConversationPreview(conversation) {
     .find((item) => item.role === 'user' || item.role === 'assistant');
 
   return truncateAiText(lastMessage?.content, 28) || '从这里继续聊苏州园林。';
+}
+
+function trimConversationMessages(conversation) {
+  if (!conversation) {
+    return;
+  }
+
+  const greetingMessage = conversation.messages.find((item) => item.hint === AI_GREETING_HINT) || null;
+  const regularMessages = conversation.messages
+    .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
+    .filter((item) => item.hint !== AI_GREETING_HINT)
+    .slice(-(MAX_PERSISTED_CHAT_ROUNDS * 2));
+
+  conversation.messages = greetingMessage ? [greetingMessage, ...regularMessages] : regularMessages;
 }
 
 function buildConversationMessagesForApi(conversation = activeAiConversation.value) {
@@ -233,17 +286,31 @@ function scrollAiConversationToBottom(behavior = 'smooth') {
   });
 }
 
+function buildConversationFromHistoryItem(item) {
+  const historyMessages = (item?.messages || [])
+    .filter((message) => message && (message.role === 'user' || message.role === 'assistant'))
+    .map((message) => ({
+      id: message.id || createAiMessageId(message.role),
+      role: message.role,
+      content: message.content,
+      createdAt: message.createdAt || item?.updatedAt || Date.now(),
+    }));
+
+  return createAiConversation({
+    id: item?.id || createAiConversationId(),
+    title: item?.title || DEFAULT_AI_CONVERSATION_TITLE,
+    contextKey: route.fullPath,
+    pageLabel: pageContextLabel.value,
+    createdAt: item?.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
+    updatedAt: item?.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
+    titleManuallyEdited: Boolean(item?.title),
+    messages: historyMessages.length ? historyMessages : [createAiGreetingMessage(pageContextLabel.value)],
+  });
+}
+
 const ensureAiConversation = (forceReset = false) => {
   if (forceReset || !activeAiConversation.value) {
-    const nextConversation = {
-      id: createAiMessageId('conversation'),
-      title: DEFAULT_AI_CONVERSATION_TITLE,
-      contextKey: route.fullPath,
-      pageLabel: pageContextLabel.value,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      messages: [createAiGreetingMessage(pageContextLabel.value)],
-    };
+    const nextConversation = createAiConversation();
 
     aiConversations.value = [nextConversation, ...aiConversations.value];
     activeAiConversationId.value = nextConversation.id;
@@ -255,6 +322,10 @@ const ensureAiConversation = (forceReset = false) => {
 };
 
 function ensureAiConversationForCurrentPage(forceReset = false) {
+  if (currentUser.value?.id) {
+    return activeAiConversation.value || ensureAiConversation(forceReset);
+  }
+
   if (
     forceReset ||
     !activeAiConversation.value ||
@@ -285,8 +356,57 @@ function syncAiConversationMeta(conversation) {
   }
 
   conversation.updatedAt = Date.now();
-  conversation.title = deriveAiConversationTitle(conversation.messages, conversation.pageLabel);
+  if (!conversation.titleManuallyEdited || !currentUser.value?.id) {
+    conversation.title = deriveAiConversationTitle(conversation.messages, conversation.pageLabel);
+  }
   moveAiConversationToTop(conversation.id);
+}
+
+async function renameAiConversation(conversation, nextTitle) {
+  if (!conversation) {
+    return;
+  }
+
+  const normalizedTitle = normalizeAiText(nextTitle);
+
+  if (!normalizedTitle) {
+    return;
+  }
+
+  const trimmedTitle = truncateAiText(normalizedTitle, 24);
+
+  if (currentUser.value?.id) {
+    await aiApi.renameChatConversation({
+      conversationId: conversation.id,
+      conversationName: trimmedTitle,
+    });
+  }
+
+  conversation.title = trimmedTitle;
+  conversation.titleManuallyEdited = true;
+}
+
+async function loadAiConversations(forceReload = false) {
+  const userId = currentUser.value?.id || '';
+
+  if (!userId) {
+    aiConversationsLoadedUserId.value = '';
+    return ensureAiConversation();
+  }
+
+  if (!forceReload && aiConversationsLoadedUserId.value === userId && aiConversations.value.length) {
+    return activeAiConversation.value || aiConversations.value[0];
+  }
+
+  const result = await aiApi.getChatHistory();
+  const conversations = (result.conversations || []).map((item) => buildConversationFromHistoryItem(item));
+
+  aiConversations.value = conversations.length ? conversations : [createAiConversation()];
+  activeAiConversationId.value = aiConversations.value[0]?.id || '';
+  aiConversationsLoadedUserId.value = userId;
+  aiError.value = '';
+  scrollAiConversationToBottom('auto');
+  return activeAiConversation.value || aiConversations.value[0];
 }
 
 function selectAiConversation(conversationId) {
@@ -297,10 +417,80 @@ function selectAiConversation(conversationId) {
   focusAiComposer();
 }
 
-function startNewAiConversation() {
+async function startNewAiConversation() {
   aiDraft.value = '';
-  ensureAiConversation(true);
+  const nextConversation = createAiConversation();
+  aiConversations.value = [nextConversation, ...aiConversations.value];
+  activeAiConversationId.value = nextConversation.id;
+  aiError.value = '';
+
+  if (currentUser.value?.id) {
+    aiConversationsLoadedUserId.value = currentUser.value.id;
+  }
+
+  scrollAiConversationToBottom('auto');
   focusAiComposer();
+}
+
+async function promptRenameAiConversation(conversation) {
+  if (!conversation) {
+    return;
+  }
+
+  const nextTitle = window.prompt('请输入新的对话标题', conversation.title || DEFAULT_AI_CONVERSATION_TITLE);
+
+  if (nextTitle === null) {
+    return;
+  }
+
+  try {
+    await renameAiConversation(conversation, nextTitle);
+    aiError.value = '';
+  } catch (error) {
+    console.error('[AI] 修改会话标题失败', error);
+    aiError.value = error.message || '修改会话标题失败，请稍后再试。';
+  }
+}
+
+async function deleteAiConversation(conversationId) {
+  if (!conversationId || aiConversationDeletingId.value) {
+    return;
+  }
+
+  aiConversationDeletingId.value = conversationId;
+
+  try {
+    if (currentUser.value?.id) {
+      await aiApi.deleteChatConversation({ conversationId });
+    }
+
+    const nextConversations = aiConversations.value.filter((item) => item.id !== conversationId);
+    aiConversations.value = nextConversations.length ? nextConversations : [createAiConversation()];
+
+    if (activeAiConversationId.value === conversationId) {
+      activeAiConversationId.value = aiConversations.value[0]?.id || '';
+    }
+
+    aiError.value = '';
+    scrollAiConversationToBottom('auto');
+  } catch (error) {
+    console.error('[AI] 删除会话失败', error);
+    aiError.value = error.message || '删除会话失败，请稍后再试。';
+  } finally {
+    if (aiConversationDeletingId.value === conversationId) {
+      aiConversationDeletingId.value = '';
+    }
+  }
+
+  focusAiComposer();
+}
+
+function toggleAiFullscreen() {
+  isAiFullscreen.value = !isAiFullscreen.value;
+  nextTick(() => {
+    scrollAiConversationToBottom('auto');
+    focusAiComposer();
+  });
 }
 
 function handleAiComposerKeydown(event) {
@@ -312,7 +502,7 @@ function handleAiComposerKeydown(event) {
   sendAiMessage();
 }
 
-const openFeature = (featureId) => {
+const openFeature = async (featureId) => {
   activeFeature.value = featureId;
   inviteFeedback.value = '';
 
@@ -321,7 +511,18 @@ const openFeature = (featureId) => {
   }
 
   if (featureId === 'ai') {
-    ensureAiConversationForCurrentPage();
+    try {
+      if (currentUser.value?.id) {
+        await loadAiConversations();
+      } else {
+        ensureAiConversationForCurrentPage();
+      }
+    } catch (error) {
+      console.error('[AI] 加载历史会话失败', error);
+      aiError.value = error.message || '加载历史会话失败，已切换到临时会话。';
+      ensureAiConversation(true);
+    }
+
     focusAiComposer();
   }
 
@@ -363,13 +564,27 @@ const sendAiMessage = async (prefilledPrompt = '') => {
     return;
   }
 
-  const conversation = ensureAiConversation();
+  if (currentUser.value?.id) {
+    try {
+      await loadAiConversations();
+    } catch (error) {
+      console.error('[AI] 加载历史会话失败', error);
+      aiError.value = error.message || '加载历史会话失败，已切换到临时会话。';
+    }
+  }
+
+  const conversation = currentUser.value?.id
+    ? activeAiConversation.value || ensureAiConversation(true)
+    : ensureAiConversation();
 
   if (!conversation) {
     return;
   }
 
+  conversation.contextKey = route.fullPath;
+  conversation.pageLabel = pageContextLabel.value;
   conversation.messages.push({ id: createAiMessageId('user'), role: 'user', content: question });
+  trimConversationMessages(conversation);
   syncAiConversationMeta(conversation);
   aiDraft.value = '';
   aiError.value = '';
@@ -380,12 +595,15 @@ const sendAiMessage = async (prefilledPrompt = '') => {
   try {
     // 中文注释：这里连接后端千问接口 /api/chat，把用户输入发给后端并拿到 AI 回复。
     const data = await aiApi.askQianwen({
+      conversationId: conversation.id,
+      conversationName: conversation.title,
       message: question,
       messages: buildConversationMessagesForApi(conversation),
       gpsLocation: conversation.pageLabel,
     });
 
     conversation.messages.push({ id: createAiMessageId('assistant'), role: 'assistant', content: data.response });
+    trimConversationMessages(conversation);
     syncAiConversationMeta(conversation);
 
     if (activeAiConversationId.value === conversation.id) {
@@ -399,8 +617,9 @@ const sendAiMessage = async (prefilledPrompt = '') => {
       content: buildOfflineAiReply(question, conversation),
       hint: '已切换本地伴游建议',
     });
+    trimConversationMessages(conversation);
     syncAiConversationMeta(conversation);
-    aiError.value = 'AI 接口暂时不可用，已先给你本地伴游建议。';
+    aiError.value = error.message || 'AI 接口暂时不可用，已先给你本地伴游建议。';
     if (activeAiConversationId.value === conversation.id) {
       scrollAiConversationToBottom();
     }
@@ -418,7 +637,7 @@ watch(
     friendTrip.meetingPoint = currentJourney.value.meetPoint;
     inviteFeedback.value = '';
 
-    if (activeFeature.value === 'ai') {
+    if (activeFeature.value === 'ai' && !currentUser.value?.id) {
       ensureAiConversationForCurrentPage(true);
       focusAiComposer();
     }
@@ -448,6 +667,7 @@ watch(isActiveAiConversationLoading, (loading) => {
 });
 
 const currentUser = ref(null);
+const isProfileMenuOpen = ref(false);
 const isAuthOpen = ref(false);
 const authMode = ref('login');
 const securityQuestionItems = SECURITY_QUESTION_FIELDS.map((field) => ({
@@ -469,6 +689,14 @@ const authSubmitting = ref(false);
 const authDeletingAccount = ref(false);
 const authFeedback = ref('');
 const authFeedbackType = ref('info');
+const profileForm = reactive({
+  displayName: '',
+  password: '',
+  confirmPassword: '',
+});
+const profileSubmitting = ref(false);
+const profileFeedback = ref('');
+const profileFeedbackType = ref('info');
 
 const openAuthDialog = (mode = 'login') => {
   authMode.value = mode;
@@ -476,6 +704,45 @@ const openAuthDialog = (mode = 'login') => {
   authFeedback.value = '';
   authFeedbackType.value = 'info';
 };
+
+function toggleProfileMenu() {
+  if (!currentUser.value) {
+    openAuthDialog('login');
+    return;
+  }
+
+  isProfileMenuOpen.value = !isProfileMenuOpen.value;
+
+  if (isProfileMenuOpen.value) {
+    profileForm.displayName = currentUser.value.username || '';
+    profileForm.password = '';
+    profileForm.confirmPassword = '';
+    profileFeedback.value = '';
+    profileFeedbackType.value = 'info';
+  }
+}
+
+function closeProfileMenu() {
+  isProfileMenuOpen.value = false;
+  profileFeedback.value = '';
+  profileFeedbackType.value = 'info';
+  profileForm.password = '';
+  profileForm.confirmPassword = '';
+}
+
+function handleWindowClickForProfileMenu(event) {
+  if (!isProfileMenuOpen.value) {
+    return;
+  }
+
+  const menuRoot = profileMenuRef.value;
+
+  if (!menuRoot || menuRoot.contains(event.target)) {
+    return;
+  }
+
+  closeProfileMenu();
+}
 
 function setAuthMode(mode) {
   authMode.value = mode;
@@ -793,7 +1060,59 @@ async function logout() {
     clearPendingRequestState();
     clearGroupChatUnreadState();
     currentUser.value = null;
+    closeProfileMenu();
     closeAuthDialog();
+  }
+}
+
+function setProfileFeedback(message, type = 'info') {
+  profileFeedback.value = message;
+  profileFeedbackType.value = type;
+}
+
+async function submitProfileUpdate() {
+  if (profileSubmitting.value || !currentUser.value) {
+    return;
+  }
+
+  const displayName = profileForm.displayName.trim();
+  const password = profileForm.password;
+  const confirmPassword = profileForm.confirmPassword;
+
+  if (!displayName) {
+    setProfileFeedback('昵称不能为空。', 'error');
+    return;
+  }
+
+  if (password && password.length < 6) {
+    setProfileFeedback('新密码长度至少 6 位。', 'error');
+    return;
+  }
+
+  if (password && password !== confirmPassword) {
+    setProfileFeedback('两次输入的新密码不一致。', 'error');
+    return;
+  }
+
+  profileSubmitting.value = true;
+  setProfileFeedback('');
+
+  try {
+    const nextAuthState = await authApi.updateProfile({ displayName });
+    currentUser.value = nextAuthState;
+
+    if (password) {
+      await authApi.updatePassword({ password });
+    }
+
+    profileForm.password = '';
+    profileForm.confirmPassword = '';
+    setProfileFeedback(password ? '昵称和密码已更新。' : '昵称已更新。', 'success');
+  } catch (error) {
+    console.error('[Auth] 更新账户信息失败', error);
+    setProfileFeedback(error.message || '更新账户信息失败，请稍后再试。', 'error');
+  } finally {
+    profileSubmitting.value = false;
   }
 }
 
@@ -919,6 +1238,9 @@ onMounted(async () => {
     clearGroupChatUnreadState();
   });
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener('click', handleWindowClickForProfileMenu);
+  }
   window.addEventListener('group-chats-updated', handleGroupChatUnreadChanged);
 });
 
@@ -927,7 +1249,37 @@ onUnmounted(() => {
   stopGroupChatUnreadPolling();
   window.removeEventListener('group-chats-updated', handleGroupChatUnreadChanged);
   authSubscription?.data?.subscription?.unsubscribe?.();
+
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('click', handleWindowClickForProfileMenu);
+  }
 });
+
+watch(
+  () => currentUser.value?.id || '',
+  async (nextUserId, prevUserId) => {
+    if (nextUserId === prevUserId) {
+      return;
+    }
+
+    aiConversationsLoadedUserId.value = '';
+
+    if (nextUserId) {
+      if (activeFeature.value === 'ai') {
+        await loadAiConversations(true);
+      }
+
+      return;
+    }
+
+    aiConversations.value = [];
+    activeAiConversationId.value = '';
+
+    if (activeFeature.value === 'ai') {
+      ensureAiConversationForCurrentPage(true);
+    }
+  },
+);
 </script>
 
 <template>
@@ -1061,24 +1413,83 @@ onUnmounted(() => {
         </nav>
 
         <div class="header-actions">
-          <button
-            type="button"
-            class="profile-button"
-            :aria-label="currentUser ? '打开账户信息' : '打开登录弹窗'"
-            @click="openAuthDialog(currentUser ? 'profile' : 'login')"
-          >
-            <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
-              <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
-              <span v-if="hasPendingFriendRequests" class="profile-request-badge">
-                {{ pendingFriendRequests.length > 9 ? '9+' : pendingFriendRequests.length }}
+          <div ref="profileMenuRef" class="profile-menu-wrap">
+            <button
+              type="button"
+              class="profile-button"
+              :aria-label="currentUser ? '打开账户菜单' : '打开登录弹窗'"
+              @click.stop="toggleProfileMenu"
+            >
+                <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
+                  <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
+                  <span v-if="hasPendingFriendRequests" class="profile-request-badge">
+                    {{ pendingFriendRequests.length > 9 ? '9+' : pendingFriendRequests.length }}
+                  </span>
+                  <span>{{ avatarLabel }}</span>
+                </span>
+                <span class="profile-copy">
+                  <span class="profile-label">{{ profileLabel }}</span>
+                  <small class="profile-note">{{ profileStatus }}</small>
               </span>
-              <span>{{ avatarLabel }}</span>
-            </span>
-            <span class="profile-copy">
-              <span class="profile-label">{{ profileLabel }}</span>
-              <small class="profile-note">{{ profileStatus }}</small>
-            </span>
-          </button>
+            </button>
+
+            <div v-if="currentUser && isProfileMenuOpen" class="profile-dropdown" @click.stop>
+              <div class="profile-dropdown__head">
+                <strong>{{ currentUser.username }}</strong>
+                <span>{{ currentUser.email }}</span>
+              </div>
+
+              <form class="profile-dropdown__form" @submit.prevent="submitProfileUpdate">
+                <label class="field">
+                  <span>昵称</span>
+                  <input
+                    v-model.trim="profileForm.displayName"
+                    type="text"
+                    placeholder="输入新的昵称"
+                    autocomplete="nickname"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>新密码</span>
+                  <input
+                    v-model="profileForm.password"
+                    type="password"
+                    placeholder="留空则不修改密码"
+                    autocomplete="new-password"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>确认新密码</span>
+                  <input
+                    v-model="profileForm.confirmPassword"
+                    type="password"
+                    placeholder="再次输入新密码"
+                    autocomplete="new-password"
+                  />
+                </label>
+
+                <p v-if="profileFeedback" :class="['auth-feedback', `is-${profileFeedbackType}`]">
+                  {{ profileFeedback }}
+                </p>
+
+                <div class="profile-dropdown__actions">
+                  <button type="submit" class="dialog__primary" :disabled="profileSubmitting">
+                    {{ profileSubmitting ? '保存中…' : '保存修改' }}
+                  </button>
+                  <button type="button" class="dialog__ghost" @click="logout" :disabled="profileSubmitting">
+                    退出登录
+                  </button>
+                </div>
+                <div class="profile-dropdown__actions">
+                  <button type="button" class="dialog__ghost" @click="openAuthDialog('profile')">
+                    更多账户操作
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -1114,8 +1525,19 @@ onUnmounted(() => {
     </footer>
 
     <transition name="veil" appear>
-      <div v-if="isFeatureOpen" class="overlay" role="dialog" aria-modal="true" @click.self="closeFeature">
-        <section class="dialog dialog--feature" :class="{ 'dialog--ai': activeFeature === 'ai' }" @click.stop>
+      <div
+        v-if="isFeatureOpen"
+        class="overlay"
+        :class="{ 'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen }"
+        role="dialog"
+        aria-modal="true"
+        @click.self="closeFeature"
+      >
+        <section
+          class="dialog dialog--feature"
+          :class="{ 'dialog--ai': activeFeature === 'ai', 'dialog--ai-fullscreen': activeFeature === 'ai' && isAiFullscreen }"
+          @click.stop
+        >
           <header class="dialog__header">
             <div class="dialog__intro">
               <p class="dialog__eyebrow">{{ activeFeatureInfo?.eyebrow }}</p>
@@ -1153,18 +1575,42 @@ onUnmounted(() => {
                 </button>
 
                 <div class="ai-sidebar__list" role="list">
-                  <button
+                  <div
                     v-for="conversation in aiConversations"
                     :key="conversation.id"
-                    type="button"
                     role="listitem"
-                    class="ai-sidebar__item"
-                    :class="{ 'is-active': conversation.id === activeAiConversationId }"
-                    @click="selectAiConversation(conversation.id)"
+                    class="ai-sidebar__row"
                   >
-                    <strong class="ai-sidebar__title">{{ conversation.title }}</strong>
-                    <span class="ai-sidebar__subtitle">{{ deriveAiConversationPreview(conversation) }}</span>
-                  </button>
+                    <button
+                      type="button"
+                      class="ai-sidebar__item"
+                      :class="{ 'is-active': conversation.id === activeAiConversationId }"
+                      @click="selectAiConversation(conversation.id)"
+                    >
+                      <strong class="ai-sidebar__title">{{ conversation.title }}</strong>
+                      <span class="ai-sidebar__subtitle">{{ deriveAiConversationPreview(conversation) }}</span>
+                    </button>
+                    <div class="ai-sidebar__actions">
+                      <button
+                        type="button"
+                        class="ai-sidebar__rename"
+                        :disabled="isAiLoading"
+                        :aria-label="`重命名会话 ${conversation.title}`"
+                        @click="promptRenameAiConversation(conversation)"
+                      >
+                        改
+                      </button>
+                      <button
+                        type="button"
+                        class="ai-sidebar__delete"
+                        :disabled="isAiLoading || aiConversationDeletingId === conversation.id"
+                        :aria-label="`删除会话 ${conversation.title}`"
+                        @click="deleteAiConversation(conversation.id)"
+                      >
+                        {{ aiConversationDeletingId === conversation.id ? '...' : '删' }}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </aside>
 
@@ -1176,9 +1622,11 @@ onUnmounted(() => {
                     <p>{{ activeAiJourney.pace }}</p>
                   </div>
 
-                  <button type="button" class="ai-main__reset" :disabled="isAiLoading" @click="startNewAiConversation">
-                    重置
-                  </button>
+                  <div class="ai-main__header-actions">
+                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
+                      {{ isAiFullscreen ? '退出全屏' : '全屏放大' }}
+                    </button>
+                  </div>
                 </header>
 
                 <div class="ai-main__body">
@@ -1673,6 +2121,11 @@ onUnmounted(() => {
   z-index: 80;
 }
 
+.overlay--fullscreen {
+  place-items: stretch;
+  padding: 0;
+}
+
 .dialog {
   width: min(92vw, 500px);
   max-height: calc(100dvh - 3rem);
@@ -1700,6 +2153,15 @@ onUnmounted(() => {
   scrollbar-gutter: stable both-edges;
 }
 
+.dialog--ai-fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+}
+
 .dialog--ai .dialog__header {
   padding: 1.15rem 1.2rem 0.85rem;
 }
@@ -1712,7 +2174,7 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   border-top: 1px solid rgba(28, 25, 23, 0.06);
 }
 
@@ -1746,6 +2208,50 @@ onUnmounted(() => {
   border-radius: 999px;
   border: 1px solid rgba(28, 25, 23, 0.14);
   background: rgba(255, 255, 255, 0.7);
+}
+
+.profile-menu-wrap {
+  position: relative;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 0.8rem);
+  right: 0;
+  width: min(88vw, 360px);
+  padding: 1rem;
+  border-radius: 24px;
+  border: 1px solid rgba(28, 25, 23, 0.1);
+  background: rgba(250, 250, 249, 0.98);
+  box-shadow: 0 24px 56px rgba(28, 25, 23, 0.18);
+  display: grid;
+  gap: 0.9rem;
+  z-index: 30;
+}
+
+.profile-dropdown__head {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.profile-dropdown__head strong {
+  color: var(--ink-900);
+  font-size: 1rem;
+}
+
+.profile-dropdown__head span {
+  color: var(--ink-600);
+  font-size: 0.88rem;
+}
+
+.profile-dropdown__form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.profile-dropdown__actions {
+  display: grid;
+  gap: 0.7rem;
 }
 
 .dialog__copy {
@@ -1901,8 +2407,23 @@ onUnmounted(() => {
   overflow-y: auto;
   overscroll-behavior: contain;
   display: grid;
+  grid-auto-rows: min-content;
   gap: 0.5rem;
+  align-content: start;
   padding-right: 0.2rem;
+}
+
+.ai-sidebar__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.ai-sidebar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .ai-sidebar__item {
@@ -1928,6 +2449,40 @@ onUnmounted(() => {
 .ai-sidebar__item.is-active {
   border-color: rgba(95, 127, 114, 0.34);
   background: rgba(95, 127, 114, 0.12);
+}
+
+.ai-sidebar__rename,
+.ai-sidebar__delete {
+  width: 2.5rem;
+  border-radius: 16px;
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink-700);
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.ai-sidebar__rename:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(95, 127, 114, 0.28);
+  background: rgba(95, 127, 114, 0.1);
+  color: var(--ink-900);
+}
+
+.ai-sidebar__delete:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(159, 63, 52, 0.22);
+  background: rgba(159, 63, 52, 0.08);
+  color: var(--cinnabar-700);
+}
+
+.ai-sidebar__rename:disabled,
+.ai-sidebar__delete:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
 }
 
 .ai-sidebar__title {
@@ -1966,6 +2521,12 @@ onUnmounted(() => {
   backdrop-filter: blur(12px);
 }
 
+.ai-main__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
 .ai-main__context {
   display: grid;
   gap: 0.25rem;
@@ -1993,7 +2554,7 @@ onUnmounted(() => {
   font-size: 0.92rem;
 }
 
-.ai-main__reset {
+.ai-main__resize {
   flex: 0 0 auto;
   min-height: 2.35rem;
   padding: 0 1rem;
@@ -2032,6 +2593,20 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.9rem;
   padding: 1.15rem 1.2rem;
+}
+
+.dialog--ai-fullscreen .ai-chat.ai-chat--main {
+  padding: 1.35rem 1.5rem;
+}
+
+.dialog--ai-fullscreen .ai-composer {
+  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.dialog--ai-fullscreen .ai-main__header,
+.dialog--ai-fullscreen .dialog__header {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .message-row {
@@ -2368,6 +2943,26 @@ onUnmounted(() => {
   .dialog__primary,
   .dialog__ghost {
     width: 100%;
+  }
+
+  .ai-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(28, 25, 23, 0.08);
+  }
+
+  .ai-main__header,
+  .dialog__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ai-main__header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
