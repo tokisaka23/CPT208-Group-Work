@@ -5,7 +5,7 @@ const routes = [
     path: '/',
     name: 'pingjiang',
     component: () => import('../views/Pingjiang.vue'),
-    meta: { title: '平江古街' },
+    meta: { title: '苏州慢游' },
   },
   {
     path: '/gardens',
@@ -30,6 +30,24 @@ const routes = [
     name: 'wangshiyuan',
     component: () => import('../views/WangshiyuanView.vue'),
     meta: { title: '网师园' },
+  },
+  {
+    path: '/tianping',
+    name: 'tianpingshan',
+    component: () => import('../views/TianpingShanView.vue'),
+    meta: { title: '天平山' },
+  },
+  {
+    path: '/pingjiang-road',
+    name: 'pingjiangroad',
+    component: () => import('../views/PingjiangRoadView.vue'),
+    meta: { title: '平江路' },
+  },
+  {
+    path: '/suzhou-museum',
+    name: 'suzhoumuseum',
+    component: () => import('../views/SuzhouMuseumView.vue'),
+    meta: { title: '苏州博物馆' },
   },
   {
     path: '/museums',

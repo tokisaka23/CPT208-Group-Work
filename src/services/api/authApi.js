@@ -47,7 +47,7 @@ export const authApi = {
   async login({ email, password }) {
     if (!isSupabaseConfigured()) {
       throw new Error(
-        '尚未配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。',
+        '尚未配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。',
       );
     }
 
@@ -69,7 +69,7 @@ export const authApi = {
   async register({ displayName, email, password, securityAnswers }) {
     if (!isSupabaseConfigured()) {
       throw new Error(
-        '尚未配置真实 Supabase 注册环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。',
+        '尚未配置真实 Supabase 注册环境变量。请在 .env.local 中填写 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，然后重启前端。',
       );
     }
 

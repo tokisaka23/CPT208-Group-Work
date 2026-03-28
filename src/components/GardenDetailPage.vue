@@ -1,6 +1,8 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
+import ScenicMapDialog from './maps/ScenicMapDialog.vue';
+import { resolveSuzhouPoi } from '../data/poiMapData';
 
 const props = defineProps({
   garden: {
@@ -47,6 +49,10 @@ const design = computed(() => props.garden.design || {});
 const variant = computed(() => design.value.variant || 'zhuozheng');
 const galleryItems = computed(() => props.garden.gallery || []);
 const floatingTags = computed(() => design.value.floatingTags || props.garden.badges || []);
+const mapVisible = ref(false);
+const resolvedPoi = computed(() => (
+  resolveSuzhouPoi(props.garden.mapSlug || props.garden.slug || props.garden.name)
+));
 
 const themeStyle = computed(() => ({
   '--garden-accent': design.value.accent || '#5F7F72',
@@ -138,6 +144,14 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
           >
             继续看 {{ garden.nextGarden.label }}
           </component>
+          <button
+            v-if="resolvedPoi"
+            type="button"
+            class="detail-action-link detail-action-link--ghost"
+            @click="mapVisible = true"
+          >
+            地图导航
+          </button>
         </div>
       </div>
 
@@ -236,6 +250,13 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
         </component>
       </article>
     </section>
+
+    <ScenicMapDialog
+      :show="mapVisible"
+      :poi="resolvedPoi"
+      :title="`${garden.name} 导航地图`"
+      @update:show="mapVisible = $event"
+    />
   </article>
 </template>
 
