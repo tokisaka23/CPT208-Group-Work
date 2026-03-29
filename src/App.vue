@@ -17,11 +17,12 @@ import { deleteCurrentAccount } from './services/supabase/authRuntime';
 const route = useRoute();
 const router = useRouter();
 
-const navItems = [
-  { label: '平江古街', to: '/', icon: 'pingjiang', matchPaths: ['/'] },
+const navItems = [const navItems = [
+  { label: '苏州慢游', to: '/', icon: 'pingjiang', matchPaths: ['/'] },
   { label: '古典园林', to: '/gardens', icon: 'gardens', matchPaths: ['/gardens', '/zhuozheng', '/liu', '/wangshi'] },
   { label: '文博殿堂', to: '/museums', icon: 'museums', matchPaths: ['/museums'] },
   { label: '非遗市井', to: '/heritage', icon: 'heritage', matchPaths: ['/heritage'] },
+];
 ];
 
 const featureButtons = [
@@ -75,7 +76,7 @@ const routeJourneys = {
   },
 };
 
-const pageContextLabel = computed(() => route.meta.title || '平江古街');
+const pageContextLabel = computed(() => route.meta.title || '苏州慢游');
 const currentJourney = computed(() => routeJourneys[route.path] || routeJourneys['/']);
 
 const activeFeature = ref('');
@@ -989,7 +990,7 @@ async function submitAuth() {
 
   if (!isSupabaseConfigured()) {
     setAuthFeedback(
-      '当前还没有配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
+      '当前还没有配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
       'warning'
     );
     return;
@@ -1293,8 +1294,8 @@ watch(
         <RouterLink to="/" class="brand-link">
           <span class="brand-seal">平</span>
           <span class="brand-copy">
-            <strong class="brand-title">平江慢游</strong>
-            <small class="brand-subtitle">Pingjiang · Gardens · Museums · Heritage</small>
+            <strong class="brand-title">苏州慢游</strong>
+            <small class="brand-subtitle">Suzhou · Gardens · Museums · Heritage</small>
           </span>
         </RouterLink>
 
@@ -1842,8 +1843,7 @@ watch(
 
           <p v-if="!currentUser && !isSupabaseConfigured()" class="auth-feedback is-warning">
             当前尚未配置真实 Supabase 登录环境变量，所以登录、注册和重置密码现在都不可用。请在
-            `.env.local` 中填写 `VITE_FY_SUPABASE_URL` 和 `VITE_FY_SUPABASE_ANON_KEY`，或填写
-            `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 后重启前端。
+            `.env.local` 中填写 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 后重启前端。
           </p>
 
           <template v-if="currentUser">

@@ -5,6 +5,7 @@ import { resolveGardenGalleryImage, resolveGardenHeroImage } from '../data/garde
 const slug = 'wangshiyuan';
 
 const garden = {
+  mapSlug: slug,
   kicker: '小中见大的代表',
   name: '网师园',
   englishName: 'The Master of Nets Garden',

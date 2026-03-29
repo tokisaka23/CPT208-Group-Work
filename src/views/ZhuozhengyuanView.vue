@@ -5,6 +5,7 @@ import { resolveGardenGalleryImage, resolveGardenHeroImage } from '../data/garde
 const slug = 'zhuozhengyuan';
 
 const garden = {
+  mapSlug: slug,
   kicker: '经典入门园林',
   name: '拙政园',
   englishName: 'The Humble Administrator’s Garden',

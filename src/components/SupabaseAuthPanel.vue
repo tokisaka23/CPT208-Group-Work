@@ -139,7 +139,7 @@ async function handlePrimaryAction() {
 
   if (!isReady.value) {
     setFeedback(
-      '还没有配置真实 Supabase。请先在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
+      '还没有配置真实 Supabase。请先在 .env.local 中填写 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
       'warning'
     );
     return;
@@ -216,7 +216,6 @@ function handleGuestLogin() {
 
     <div v-if="!isReady" class="env-hint">
       尚未检测到 Supabase 前端配置。请先在 `.env.local` 中补全
-      `VITE_FY_SUPABASE_URL` 和 `VITE_FY_SUPABASE_ANON_KEY`，或使用
       `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`。
     </div>
 

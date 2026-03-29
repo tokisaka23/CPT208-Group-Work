@@ -5,6 +5,7 @@ import { resolveGardenGalleryImage, resolveGardenHeroImage } from '../data/garde
 const slug = 'liuyuan';
 
 const garden = {
+  mapSlug: slug,
   kicker: '框景层次代表',
   name: '留园',
   englishName: 'The Lingering Garden',
