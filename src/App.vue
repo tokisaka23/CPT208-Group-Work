@@ -17,12 +17,11 @@ import { deleteCurrentAccount } from './services/supabase/authRuntime';
 const route = useRoute();
 const router = useRouter();
 
-const navItems = [const navItems = [
+const navItems = [
   { label: '苏州慢游', to: '/', icon: 'pingjiang', matchPaths: ['/'] },
   { label: '古典园林', to: '/gardens', icon: 'gardens', matchPaths: ['/gardens', '/zhuozheng', '/liu', '/wangshi'] },
   { label: '文博殿堂', to: '/museums', icon: 'museums', matchPaths: ['/museums'] },
   { label: '非遗市井', to: '/heritage', icon: 'heritage', matchPaths: ['/heritage'] },
-];
 ];
 
 const featureButtons = [
@@ -1582,7 +1581,10 @@ watch(
       <div
         v-if="isFeatureOpen"
         class="overlay"
-        :class="{ 'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen }"
+        :class="{
+          'overlay--ai': activeFeature === 'ai',
+          'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen,
+        }"
         role="dialog"
         aria-modal="true"
         @click.self="closeFeature"
@@ -1592,7 +1594,7 @@ watch(
           :class="{ 'dialog--ai': activeFeature === 'ai', 'dialog--ai-fullscreen': activeFeature === 'ai' && isAiFullscreen }"
           @click.stop
         >
-          <header class="dialog__header">
+          <header v-if="activeFeature !== 'ai'" class="dialog__header">
             <div class="dialog__intro">
               <p class="dialog__eyebrow">{{ activeFeatureInfo?.eyebrow }}</p>
               <h2 class="dialog__title">{{ activeFeatureInfo?.label }}</h2>
@@ -1600,7 +1602,7 @@ watch(
             <button type="button" class="dialog__close" @click="closeFeature">关闭</button>
           </header>
 
-          <p class="dialog__copy">{{ activeFeatureInfo?.description }}</p>
+          <p v-if="activeFeature !== 'ai'" class="dialog__copy">{{ activeFeatureInfo?.description }}</p>
 
           <template v-if="activeFeature === 'friends'">
             <div v-if="!currentUser" class="feature-context">
@@ -1623,10 +1625,13 @@ watch(
           <template v-else-if="activeFeature === 'ai'">
             <div class="ai-shell">
               <aside class="ai-sidebar" aria-label="历史会话">
-                <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">
-                  <span aria-hidden="true">+</span>
-                  新建对话
-                </button>
+                <div class="ai-sidebar__header">
+                  <div class="ai-sidebar__intro">
+                    <p class="ai-sidebar__label">历史会话</p>
+                    <span class="ai-sidebar__meta">{{ aiConversations.length }} 个会话</span>
+                  </div>
+                  <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">新对话</button>
+                </div>
 
                 <div class="ai-sidebar__list" role="list">
                   <div
@@ -1669,36 +1674,18 @@ watch(
               </aside>
 
               <section class="ai-main" aria-label="AI 伴游对话">
-                <header class="ai-main__header">
-                  <div class="ai-main__context">
-                    <span>当前导览页面</span>
-                    <strong>{{ activeAiPageLabel }}</strong>
-                    <p>{{ activeAiJourney.pace }}</p>
+                <header class="ai-topbar">
+                  <div class="ai-topbar__copy">
+                    <p class="ai-topbar__eyebrow">AI 伴游</p>
+                    <h2 class="ai-topbar__title">{{ activeAiPageLabel }}</h2>
+                    <p class="ai-topbar__status">当前导览节奏：{{ activeAiJourney.pace || '默认讲解' }}</p>
                   </div>
-
-                  <div class="ai-main__header-actions">
-                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
-                      {{ isAiFullscreen ? '退出全屏' : '全屏放大' }}
-                    </button>
+                  <div class="ai-topbar__actions">
+                    <button type="button" class="ai-topbar__exit" @click="closeFeature">退出 AI 伴游</button>
                   </div>
                 </header>
 
                 <div class="ai-main__body">
-                  <div class="ai-starters" v-if="aiShouldShowStarter">
-                    <p class="ai-starters__label">你可以从这些问题开始</p>
-                    <div class="prompt-chips">
-                      <button
-                        v-for="prompt in activeAiPrompts"
-                        :key="prompt"
-                        type="button"
-                        class="prompt-chip"
-                        @click="sendAiMessage(prompt)"
-                      >
-                        {{ prompt }}
-                      </button>
-                    </div>
-                  </div>
-
                   <div ref="aiChatScroller" class="ai-chat ai-chat--main" aria-live="polite">
                     <article
                       v-for="message in aiMessages"
@@ -1738,28 +1725,45 @@ watch(
 
                 <p v-if="aiError" class="feature-feedback feature-feedback--ai">{{ aiError }}</p>
 
-                <form class="ai-composer" @submit.prevent="sendAiMessage()">
-                  <label class="ai-composer__field">
-                    <textarea
-                      ref="aiComposerInput"
-                      v-model="aiDraft"
-                      rows="1"
-                      aria-label="输入你的问题"
-                      placeholder="输入问题，Enter 发送，Shift + Enter 换行"
-                      @compositionstart="isAiComposing = true"
-                      @compositionend="isAiComposing = false"
-                      @keydown="handleAiComposerKeydown"
-                    />
-                  </label>
+                <div class="ai-bottom">
+                  <div class="ai-starters" v-if="aiShouldShowStarter">
+                    <p class="ai-starters__label">你可以从这些问题开始</p>
+                    <div class="prompt-chips prompt-chips--scroll">
+                      <button
+                        v-for="prompt in activeAiPrompts"
+                        :key="prompt"
+                        type="button"
+                        class="prompt-chip"
+                        @click="sendAiMessage(prompt)"
+                      >
+                        {{ prompt }}
+                      </button>
+                    </div>
+                  </div>
 
-                  <button
-                    type="submit"
-                    class="dialog__primary ai-composer__send"
-                    :disabled="isAiLoading || !aiDraft.trim()"
-                  >
-                    发送
-                  </button>
-                </form>
+                  <form class="ai-composer" @submit.prevent="sendAiMessage()">
+                    <label class="ai-composer__field">
+                      <textarea
+                        ref="aiComposerInput"
+                        v-model="aiDraft"
+                        rows="1"
+                        aria-label="输入你的问题"
+                        placeholder="输入问题，Enter 发送，Shift + Enter 换行"
+                        @compositionstart="isAiComposing = true"
+                        @compositionend="isAiComposing = false"
+                        @keydown="handleAiComposerKeydown"
+                      />
+                    </label>
+
+                    <button
+                      type="submit"
+                      class="dialog__primary ai-composer__send"
+                      :disabled="isAiLoading || !aiDraft.trim()"
+                    >
+                      发送
+                    </button>
+                  </form>
+                </div>
               </section>
             </div>
           </template>
@@ -2330,6 +2334,10 @@ watch(
   z-index: 80;
 }
 
+.overlay--ai {
+  align-items: stretch;
+}
+
 .overlay--fullscreen {
   place-items: stretch;
   padding: 0;
@@ -2345,6 +2353,7 @@ watch(
   padding: 1.25rem 1.3rem 1.35rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+  box-sizing: border-box;
 }
 
 .dialog--feature {
@@ -2353,13 +2362,16 @@ watch(
 
 .dialog--ai {
   width: min(98vw, 1120px);
+  height: calc(100vh - 3rem);
   height: calc(100dvh - 3rem);
+  max-height: calc(100vh - 3rem);
   max-height: calc(100dvh - 3rem);
   padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable both-edges;
+  box-sizing: border-box;
 }
 
 .dialog--ai-fullscreen {
@@ -2381,10 +2393,12 @@ watch(
 
 .ai-shell {
   flex: 1;
+  height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   border-top: 1px solid rgba(28, 25, 23, 0.06);
+  overflow: hidden;
 }
 
 .dialog__header {
@@ -2579,27 +2593,56 @@ watch(
 }
 
 .ai-sidebar {
-  background: rgba(28, 25, 23, 0.06);
-  border-right: 1px solid rgba(28, 25, 23, 0.08);
-  padding: 1rem 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+  background: linear-gradient(180deg, rgba(248, 246, 242, 0.96), rgba(245, 242, 236, 0.88));
+  border-bottom: 1px solid rgba(28, 25, 23, 0.08);
+  padding: 0.9rem 1.2rem 0.82rem;
+  display: grid;
+  gap: 0.7rem;
   min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.ai-sidebar__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ai-sidebar__intro {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.ai-sidebar__label {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-sidebar__meta {
+  color: var(--ink-500);
+  font-size: 0.78rem;
+  line-height: 1.2;
 }
 
 .ai-sidebar__new {
-  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  min-height: 2.85rem;
+  min-height: 2rem;
+  padding: 0 0.78rem;
   border-radius: 999px;
   border: 1px solid rgba(28, 25, 23, 0.14);
   background: rgba(255, 255, 255, 0.65);
-  color: var(--ink-900);
-  letter-spacing: 0.08em;
+  color: var(--ink-800);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
   transition:
     transform 0.25s ease,
     background-color 0.25s ease,
@@ -2611,39 +2654,53 @@ watch(
 }
 
 .ai-sidebar__list {
-  flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
-  display: grid;
-  grid-auto-rows: min-content;
-  gap: 0.5rem;
-  align-content: start;
-  padding-right: 0.2rem;
+  display: flex;
+  gap: 0.7rem;
+  align-items: stretch;
+  padding: 0 0.05rem 0.15rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(95, 127, 114, 0.28) transparent;
+}
+
+.ai-sidebar__list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ai-sidebar__list::-webkit-scrollbar-thumb {
+  background: rgba(95, 127, 114, 0.24);
+  border-radius: 999px;
 }
 
 .ai-sidebar__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.45rem;
-  align-items: stretch;
+  align-items: start;
+  flex: 0 0 clamp(13rem, 22vw, 16rem);
+  min-width: 0;
 }
 
 .ai-sidebar__actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  justify-content: flex-end;
+  gap: 0.35rem;
 }
 
 .ai-sidebar__item {
   width: 100%;
   text-align: left;
-  padding: 0.75rem 0.8rem;
-  border-radius: 18px;
+  min-height: 4.9rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.55);
   display: grid;
-  gap: 0.28rem;
+  align-content: start;
+  gap: 0.24rem;
   transition:
     border-color 0.25s ease,
     background-color 0.25s ease,
@@ -2662,11 +2719,14 @@ watch(
 
 .ai-sidebar__rename,
 .ai-sidebar__delete {
-  width: 2.5rem;
-  border-radius: 16px;
+  min-width: 2.4rem;
+  min-height: 2rem;
+  padding: 0 0.62rem;
+  border-radius: 14px;
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.7);
   color: var(--ink-700);
+  font-size: 0.8rem;
   transition:
     background-color 0.25s ease,
     border-color 0.25s ease,
@@ -2697,7 +2757,7 @@ watch(
 .ai-sidebar__title {
   font-weight: 600;
   color: var(--ink-900);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2705,7 +2765,7 @@ watch(
 
 .ai-sidebar__subtitle {
   color: var(--ink-600);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2716,61 +2776,81 @@ watch(
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   background: rgba(250, 250, 249, 0.94);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-.ai-main__header {
-  padding: 1rem 1.2rem;
+.ai-topbar {
+  flex-shrink: 0;
+  padding: 1rem 1.2rem 0.7rem;
   border-bottom: 1px solid rgba(28, 25, 23, 0.06);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   background: rgba(250, 250, 249, 0.9);
   backdrop-filter: blur(12px);
 }
 
-.ai-main__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-
-.ai-main__context {
-  display: grid;
-  gap: 0.25rem;
+.ai-topbar__copy {
   min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.28rem;
 }
 
-.ai-main__context span {
+.ai-topbar__eyebrow {
+  margin: 0;
   color: var(--ink-500);
-  font-size: 0.74rem;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-.ai-main__context strong {
-  font-size: 1.05rem;
+.ai-topbar__title {
+  margin: 0;
+  font-size: 1.18rem;
   color: var(--ink-900);
+}
+
+.ai-topbar__status {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.ai-main__context p {
-  margin: 0;
-  color: var(--ink-700);
-  font-size: 0.92rem;
-}
-
-.ai-main__resize {
+.ai-topbar__actions {
+  display: flex;
+  align-items: center;
   flex: 0 0 auto;
+}
+
+.ai-topbar__exit {
   min-height: 2.35rem;
-  padding: 0 1rem;
+  padding: 0 0.95rem;
   border-radius: 999px;
   border: 1px solid rgba(28, 25, 23, 0.14);
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--ink-800);
+  font-size: 0.84rem;
+  line-height: 1;
+  transition:
+    transform 0.25s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.ai-topbar__exit:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink-900);
 }
 
 .ai-main__body {
@@ -2781,15 +2861,29 @@ watch(
   overflow: hidden;
 }
 
+.ai-bottom {
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid rgba(28, 25, 23, 0.06);
+  background: linear-gradient(
+    to bottom,
+    rgba(250, 250, 249, 0.88) 0%,
+    rgba(250, 250, 249, 0.94) 24%,
+    rgba(250, 250, 249, 0.98) 100%
+  );
+  backdrop-filter: blur(12px);
+}
+
 .ai-starters {
-  padding: 1rem 1.2rem 0;
+  flex-shrink: 0;
+  padding: 0.7rem 1.2rem 0.2rem;
 }
 
 .ai-starters__label {
   margin: 0;
-  color: var(--ink-600);
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
+  color: var(--ink-500);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
 }
 
 .ai-chat.ai-chat--main {
@@ -2808,12 +2902,10 @@ watch(
   padding: 1.35rem 1.5rem;
 }
 
-.dialog--ai-fullscreen .ai-composer {
-  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
-}
-
-.dialog--ai-fullscreen .ai-main__header,
-.dialog--ai-fullscreen .dialog__header {
+.dialog--ai-fullscreen .ai-topbar,
+.dialog--ai-fullscreen .ai-starters,
+.dialog--ai-fullscreen .ai-composer,
+.dialog--ai-fullscreen .feature-feedback--ai {
   padding-left: 1.5rem;
   padding-right: 1.5rem;
 }
@@ -2866,37 +2958,32 @@ watch(
 }
 
 .ai-composer {
-  padding: 0.95rem 1.2rem calc(0.95rem + env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(28, 25, 23, 0.06);
-  background: linear-gradient(
-    to bottom,
-    rgba(250, 250, 249, 0) 0%,
-    rgba(250, 250, 249, 0.9) 20%,
-    rgba(250, 250, 249, 0.96) 100%
-  );
-  backdrop-filter: blur(12px);
-  display: flex;
-  align-items: flex-end;
+  flex-shrink: 0;
+  padding: 0.7rem 1.2rem 0.95rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   gap: 0.75rem;
 }
 
 .ai-composer__field {
-  flex: 1;
   min-width: 0;
 }
 
 .ai-composer__field textarea {
+  display: block;
   width: 100%;
-  min-height: 2.85rem;
-  max-height: 9.5rem;
-  padding: 0.75rem 0.95rem;
-  border-radius: 18px;
+  min-height: 3.5rem;
+  max-height: 10.5rem;
+  padding: 0.95rem 1rem;
+  border-radius: 20px;
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.72);
   outline: none;
   resize: none;
   line-height: 1.45;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 .ai-composer__field textarea:focus {
@@ -2905,13 +2992,14 @@ watch(
 }
 
 .dialog__primary.ai-composer__send {
-  flex: 0 0 auto;
-  min-width: 5.5rem;
-  padding: 0 1.15rem;
+  min-width: 5.85rem;
+  min-height: 3.5rem;
+  padding: 0 1.2rem;
+  align-self: stretch;
 }
 
 .feature-feedback--ai {
-  margin-bottom: 0.35rem;
+  margin: 0 1.2rem 0.55rem;
 }
 
 .field {
@@ -3002,28 +3090,37 @@ watch(
 }
 
 .prompt-chips {
-  margin-top: 1rem;
   display: flex;
-  flex-wrap: wrap;
   gap: 0.55rem;
 }
 
+.prompt-chips--scroll {
+  margin-top: 0.55rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.prompt-chips--scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .prompt-chip {
+  flex: 0 0 auto;
   min-height: 2.45rem;
   padding: 0.5rem 0.95rem;
+  white-space: nowrap;
 }
 
 .ai-chat {
-  margin-top: 1rem;
-  min-height: min(38vh, 280px);
-  max-height: min(46vh, 360px);
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   display: grid;
   gap: 0.75rem;
   align-content: start;
-  padding-bottom: 0.35rem;
   padding-right: 0.15rem;
 }
 
@@ -3131,6 +3228,11 @@ watch(
     padding: 1rem 0.8rem;
   }
 
+  .overlay--ai {
+    place-items: stretch;
+    padding: 0;
+  }
+
   .dialog {
     width: min(100%, 680px);
     max-height: calc(100dvh - 2rem);
@@ -3155,23 +3257,127 @@ watch(
   }
 
   .ai-shell {
-    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .ai-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid rgba(28, 25, 23, 0.08);
+    padding: 0.7rem 1rem 0.68rem;
+    gap: 0.45rem;
   }
 
-  .ai-main__header,
+  .dialog--ai {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    padding: 0;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .ai-sidebar__list {
+    gap: 0.45rem;
+    scrollbar-width: none;
+  }
+
+  .ai-sidebar__list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ai-sidebar__row {
+    min-width: min(56vw, 12.5rem);
+    flex: 0 0 auto;
+  }
+
+  .ai-sidebar__header {
+    align-items: center;
+  }
+
+  .ai-sidebar__item {
+    padding: 0.56rem 0.68rem;
+    gap: 0.12rem;
+    min-height: 4.3rem;
+  }
+
+  .ai-sidebar__title {
+    font-size: 0.82rem;
+  }
+
+  .ai-sidebar__subtitle {
+    display: none;
+  }
+
   .dialog__header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .ai-main__header-actions {
-    width: 100%;
-    justify-content: space-between;
+  .ai-topbar {
+    align-items: center;
+  }
+
+  .ai-topbar {
+    padding-top: calc(0.95rem + env(safe-area-inset-top));
+  }
+
+  .ai-topbar__eyebrow {
+    font-size: 0.68rem;
+  }
+
+  .ai-topbar__title {
+    font-size: 1.02rem;
+  }
+
+  .ai-topbar__status {
+    font-size: 0.8rem;
+  }
+
+  .ai-topbar__actions {
+    gap: 0.38rem;
+  }
+
+  .ai-topbar__exit {
+    min-height: 2.1rem;
+    padding: 0 0.8rem;
+    font-size: 0.78rem;
+  }
+
+  .ai-chat.ai-chat--main {
+    padding: 1rem;
+  }
+
+  .ai-starters,
+  .ai-composer,
+  .feature-feedback--ai {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .ai-composer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+
+  .dialog__primary.ai-composer__send {
+    min-width: 5rem;
+    min-height: 3.5rem;
+  }
+
+  .ai-composer__field textarea {
+    min-height: 3.7rem;
+  }
+
+  .message-row {
+    gap: 0.55rem;
+  }
+
+  .message-avatar {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
   }
 }
 
