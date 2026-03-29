@@ -18,10 +18,10 @@ const route = useRoute();
 const router = useRouter();
 
 const navItems = [
-  { label: '平江古街', to: '/', icon: 'pingjiang' },
-  { label: '古典园林', to: '/gardens', icon: 'gardens' },
-  { label: '文博殿堂', to: '/museums', icon: 'museums' },
-  { label: '非遗市井', to: '/heritage', icon: 'heritage' },
+  { label: '平江古街', to: '/', icon: 'pingjiang', matchPaths: ['/'] },
+  { label: '古典园林', to: '/gardens', icon: 'gardens', matchPaths: ['/gardens', '/zhuozheng', '/liu', '/wangshi'] },
+  { label: '文博殿堂', to: '/museums', icon: 'museums', matchPaths: ['/museums'] },
+  { label: '非遗市井', to: '/heritage', icon: 'heritage', matchPaths: ['/heritage'] },
 ];
 
 const featureButtons = [
@@ -179,6 +179,10 @@ const hasUnreadGroupChats = computed(() => unreadGroupChatCount.value > 0);
 const hasFriendFeatureNotification = computed(
   () => hasPendingFriendRequests.value || hasUnreadGroupChats.value,
 );
+
+function isNavItemActive(item) {
+  return (item?.matchPaths || [item?.to]).includes(route.path);
+}
 
 function buildAiGreeting(pageLabel = pageContextLabel.value) {
   return `你现在浏览的是「${pageLabel}」。我可以按当前页面告诉你先看哪里、怎么走更顺，以及哪些细节最值得慢下来。`;
@@ -1294,8 +1298,14 @@ watch(
           </span>
         </RouterLink>
 
-        <nav class="site-nav" aria-label="主导航">
-          <RouterLink v-for="item in navItems" :key="item.to" :to="item.to" class="nav-link">
+        <nav class="site-nav site-nav--desktop" aria-label="主导航">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-link"
+            :class="{ 'is-active': isNavItemActive(item) }"
+          >
             <span class="nav-link__icon" aria-hidden="true">
               <svg v-if="item.icon === 'pingjiang'" viewBox="0 0 24 24" fill="none">
                 <path
@@ -1381,6 +1391,7 @@ watch(
             :key="feature.id"
             type="button"
             class="nav-link"
+            :class="{ 'is-active': activeFeature === feature.id }"
             @click="openFeature(feature.id)"
           >
             <span class="nav-link__icon" aria-hidden="true">
@@ -1492,6 +1503,30 @@ watch(
           </div>
         </div>
       </div>
+
+      <div class="mobile-header-strip">
+        <div class="mobile-header-strip__inner">
+          <p class="mobile-header-strip__page">当前页 · {{ pageContextLabel }}</p>
+
+          <nav class="mobile-feature-nav" aria-label="快捷功能">
+            <button
+              v-for="feature in featureButtons"
+              :key="`mobile-${feature.id}`"
+              type="button"
+              class="mobile-feature-chip"
+              :class="{ 'is-active': activeFeature === feature.id }"
+              @click="openFeature(feature.id)"
+            >
+              <span>{{ feature.label }}</span>
+              <span
+                v-if="feature.id === 'friends' && hasFriendFeatureNotification"
+                class="mobile-feature-chip__dot"
+                aria-label="存在好友或群聊未读提醒"
+              />
+            </button>
+          </nav>
+        </div>
+      </div>
     </header>
 
     <main class="page-body">
@@ -1513,7 +1548,13 @@ watch(
         </section>
 
         <nav class="footer-nav" aria-label="页脚导航">
-          <RouterLink v-for="item in navItems" :key="`footer-${item.to}`" :to="item.to" class="footer-link">
+          <RouterLink
+            v-for="item in navItems"
+            :key="`footer-${item.to}`"
+            :to="item.to"
+            class="footer-link"
+            :class="{ 'is-active': isNavItemActive(item) }"
+          >
             {{ item.label }}
           </RouterLink>
         </nav>
@@ -1523,6 +1564,18 @@ watch(
         <p>© 2026 Jiangnan Gardens. 姑苏漫游指南 保留所有权利。</p>
       </div>
     </footer>
+
+    <nav class="mobile-tab-bar" aria-label="移动端主导航">
+      <RouterLink
+        v-for="item in navItems"
+        :key="`mobile-tab-${item.to}`"
+        :to="item.to"
+        class="mobile-tab"
+        :class="{ 'is-active': isNavItemActive(item) }"
+      >
+        <span class="mobile-tab__label">{{ item.label }}</span>
+      </RouterLink>
+    </nav>
 
     <transition name="veil" appear>
       <div
@@ -1923,6 +1976,162 @@ watch(
 </template>
 
 <style>
+.nav-link.is-active {
+  border-color: rgba(95, 127, 114, 0.26);
+  background: rgba(95, 127, 114, 0.12);
+  color: var(--ink-900);
+}
+
+.footer-link.is-active {
+  color: var(--celadon-700);
+  transform: translateX(-4px);
+}
+
+.mobile-header-strip,
+.mobile-tab-bar {
+  display: none;
+}
+
+.mobile-header-strip {
+  border-top: 1px solid rgba(28, 25, 23, 0.05);
+  background:
+    linear-gradient(180deg, rgba(250, 250, 249, 0.94), rgba(250, 250, 249, 0.82)),
+    rgba(250, 250, 249, 0.9);
+}
+
+.mobile-header-strip__inner {
+  width: min(100%, calc(var(--max-width) + 3rem));
+  margin: 0 auto;
+  padding: 0 1rem 0.78rem;
+  display: grid;
+  gap: 0.72rem;
+}
+
+.mobile-header-strip__page {
+  width: fit-content;
+  margin: 0;
+  padding: 0.42rem 0.82rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink-600);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+}
+
+.mobile-feature-nav {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+
+.mobile-feature-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-feature-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.38rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink-700);
+  white-space: nowrap;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  transition:
+    transform 0.26s ease,
+    border-color 0.26s ease,
+    background-color 0.26s ease,
+    color 0.26s ease;
+}
+
+.mobile-feature-chip.is-active {
+  border-color: rgba(95, 127, 114, 0.26);
+  background: rgba(95, 127, 114, 0.14);
+  color: var(--ink-900);
+}
+
+.mobile-feature-chip__dot {
+  position: absolute;
+  top: 0.38rem;
+  right: 0.42rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #ee4f44;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.88);
+}
+
+.mobile-tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  padding: 0.72rem 1rem calc(0.78rem + env(safe-area-inset-bottom));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  border-top: 1px solid rgba(28, 25, 23, 0.08);
+  background:
+    linear-gradient(180deg, rgba(250, 250, 249, 0.8), rgba(250, 250, 249, 0.98)),
+    rgba(250, 250, 249, 0.94);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 -12px 36px rgba(28, 25, 23, 0.08);
+}
+
+.mobile-tab {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 3.25rem;
+  padding: 0.45rem 0.3rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--ink-600);
+  text-align: center;
+  transition:
+    transform 0.26s ease,
+    border-color 0.26s ease,
+    background-color 0.26s ease,
+    color 0.26s ease,
+    box-shadow 0.26s ease;
+}
+
+.mobile-tab__label {
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+}
+
+.mobile-tab.is-active {
+  border-color: rgba(95, 127, 114, 0.28);
+  background: rgba(95, 127, 114, 0.14);
+  color: var(--ink-900);
+  box-shadow: 0 10px 24px rgba(95, 127, 114, 0.12);
+}
+
+.mobile-tab.is-active::before {
+  content: '';
+  position: absolute;
+  top: 0.34rem;
+  left: 50%;
+  width: 1.3rem;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(95, 127, 114, 0.72);
+  transform: translateX(-50%);
+}
+
 .profile-request-badge {
   position: absolute;
   top: -0.4rem;
@@ -2967,8 +3176,53 @@ watch(
 }
 
 @media (max-width: 768px) {
+  .site-nav--desktop {
+    display: none;
+  }
+
+  .mobile-header-strip,
+  .mobile-tab-bar {
+    display: grid;
+  }
+
+  .header-inner {
+    padding-top: 0.8rem;
+    padding-bottom: 0.72rem;
+  }
+
+  .brand-link {
+    min-width: 0;
+  }
+
+  .brand-copy {
+    min-width: 0;
+  }
+
+  .brand-title {
+    white-space: nowrap;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  .profile-button {
+    min-height: 2.45rem;
+    padding-right: 0.3rem;
+  }
+
+  .profile-dropdown {
+    top: calc(100% + 0.65rem);
+    right: 0;
+  }
+
   .global-footer {
     padding-top: 52px;
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
   }
 
   .footer-content {
@@ -2977,8 +3231,14 @@ watch(
   }
 
   .footer-nav {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    display: none;
+  }
+
+  .footer-signature {
+    padding-left: 0;
+    border-left: 0;
+    padding-top: 0.2rem;
+    border-top: 1px solid rgba(28, 25, 23, 0.08);
   }
 }
 </style>
