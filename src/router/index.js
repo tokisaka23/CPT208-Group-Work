@@ -61,6 +61,12 @@ const routes = [
     component: () => import('../views/Heritage.vue'),
     meta: { title: '非遗市井' },
   },
+  {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('../views/FavoritesView.vue'),
+    meta: { title: '收藏夹' },
+  },
 ];
 
 const router = createRouter({

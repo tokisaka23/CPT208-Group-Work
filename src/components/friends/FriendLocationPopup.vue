@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { Button, Popup, Tag } from 'vant';
 import { computed } from 'vue';
 
@@ -17,7 +17,7 @@ const emit = defineEmits(['update:show']);
 
 const formattedTime = computed(() => {
   if (!props.friend?.updatedAt) {
-    return '暂无更新时间';
+    return '暂时没有更新时间';
   }
 
   return new Intl.DateTimeFormat('zh-CN', {
@@ -50,7 +50,7 @@ const formattedTime = computed(() => {
       <div class="map-placeholder">
         <div class="map-pin"></div>
         <strong>定位原型展示区</strong>
-        <p>后续接入地图 SDK 后，可在这里展示地图、轨迹和更新时间。</p>
+        <p>接入真实地图 SDK 后，这里可以展示好友位置、移动轨迹和最近更新时间。</p>
       </div>
 
       <div class="detail-list">

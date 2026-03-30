@@ -1,5 +1,6 @@
 ﻿<script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   Button,
   Loading,
@@ -45,6 +46,7 @@ defineProps({
   },
 });
 
+const router = useRouter();
 const currentUser = ref(null);
 const friends = ref([]);
 const blockedUsers = ref([]);
@@ -390,6 +392,20 @@ async function handleFriendDataChanged() {
   }
 }
 
+function handleViewFriendFavorites(friend) {
+  if (!friend?.id) {
+    showFailToast('暂时无法读取这位好友的收藏夹。');
+    return;
+  }
+
+  router.push({
+    path: '/favorites',
+    query: {
+      userId: friend.id,
+    },
+  });
+}
+
 function handleOpenCreateGroup() {
   if (!friends.value.length) {
     showToast('请先添加至少 1 位好友');
@@ -693,6 +709,7 @@ onUnmounted(() => {
           :processing-id="processingFriendId"
           :processing-action="processingAction"
           @select-friend="handleSelectFriend"
+          @view-favorites="handleViewFriendFavorites"
           @remove-friend="handleRemoveFriend"
           @block-friend="handleBlockFriend"
           @open-create-group="handleOpenCreateGroup"
@@ -798,3 +815,5 @@ onUnmounted(() => {
   }
 }
 </style>
+
+

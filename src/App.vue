@@ -44,7 +44,7 @@ const featurePanels = {
   upload: {
     label: '上传照片',
     eyebrow: 'Photo Upload',
-    description: '把你在园林里的随手拍传上来，上传成功后会在这里回显。',
+    description: '把你在园林里的随手拍传上来，上传成功后会在这里显示。',
   },
 };
 
@@ -528,6 +528,7 @@ const openFeature = async (featureId) => {
 
   if (featureId === 'upload') {
     uploadError.value = '';
+    requestUploadLocation();
   }
 };
 
@@ -535,6 +536,8 @@ const closeFeature = () => {
   activeFeature.value = '';
   aiDraft.value = '';
   uploadError.value = '';
+  clearUploadDraft();
+  resetUploadLocation();
 };
 
 const regenerateInviteCode = () => {
@@ -555,6 +558,10 @@ const copyInviteCode = async () => {
   } catch {
     inviteFeedback.value = `房间口令：${friendTrip.roomCode}；集合点：${friendTrip.meetingPoint}`;
   }
+};
+
+const openFavorites = () => {
+  router.push('/favorites');
 };
 
 const sendAiMessage = async (prefilledPrompt = '') => {
@@ -1161,45 +1168,307 @@ const profileStatus = computed(() => {
 
 // 上传图片相关状态
 const selectedImageFile = ref(null);
+const selectedImagePreviewUrl = ref('');
 const uploadedImageUrl = ref('');
+const uploadedImageTitle = ref('');
+const uploadedImageDescription = ref('');
 const isUploadingImage = ref(false);
 const uploadError = ref('');
+const uploadForm = reactive({
+  title: '',
+  description: '',
+});
+const uploadLocation = reactive({
+  lat: null,
+  lng: null,
+  status: 'idle',
+  message: '',
+});
+const cropImageElement = ref(null);
+const cropFrameRect = ref({ left: 0, top: 0, width: 0, height: 0 });
+const cropImageMetrics = ref({ width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 });
+const isCropDragging = ref(false);
+const cropDragOrigin = ref({ x: 0, y: 0 });
+const isCropEditorOpen = ref(false);
+const isCropReady = computed(
+  () => cropFrameRect.value.width > 12 && cropFrameRect.value.height > 12 && Boolean(selectedImagePreviewUrl.value),
+);
+
+function resetCropState() {
+  cropFrameRect.value = { left: 0, top: 0, width: 0, height: 0 };
+  cropImageMetrics.value = { width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 };
+  isCropDragging.value = false;
+  cropDragOrigin.value = { x: 0, y: 0 };
+}
+
+function revokeSelectedPreviewUrl() {
+  if (selectedImagePreviewUrl.value?.startsWith('blob:')) {
+    URL.revokeObjectURL(selectedImagePreviewUrl.value);
+  }
+}
+
+function clearUploadDraft() {
+  selectedImageFile.value = null;
+  revokeSelectedPreviewUrl();
+  selectedImagePreviewUrl.value = '';
+  resetCropState();
+  isCropEditorOpen.value = false;
+}
+
+function resetUploadLocation() {
+  uploadLocation.lat = null;
+  uploadLocation.lng = null;
+  uploadLocation.status = 'idle';
+  uploadLocation.message = '';
+}
+
+function requestUploadLocation() {
+  if (!navigator?.geolocation) {
+    uploadLocation.status = 'error';
+    uploadLocation.message = '当前浏览器不支持定位，请换一个浏览器再试。';
+    return;
+  }
+
+  uploadLocation.status = 'loading';
+  uploadLocation.message = '正在获取当前位置…';
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      uploadLocation.lat = Number(position.coords.latitude);
+      uploadLocation.lng = Number(position.coords.longitude);
+      uploadLocation.status = 'success';
+      uploadLocation.message = '已获取当前位置，提交时会自动一并保存。';
+    },
+    (error) => {
+      uploadLocation.lat = null;
+      uploadLocation.lng = null;
+      uploadLocation.status = 'error';
+
+      if (error?.code === error.PERMISSION_DENIED) {
+        uploadLocation.message = '你拒绝了定位权限，请允许定位后再上传。';
+        return;
+      }
+
+      if (error?.code === error.POSITION_UNAVAILABLE) {
+        uploadLocation.message = '暂时无法获取位置，请稍后重试。';
+        return;
+      }
+
+      if (error?.code === error.TIMEOUT) {
+        uploadLocation.message = '定位超时了，请再试一次。';
+        return;
+      }
+
+      uploadLocation.message = '获取位置失败，请稍后重试。';
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 60000,
+    },
+  );
+}
+
+function clampCropPosition(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function handleCropImageLoad(event) {
+  const element = event?.target;
+
+  if (!element) {
+    return;
+  }
+
+  cropImageMetrics.value = {
+    width: element.clientWidth,
+    height: element.clientHeight,
+    naturalWidth: element.naturalWidth,
+    naturalHeight: element.naturalHeight,
+  };
+
+  if (!cropFrameRect.value.width || !cropFrameRect.value.height) {
+    const frameWidth = Math.max(120, Math.round(element.clientWidth * 0.68));
+    const frameHeight = Math.max(120, Math.round(element.clientHeight * 0.68));
+    cropFrameRect.value = {
+      left: Math.max(0, Math.round((element.clientWidth - frameWidth) / 2)),
+      top: Math.max(0, Math.round((element.clientHeight - frameHeight) / 2)),
+      width: Math.min(frameWidth, element.clientWidth),
+      height: Math.min(frameHeight, element.clientHeight),
+    };
+  }
+}
+
+function startCropSelection(event) {
+  if (!selectedImagePreviewUrl.value || !cropImageElement.value) {
+    return;
+  }
+
+  const rect = cropImageElement.value.getBoundingClientRect();
+  const startX = clampCropPosition(event.clientX - rect.left, 0, rect.width);
+  const startY = clampCropPosition(event.clientY - rect.top, 0, rect.height);
+
+  cropDragOrigin.value = { x: startX, y: startY };
+  cropFrameRect.value = { left: startX, top: startY, width: 0, height: 0 };
+  isCropDragging.value = true;
+}
+
+function updateCropSelection(event) {
+  if (!isCropDragging.value || !cropImageElement.value) {
+    return;
+  }
+
+  const rect = cropImageElement.value.getBoundingClientRect();
+  const currentX = clampCropPosition(event.clientX - rect.left, 0, rect.width);
+  const currentY = clampCropPosition(event.clientY - rect.top, 0, rect.height);
+  const origin = cropDragOrigin.value;
+
+  cropFrameRect.value = {
+    left: Math.min(origin.x, currentX),
+    top: Math.min(origin.y, currentY),
+    width: Math.abs(currentX - origin.x),
+    height: Math.abs(currentY - origin.y),
+  };
+}
+
+function stopCropSelection() {
+  isCropDragging.value = false;
+}
+
+async function applyCropSelection() {
+  if (!isCropReady.value || !selectedImageFile.value || !cropImageElement.value) {
+    return;
+  }
+
+  const frame = cropFrameRect.value;
+  const metrics = cropImageMetrics.value;
+
+  if (!metrics.width || !metrics.height || !metrics.naturalWidth || !metrics.naturalHeight) {
+    return;
+  }
+
+  const scaleX = metrics.naturalWidth / metrics.width;
+  const scaleY = metrics.naturalHeight / metrics.height;
+  const sourceX = Math.round(frame.left * scaleX);
+  const sourceY = Math.round(frame.top * scaleY);
+  const sourceWidth = Math.max(1, Math.round(frame.width * scaleX));
+  const sourceHeight = Math.max(1, Math.round(frame.height * scaleY));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = sourceWidth;
+  canvas.height = sourceHeight;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    showFailToast('暂时无法裁剪图片，请稍后再试');
+    return;
+  }
+
+  ctx.drawImage(
+    cropImageElement.value,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    sourceWidth,
+    sourceHeight,
+  );
+
+  const mimeType = selectedImageFile.value.type || 'image/jpeg';
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, 0.92));
+
+  if (!blob) {
+    showFailToast('裁剪失败，请重新框选一次');
+    return;
+  }
+
+  const nextFile = new File([blob], selectedImageFile.value.name, {
+    type: blob.type || mimeType,
+    lastModified: Date.now(),
+  });
+
+  selectedImageFile.value = nextFile;
+  revokeSelectedPreviewUrl();
+  selectedImagePreviewUrl.value = URL.createObjectURL(blob);
+  resetCropState();
+  isCropEditorOpen.value = false;
+  showSuccessToast('已应用裁剪');
+}
 
 function handleSelectImage(event) {
   const file = event?.target?.files?.[0];
 
   if (!file) {
-    selectedImageFile.value = null;
+    clearUploadDraft();
     return;
   }
 
   selectedImageFile.value = file;
+  revokeSelectedPreviewUrl();
+  selectedImagePreviewUrl.value = URL.createObjectURL(file);
+  resetCropState();
+  isCropEditorOpen.value = true;
   uploadError.value = '';
 }
 
 async function submitUploadImage() {
-  if (!selectedImageFile.value || isUploadingImage.value) {
+  if (isUploadingImage.value) {
+    return;
+  }
+
+  if (!uploadForm.title.trim()) {
+    uploadError.value = '请填写照片标题。';
+    return;
+  }
+
+  if (!uploadForm.description.trim()) {
+    uploadError.value = '请填写照片描述。';
+    return;
+  }
+
+  if (!selectedImageFile.value) {
+    uploadError.value = '请选择图片文件。';
+    return;
+  }
+
+  if (uploadLocation.status !== 'success' || uploadLocation.lat === null || uploadLocation.lng === null) {
+    uploadError.value = uploadLocation.message || '请先允许定位，获取当前位置后再上传。';
+    showFailToast(uploadError.value);
     return;
   }
 
   isUploadingImage.value = true;
   uploadError.value = '';
+  uploadedImageUrl.value = '';
+  uploadedImageTitle.value = '';
+  uploadedImageDescription.value = '';
 
   try {
     const formData = new FormData();
     formData.append('image', selectedImageFile.value);
+    formData.append('title', uploadForm.title.trim());
+    formData.append('description', uploadForm.description.trim());
+    formData.append('lat', String(uploadLocation.lat));
+    formData.append('lng', String(uploadLocation.lng));
 
     // 中文注释：这里连接后端图片上传接口 /api/ugc，使用 FormData 以 multipart/form-data 发送图片文件。
     // 注意：使用 fetch/axios 发送 FormData 时，不要手动写死 Content-Type，浏览器会自动补上 boundary。
     const result = await uploadApi.uploadGardenImage(formData);
     uploadedImageUrl.value = result?.image_url || result?.imageUrl || '';
+    uploadedImageTitle.value = result?.title || uploadForm.title.trim();
+    uploadedImageDescription.value = result?.description || uploadForm.description.trim();
 
     if (!uploadedImageUrl.value) {
       throw new Error('上传成功但未拿到图片地址，请检查后端返回字段 image_url/imageUrl。');
     }
+
+    showSuccessToast('上传成功');
   } catch (error) {
     console.error('[Upload] 上传图片失败', error);
     uploadError.value = error.message || '上传失败，请稍后再试。';
+    showFailToast(uploadError.value);
   } finally {
     isUploadingImage.value = false;
   }
@@ -1249,6 +1518,7 @@ onUnmounted(() => {
   stopGroupChatUnreadPolling();
   window.removeEventListener('group-chats-updated', handleGroupChatUnreadChanged);
   authSubscription?.data?.subscription?.unsubscribe?.();
+  revokeSelectedPreviewUrl();
 
   if (typeof window !== 'undefined') {
     window.removeEventListener('click', handleWindowClickForProfileMenu);
@@ -1524,6 +1794,20 @@ watch(
       </div>
     </footer>
 
+    <button type="button" class="favorites-fab" aria-label="打开收藏夹" @click="openFavorites">
+      <span class="favorites-fab__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path
+            d="m12 4.8 2.18 4.41 4.87.71-3.52 3.43.83 4.85L12 15.91 7.64 18.2l.83-4.85-3.52-3.43 4.87-.71L12 4.8Z"
+            stroke="currentColor"
+            stroke-linejoin="round"
+            stroke-width="1.7"
+          />
+        </svg>
+      </span>
+      <span class="favorites-fab__label">收藏夹</span>
+    </button>
+
     <transition name="veil" appear>
       <div
         v-if="isFeatureOpen"
@@ -1714,30 +1998,155 @@ watch(
             <div class="feature-context">
               <span>上传提示</span>
               <strong>上传园林照片</strong>
-              <p>选择一张图片后点击上传，后端返回图片地址后会在下方回显。</p>
+              <p>上传照片时补充标题和描述，上传成功后会在下方显示成完整卡片。</p>
+              <p
+                class="upload-location-status"
+                :class="{
+                  'is-loading': uploadLocation.status === 'loading',
+                  'is-success': uploadLocation.status === 'success',
+                  'is-error': uploadLocation.status === 'error',
+                }"
+              >
+                {{ uploadLocation.message || '打开表单后会自动获取当前位置。' }}
+              </p>
             </div>
 
             <form class="dialog__form" @submit.prevent="submitUploadImage">
               <label class="field field--full">
-                <span>选择图片文件</span>
-                <input type="file" accept="image/*" @change="handleSelectImage" />
+                <span>照片标题</span>
+                <input v-model="uploadForm.title" type="text" placeholder="例如：雨后的拙政园回廊" />
               </label>
 
+              <label class="field field--full">
+                <span>照片描述</span>
+                <textarea
+                  v-model="uploadForm.description"
+                  rows="3"
+                  placeholder="写一句你拍下这张照片时的感受或画面描述"
+                />
+              </label>
+
+              <label class="field field--full">
+                <span>选择图片文件</span>
+                <input class="upload-picker__input" type="file" accept="image/*" @change="handleSelectImage" />
+                <div class="upload-picker">
+                  <span class="upload-picker__camera" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M8 6.5 9.2 5h5.6L16 6.5H18A2.5 2.5 0 0 1 20.5 9v7A2.5 2.5 0 0 1 18 18.5H6A2.5 2.5 0 0 1 3.5 16V9A2.5 2.5 0 0 1 6 6.5h2Z"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linejoin="round"
+                      />
+                      <circle cx="12" cy="12.5" r="3.2" stroke="currentColor" stroke-width="1.6" />
+                    </svg>
+                  </span>
+                  <div class="upload-picker__copy">
+                    <strong>{{ selectedImageFile ? '更换照片' : '选择照片' }}</strong>
+                    <p>{{ selectedImageFile?.name || '支持 JPG / PNG，选择后会直接显示在这里' }}</p>
+                  </div>
+                </div>
+              </label>
+
+              <div v-if="selectedImagePreviewUrl && !uploadedImageUrl" class="upload-preview upload-preview--draft">
+                <p class="upload-preview__label">你选择的照片</p>
+                <img :src="selectedImagePreviewUrl" alt="selected" class="upload-preview__image" />
+                <div class="crop-stage__actions">
+                  <span>如果想调整画面范围，可以再重新裁一下。</span>
+                  <button type="button" class="dialog__ghost" @click="isCropEditorOpen = true">重新调整范围</button>
+                </div>
+              </div>
+
               <div class="dialog__actions dialog__actions--compact">
-                <button type="submit" class="dialog__primary" :disabled="!selectedImageFile || isUploadingImage">
+                <button
+                  type="button"
+                  class="dialog__primary"
+                  :disabled="!selectedImageFile || !uploadForm.title.trim() || !uploadForm.description.trim() || isUploadingImage"
+                  @click="submitUploadImage"
+                >
                   {{ isUploadingImage ? '正在上传…' : '开始上传' }}
                 </button>
-                <button type="button" class="dialog__ghost" @click="uploadedImageUrl = ''">清空回显</button>
+                <button
+                  type="button"
+                  class="dialog__ghost"
+                  @click="
+                    clearUploadDraft();
+                    uploadedImageUrl = '';
+                    uploadedImageTitle = '';
+                    uploadedImageDescription = '';
+                  "
+                >
+                  清空内容
+                </button>
               </div>
             </form>
 
             <p v-if="uploadError" class="feature-feedback">{{ uploadError }}</p>
 
             <div v-if="uploadedImageUrl" class="upload-preview">
-              <p class="upload-preview__label">上传成功回显</p>
+              <p class="upload-preview__label">上传后的显示效果</p>
               <img :src="uploadedImageUrl" alt="uploaded" class="upload-preview__image" />
+              <div class="upload-preview__meta">
+                <strong>{{ uploadedImageTitle }}</strong>
+                <p>{{ uploadedImageDescription }}</p>
+              </div>
             </div>
           </template>
+        </section>
+      </div>
+    </transition>
+
+    <transition name="veil">
+      <div
+        v-if="isCropEditorOpen && selectedImagePreviewUrl"
+        class="overlay"
+        role="dialog"
+        aria-modal="true"
+        @click.self="isCropEditorOpen = false"
+      >
+        <section class="dialog dialog--feature dialog--crop" @click.stop>
+          <header class="dialog__header">
+            <div class="dialog__intro">
+              <p class="dialog__eyebrow">Crop Photo</p>
+              <h2 class="dialog__title">裁剪照片</h2>
+            </div>
+            <button type="button" class="dialog__close" @click="isCropEditorOpen = false">关闭</button>
+          </header>
+
+          <p class="dialog__copy">选图后先框选范围，点“应用裁剪”后再回到上传表单。</p>
+
+          <div
+            class="crop-stage crop-stage--modal"
+            @mousedown.prevent="startCropSelection"
+            @mousemove.prevent="updateCropSelection"
+            @mouseup="stopCropSelection"
+            @mouseleave="stopCropSelection"
+          >
+            <img
+              ref="cropImageElement"
+              :src="selectedImagePreviewUrl"
+              alt="crop target"
+              class="upload-preview__image crop-stage__image"
+              @load="handleCropImageLoad"
+            />
+            <div
+              v-if="cropFrameRect.width > 0 && cropFrameRect.height > 0"
+              class="crop-stage__selection"
+              :style="{
+                left: `${cropFrameRect.left}px`,
+                top: `${cropFrameRect.top}px`,
+                width: `${cropFrameRect.width}px`,
+                height: `${cropFrameRect.height}px`,
+              }"
+            />
+          </div>
+
+          <div class="dialog__actions">
+            <button type="button" class="dialog__ghost" @click="isCropEditorOpen = false">暂不裁剪</button>
+            <button type="button" class="dialog__primary" :disabled="!isCropReady" @click="applyCropSelection">
+              应用裁剪
+            </button>
+          </div>
         </section>
       </div>
     </transition>
@@ -2120,6 +2529,64 @@ watch(
   z-index: 80;
 }
 
+.favorites-fab {
+  position: fixed;
+  right: 1.4rem;
+  bottom: 1.6rem;
+  width: 4.35rem;
+  height: 4.35rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 16px 30px rgba(37, 33, 28, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+  color: rgba(56, 56, 56, 0.92);
+  display: grid;
+  place-items: center;
+  gap: 0.16rem;
+  z-index: 60;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease,
+    filter 0.22s ease;
+}
+
+.favorites-fab:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    0 20px 36px rgba(37, 33, 28, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.96);
+  filter: none;
+}
+
+.favorites-fab__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  background: rgba(248, 248, 248, 0.92);
+  color: rgba(88, 88, 88, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.favorites-fab__icon svg {
+  width: 1.08rem;
+  height: 1.08rem;
+}
+
+.favorites-fab__label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  transform: translateX(0.06em);
+  color: rgba(74, 74, 74, 0.9);
+}
+
 .overlay--fullscreen {
   place-items: stretch;
   padding: 0;
@@ -2137,8 +2604,36 @@ watch(
   overscroll-behavior: contain;
 }
 
+.dialog::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dialog::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 14px 6px 14px 0;
+}
+
+.dialog::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(250, 250, 249, 0.92);
+  background: linear-gradient(180deg, rgba(160, 180, 169, 0.8), rgba(120, 145, 132, 0.82));
+}
+
+.dialog::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(145, 168, 156, 0.9), rgba(104, 129, 116, 0.92));
+}
+
+.dialog {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 145, 132, 0.82) transparent;
+}
+
 .dialog--feature {
   width: min(94vw, 680px);
+}
+
+.dialog--crop {
+  width: min(94vw, 760px);
 }
 
 .dialog--ai {
@@ -2285,6 +2780,34 @@ watch(
 
 .feature-context p {
   color: var(--ink-700);
+}
+
+.upload-location-status {
+  margin: 0.15rem 0 0;
+  padding: 0.72rem 0.85rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(28, 25, 23, 0.08);
+  color: var(--ink-700);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.upload-location-status.is-loading {
+  background: rgba(95, 127, 114, 0.08);
+  border-color: rgba(95, 127, 114, 0.14);
+}
+
+.upload-location-status.is-success {
+  background: rgba(24, 121, 78, 0.1);
+  border-color: rgba(24, 121, 78, 0.16);
+  color: rgba(24, 121, 78, 0.95);
+}
+
+.upload-location-status.is-error {
+  background: rgba(159, 63, 52, 0.08);
+  border-color: rgba(159, 63, 52, 0.12);
+  color: var(--cinnabar-700);
 }
 
 .feature-stat-grid {
@@ -2728,11 +3251,112 @@ watch(
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.72);
   outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .field input:focus {
   border-color: rgba(95, 127, 114, 0.42);
   box-shadow: 0 0 0 4px rgba(95, 127, 114, 0.12);
+}
+
+.field textarea {
+  width: 100%;
+  min-height: 6.4rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: 20px;
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 244, 241, 0.92));
+  outline: none;
+  resize: vertical;
+  line-height: 1.6;
+  font-family: inherit;
+  color: var(--ink-900);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.field textarea::placeholder {
+  color: rgba(87, 83, 78, 0.58);
+}
+
+.field textarea:focus {
+  border-color: rgba(95, 127, 114, 0.42);
+  box-shadow:
+    0 0 0 4px rgba(95, 127, 114, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.field input[type='file'] {
+  display: none;
+}
+
+.upload-picker {
+  min-height: 4.8rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 22px;
+  border: 1px dashed rgba(95, 127, 114, 0.28);
+  background:
+    linear-gradient(180deg, rgba(243, 248, 245, 0.95), rgba(255, 255, 255, 0.92));
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: center;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.upload-picker:hover {
+  border-color: rgba(95, 127, 114, 0.42);
+  background:
+    linear-gradient(180deg, rgba(239, 246, 242, 0.98), rgba(255, 255, 255, 0.96));
+  transform: translateY(-1px);
+}
+
+.upload-picker__camera {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(235, 242, 238, 0.92);
+  color: var(--ink-900);
+  box-shadow: inset 0 0 0 1px rgba(95, 127, 114, 0.08);
+  backdrop-filter: blur(2px);
+}
+
+.upload-picker__camera svg {
+  width: 1.7rem;
+  height: 1.7rem;
+}
+
+.upload-picker__copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.upload-picker__copy strong {
+  color: var(--ink-900);
+  font-size: 1rem;
+}
+
+.upload-picker__copy p {
+  margin: 0;
+  color: rgba(68, 64, 60, 0.78);
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .dialog__actions {
@@ -2880,11 +3504,73 @@ watch(
 }
 
 .upload-preview__image {
-  width: 100%;
+  width: min(100%, 420px);
+  max-height: 320px;
   height: auto;
+  justify-self: start;
   border-radius: 18px;
   border: 1px solid rgba(28, 25, 23, 0.08);
-  object-fit: cover;
+  object-fit: contain;
+  background: rgba(243, 248, 245, 0.9);
+}
+
+.upload-preview--draft {
+  margin-top: 0.7rem;
+}
+
+.crop-stage {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  user-select: none;
+}
+
+.crop-stage--modal {
+  margin-top: 1rem;
+}
+
+.crop-stage__image {
+  width: min(100%, 680px);
+  max-height: 68vh;
+}
+
+.crop-stage__selection {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 9999px rgba(28, 25, 23, 0.34),
+    0 0 0 1px rgba(95, 127, 114, 0.42);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.crop-stage__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.crop-stage__actions span {
+  color: var(--ink-600);
+  font-size: 0.88rem;
+}
+
+.upload-preview__meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.upload-preview__meta strong {
+  font-size: 1rem;
+  color: var(--ink-900);
+}
+
+.upload-preview__meta p {
+  margin: 0;
+  color: var(--ink-700);
+  line-height: 1.65;
 }
 
 .auth-feedback {
@@ -2916,6 +3602,13 @@ watch(
 }
 
 @media (max-width: 720px) {
+  .favorites-fab {
+    right: 1rem;
+    bottom: calc(1rem + env(safe-area-inset-bottom));
+    width: 3.95rem;
+    height: 3.95rem;
+  }
+
   .overlay {
     place-items: start center;
     padding: 1rem 0.8rem;

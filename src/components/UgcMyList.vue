@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { Button, showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
 import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase/clientRuntime';
@@ -11,6 +11,22 @@ const props = defineProps({
   refreshKey: {
     type: Number,
     default: 0,
+  },
+  title: {
+    type: String,
+    default: '我的上传',
+  },
+  subtitle: {
+    type: String,
+    default: '浏览并删除自己上传的照片记录。',
+  },
+  emptyText: {
+    type: String,
+    default: '你还没有上传任何照片。',
+  },
+  readOnly: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -112,8 +128,8 @@ watch(
   <section class="ugc-list">
     <div class="list-header">
       <div>
-        <h2 class="list-title">我的上传</h2>
-        <p class="list-subtitle">浏览并删除自己上传的景点记录。</p>
+        <h2 class="list-title">{{ title }}</h2>
+        <p class="list-subtitle">{{ subtitle }}</p>
       </div>
       <Button plain type="primary" size="small" :loading="loading" @click="loadRecords">
         刷新
@@ -121,7 +137,7 @@ watch(
     </div>
 
     <div v-if="!records.length" class="empty-state">
-      {{ loading ? '正在读取上传记录...' : '还没有上传记录' }}
+      {{ loading ? '正在读取上传记录...' : emptyText }}
     </div>
 
     <article v-for="record in records" :key="record.id" class="record-card">
@@ -134,7 +150,14 @@ watch(
           <p class="record-time">{{ new Date(record.created_at).toLocaleString() }}</p>
         </div>
 
-        <Button plain type="danger" size="small" :loading="deletingId === record.id" @click="deleteRecord(record)">
+        <Button
+          v-if="!readOnly"
+          plain
+          type="danger"
+          size="small"
+          :loading="deletingId === record.id"
+          @click="deleteRecord(record)"
+        >
           删除
         </Button>
       </div>
@@ -144,10 +167,11 @@ watch(
 
 <style scoped>
 .ugc-list {
-  padding: 16px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  padding: 1.15rem;
+  background: rgba(255, 252, 246, 0.9);
+  border-radius: 22px;
+  border: 1px solid rgba(145, 136, 118, 0.12);
+  box-shadow: 0 20px 44px rgba(43, 35, 21, 0.08);
 }
 
 .list-header {
@@ -160,36 +184,36 @@ watch(
 
 .list-title {
   margin: 0;
-  font-size: 18px;
-  color: #0f172a;
+  font-size: 1.22rem;
+  color: #2d241a;
 }
 
 .list-subtitle {
   margin: 6px 0 0;
-  font-size: 13px;
-  color: #64748b;
+  font-size: 0.88rem;
+  color: rgba(70, 60, 47, 0.7);
 }
 
 .empty-state {
   padding: 20px 0;
-  color: #64748b;
-  font-size: 14px;
+  color: rgba(70, 60, 47, 0.7);
+  font-size: 0.95rem;
 }
 
 .record-card {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
   padding: 14px 0;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid rgba(145, 136, 118, 0.12);
 }
 
 .record-image {
   width: 100%;
   height: 180px;
   object-fit: cover;
-  border-radius: 12px;
-  background: #e2e8f0;
+  border-radius: 16px;
+  background: #e7ece7;
 }
 
 .record-main {
@@ -202,21 +226,22 @@ watch(
 
 .record-name {
   margin: 0;
-  font-size: 18px;
-  color: #0f172a;
+  font-size: 1.18rem;
+  color: #2d241a;
 }
 
 .record-description {
   margin: 8px 0 0;
-  font-size: 14px;
-  color: #334155;
+  font-size: 0.95rem;
+  color: rgba(70, 60, 47, 0.86);
+  line-height: 1.75;
   white-space: pre-wrap;
 }
 
 .record-time {
   margin: 10px 0 0;
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 0.78rem;
+  color: rgba(70, 60, 47, 0.5);
 }
 
 @media (max-width: 640px) {

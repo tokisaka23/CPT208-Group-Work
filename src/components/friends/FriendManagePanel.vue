@@ -17,6 +17,7 @@ const text = {
   statusOffline: '\u5f53\u524d\u79bb\u7ebf\uff0c\u6682\u65f6\u65e0\u6cd5\u67e5\u770b\u5b9a\u4f4d',
   viewLocation: '\u67e5\u770b\u5b9a\u4f4d',
   viewStatus: '\u67e5\u770b\u72b6\u6001',
+  viewFavorites: '\u67e5\u770b\u6536\u85cf\u5939',
   remove: '\u5220\u9664\u597d\u53cb',
   block: '\u62c9\u9ed1',
 };
@@ -36,7 +37,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['select-friend', 'remove-friend', 'block-friend', 'open-create-group']);
+const emit = defineEmits(['select-friend', 'remove-friend', 'block-friend', 'open-create-group', 'view-favorites']);
 
 const menuVisible = ref(false);
 const menuRef = ref(null);
@@ -168,6 +169,15 @@ onBeforeUnmount(() => {
           </span>
 
           <div class="action-buttons">
+            <Button
+              plain
+              size="small"
+              type="primary"
+              :disabled="Boolean(props.processingId)"
+              @click.stop="emit('view-favorites', friend)"
+            >
+              {{ text.viewFavorites }}
+            </Button>
             <Button
               plain
               size="small"
