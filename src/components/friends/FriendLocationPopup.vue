@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { Button, Popup, Tag } from 'vant';
 import { computed } from 'vue';
 

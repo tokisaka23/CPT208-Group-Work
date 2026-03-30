@@ -6,13 +6,13 @@ async function getBearerToken() {
     const session = await getCurrentSession();
     return session?.access_token || readStoredAuthState()?.accessToken || '';
   } catch (error) {
-    console.error('[api] »ñÈ¡ access token Ê§°Ü', error);
+    console.error('[api] èŽ·å– access token å¤±è´¥', error);
     return readStoredAuthState()?.accessToken || '';
   }
 }
 
 function buildRequestError(response, result, fallbackMessage) {
-  return new Error(result?.error || result?.message || `${fallbackMessage}£¬×´Ì¬Âë£º${response.status}`);
+  return new Error(result?.error || result?.message || `${fallbackMessage}ï¼ŒçŠ¶æ€ç ï¼š${response.status}`);
 }
 
 export async function requestJson(path, { method = 'POST', body, withAuth = false } = {}) {
@@ -44,12 +44,12 @@ export async function requestJson(path, { method = 'POST', body, withAuth = fals
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok || result?.success === false) {
-      throw buildRequestError(response, result, `ÇëÇó ${path} Ê§°Ü`);
+      throw buildRequestError(response, result, `è¯·æ±‚ ${path} å¤±è´¥`);
     }
 
     return result;
   } catch (error) {
-    console.error(`[api] ÇëÇó ${path} Ê§°Ü`, error);
+    console.error(`[api] è¯·æ±‚ ${path} å¤±è´¥`, error);
     throw error;
   }
 }

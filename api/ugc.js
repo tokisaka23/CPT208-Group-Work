@@ -1,4 +1,4 @@
-﻿import { getAuthenticatedUser } from './supabase.js';
+import { getAuthenticatedUser } from './supabase.js';
 
 function buildJson(res, statusCode, payload) {
   res.status(statusCode).json(payload);

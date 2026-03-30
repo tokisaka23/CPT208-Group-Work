@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { Button, showConfirmDialog, showFailToast, showSuccessToast } from 'vant';
 import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase/clientRuntime';
