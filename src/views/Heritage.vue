@@ -1,6 +1,77 @@
 <script setup>
+import { computed } from 'vue';
 import InkCard from '../components/InkCard.vue';
-import { heritageCards, heritageSteps } from '../data/siteContent';
+import { currentLanguage, resolveLocalized } from '../i18n';
+import { useSiteContent } from '../data/siteContent';
+
+const { heritageCards, heritageSteps } = useSiteContent();
+
+const pageTextSource = {
+  title: {
+    zh: '巷陌藏烟火，吴侬软语醉人',
+    en: 'The lanes hold warmth, and the soft local voices linger in the air.',
+    ja: '路地に暮らしの熱が宿り、やわらかな呉語が人を包む。',
+    ko: '골목에는 생활의 온기가 숨어 있고, 부드러운 오어가 사람을 감싼다.',
+  },
+  lead: {
+    zh: '街巷深处是传了几代的非遗手艺与老字号。在升腾的热气与喧闹声中，感受苏州最抚凡人心的烟火气。',
+    en: 'Deep in the lanes are inherited crafts and old shops, where steam, voices, and everyday life reveal Suzhou at its warmest.',
+    ja: '路地の奥には代々受け継がれてきた手仕事と老舗があり、湯気とざわめきの中で蘇州のもっとも人に近い温度が感じられる。',
+    ko: '골목 깊숙한 곳에는 세대를 이어 온 수공예와 오래된 가게가 있다. 김과 소란 속에서 쑤저우의 가장 인간적인 온기를 느낄 수 있다.',
+  },
+  stepLabel: {
+    zh: '巷口路线',
+    en: 'Lane Sequence',
+    ja: '路地の順路',
+    ko: '골목 동선',
+  },
+  bustleTitle: {
+    zh: '真正的平江路，不只看景，还要闻到、听到、吃到、带走。',
+    en: 'The real Pingjiang Road is not only seen. It is smelled, heard, tasted, and taken home.',
+    ja: '本当の平江路は、見るだけではない。香り、音、味、そして持ち帰る手ざわりまで含まれている。',
+    ko: '진짜 평강로는 보는 것만이 아니다. 냄새 맡고, 듣고, 먹고, 가져가는 경험까지 포함된다.',
+  },
+  bustleChips: [
+    {
+      title: { zh: '吃', en: 'Eat', ja: '食べる', ko: '먹기' },
+      text: {
+        zh: '清汤细面、糕团、时令点心',
+        en: 'Clear-broth noodles, rice cakes, and seasonal sweets',
+        ja: '澄んだ麺、糕団、季節の菓子',
+        ko: '맑은 국물 면, 떡, 계절 간식',
+      },
+    },
+    {
+      title: { zh: '听', en: 'Listen', ja: '聴く', ko: '듣기' },
+      text: {
+        zh: '评弹、昆曲、船橹与人声',
+        en: 'Pingtan, Kunqu, boat sounds, and street voices',
+        ja: '評弾、昆曲、舟の音、人の声',
+        ko: '평탄, 곤곡, 노 젓는 소리와 사람 목소리',
+      },
+    },
+    {
+      title: { zh: '逛', en: 'Wander', ja: '歩く', ko: '둘러보기' },
+      text: {
+        zh: '河埠、支巷、小桥、旧铺面',
+        en: 'Canal edges, side lanes, bridges, and old storefronts',
+        ja: '河岸、路地、小橋、古い店構え',
+        ko: '하안, 골목, 작은 다리, 오래된 가게',
+      },
+    },
+    {
+      title: { zh: '带走', en: 'Bring Home', ja: '持ち帰る', ko: '가져가기' },
+      text: {
+        zh: '宋锦、香器、纸本与小手作',
+        en: 'Song brocade, incense ware, paper goods, and small crafts',
+        ja: '宋錦、香の器、紙もの、小さな手仕事',
+        ko: '송금, 향 도구, 종이 공예, 작은 수공예품',
+      },
+    },
+  ],
+};
+
+const pageText = computed(() => resolveLocalized(pageTextSource, currentLanguage.value));
 </script>
 
 <template>
@@ -10,15 +81,15 @@ import { heritageCards, heritageSteps } from '../data/siteContent';
         <div>
           <p class="eyebrow">Living Heritage</p>
           <div class="heritage-title-frame">
-            <h1 class="section-title">巷陌藏烟火，吴侬软语醉人</h1>
+            <h1 class="section-title">{{ pageText.title }}</h1>
           </div>
           <p class="section-lead">
-            街巷深处是传了几代的非遗手艺与老字号。在升腾的热气与喧闹声中，感受苏州最抚凡人心的烟火气。
+            {{ pageText.lead }}
           </p>
         </div>
         <div class="heritage-steps">
           <article v-for="step in heritageSteps" :key="step" class="heritage-step">
-            <span>巷口路线</span>
+            <span>{{ pageText.stepLabel }}</span>
             <p>{{ step }}</p>
           </article>
         </div>
@@ -35,26 +106,14 @@ import { heritageCards, heritageSteps } from '../data/siteContent';
       <div class="section-header section-header--compact">
         <div>
           <p class="eyebrow">Street Texture</p>
-          <h2 class="section-title">真正的平江路，不只看景，还要闻到、听到、吃到、带走。</h2>
+          <h2 class="section-title">{{ pageText.bustleTitle }}</h2>
         </div>
       </div>
 
       <div class="bustle-grid">
-        <article class="bustle-chip">
-          <strong>吃</strong>
-          <span>清汤细面、糕团、时令点心</span>
-        </article>
-        <article class="bustle-chip">
-          <strong>听</strong>
-          <span>评弹、昆曲、船橹与人声</span>
-        </article>
-        <article class="bustle-chip">
-          <strong>逛</strong>
-          <span>河埠、支巷、小桥、旧铺面</span>
-        </article>
-        <article class="bustle-chip">
-          <strong>带走</strong>
-          <span>宋锦、香器、纸本与小手作</span>
+        <article v-for="item in pageText.bustleChips" :key="item.title" class="bustle-chip">
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.text }}</span>
         </article>
       </div>
     </section>

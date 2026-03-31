@@ -1,6 +1,7 @@
-<script setup>
-import { Button, Popup, Tag } from 'vant';
+﻿<script setup>
 import { computed } from 'vue';
+import { Button, Popup, Tag } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 const props = defineProps({
   show: {
@@ -14,13 +15,74 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:show']);
+const { language } = useLanguage();
+
+const textSource = {
+  noUpdate: {
+    zh: '暂无更新时间',
+    en: 'No update time yet',
+    ja: '更新時刻はまだありません',
+    ko: '업데이트 시간이 아직 없습니다',
+  },
+  eyebrow: {
+    zh: '好友定位详情',
+    en: 'Friend Location Details',
+    ja: '友だちの位置詳細',
+    ko: '친구 위치 상세',
+  },
+  online: {
+    zh: '在线',
+    en: 'Online',
+    ja: 'オンライン',
+    ko: '온라인',
+  },
+  mapTitle: {
+    zh: '定位原型展示区',
+    en: 'Location Prototype Area',
+    ja: '位置プロトタイプ表示エリア',
+    ko: '위치 프로토타입 표시 영역',
+  },
+  mapDesc: {
+    zh: '后续接入地图 SDK 后，可在这里展示地图、轨迹和更新时间。',
+    en: 'After a map SDK is connected, this area can show the map, route, and update time.',
+    ja: '今後マップ SDK を接続すると、ここに地図、軌跡、更新時刻を表示できます。',
+    ko: '추후 지도 SDK 를 연결하면 이곳에 지도, 이동 경로, 업데이트 시간을 표시할 수 있습니다.',
+  },
+  latitude: {
+    zh: '纬度',
+    en: 'Latitude',
+    ja: '緯度',
+    ko: '위도',
+  },
+  longitude: {
+    zh: '经度',
+    en: 'Longitude',
+    ja: '経度',
+    ko: '경도',
+  },
+  updatedAt: {
+    zh: '最近更新',
+    en: 'Last Update',
+    ja: '最終更新',
+    ko: '최근 업데이트',
+  },
+  close: {
+    zh: '关闭',
+    en: 'Close',
+    ja: '閉じる',
+    ko: '닫기',
+  },
+};
+
+const text = computed(() => resolveLocalized(textSource, language.value));
+const locale = computed(() => (language.value === 'zh' ? 'zh-CN' : language.value));
 
 const formattedTime = computed(() => {
   if (!props.friend?.updatedAt) {
-    return '暂无更新时间';
+    return text.value.noUpdate;
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale.value, {
     hour12: false,
     month: '2-digit',
     day: '2-digit',
@@ -41,35 +103,35 @@ const formattedTime = computed(() => {
     <div v-if="friend" class="popup-content">
       <div class="popup-head">
         <div>
-          <p class="popup-eyebrow">好友定位详情</p>
+          <p class="popup-eyebrow">{{ text.eyebrow }}</p>
           <h3 class="popup-title">{{ friend.username }}</h3>
         </div>
-        <Tag type="success" plain>在线</Tag>
+        <Tag type="success" plain>{{ text.online }}</Tag>
       </div>
 
       <div class="map-placeholder">
         <div class="map-pin"></div>
-        <strong>定位原型展示区</strong>
-        <p>后续接入地图 SDK 后，可在这里展示地图、轨迹和更新时间。</p>
+        <strong>{{ text.mapTitle }}</strong>
+        <p>{{ text.mapDesc }}</p>
       </div>
 
       <div class="detail-list">
         <div class="detail-row">
-          <span class="detail-label">纬度</span>
+          <span class="detail-label">{{ text.latitude }}</span>
           <strong class="detail-value">{{ friend.latitude }}</strong>
         </div>
         <div class="detail-row">
-          <span class="detail-label">经度</span>
+          <span class="detail-label">{{ text.longitude }}</span>
           <strong class="detail-value">{{ friend.longitude }}</strong>
         </div>
         <div class="detail-row">
-          <span class="detail-label">最近更新</span>
+          <span class="detail-label">{{ text.updatedAt }}</span>
           <strong class="detail-value">{{ formattedTime }}</strong>
         </div>
       </div>
 
       <Button block round type="primary" @click="emit('update:show', false)">
-        关闭
+        {{ text.close }}
       </Button>
     </div>
   </Popup>

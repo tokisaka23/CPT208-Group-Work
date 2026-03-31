@@ -1,5 +1,7 @@
 ﻿<script setup>
+import { computed } from 'vue';
 import { Button } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 const props = defineProps({
   user: {
@@ -9,28 +11,70 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['copy']);
+const { language } = useLanguage();
+
+const textSource = {
+  eyebrow: {
+    zh: '我的好友码',
+    en: 'My Friend Code',
+    ja: '自分のフレンドコード',
+    ko: '내 친구 코드',
+  },
+  title: {
+    zh: '让好友通过这个编码添加你',
+    en: 'Let friends add you with this code',
+    ja: 'このコードで友だちに追加してもらう',
+    ko: '이 코드로 친구가 나를 추가할 수 있습니다',
+  },
+  copy: {
+    zh: '复制',
+    en: 'Copy',
+    ja: 'コピー',
+    ko: '복사',
+  },
+  fallbackCode: {
+    zh: '暂未生成好友码',
+    en: 'No friend code yet',
+    ja: 'まだフレンドコードがありません',
+    ko: '아직 친구 코드가 없습니다',
+  },
+  unnamedUser: {
+    zh: '未命名用户',
+    en: 'Unnamed user',
+    ja: '未設定ユーザー',
+    ko: '이름 없는 사용자',
+  },
+  meta: {
+    zh: '每个注册用户都对应唯一的好友码',
+    en: 'Every registered user has a unique friend code.',
+    ja: '登録ユーザーごとに固有のフレンドコードがあります。',
+    ko: '등록된 사용자마다 고유한 친구 코드가 있습니다.',
+  },
+};
+
+const text = computed(() => resolveLocalized(textSource, language.value));
 </script>
 
 <template>
   <section class="panel-card friend-code-card">
     <div class="card-head">
       <div>
-        <p class="card-eyebrow">我的好友码</p>
-        <h2 class="card-title">让好友通过这个编码添加你</h2>
+        <p class="card-eyebrow">{{ text.eyebrow }}</p>
+        <h2 class="card-title">{{ text.title }}</h2>
       </div>
       <Button size="small" plain type="primary" @click="emit('copy')">
-        复制
+        {{ text.copy }}
       </Button>
     </div>
 
     <div class="code-box">
       <span class="code-label">friend_code</span>
-      <strong class="code-value">{{ props.user.friendCode || '暂未生成好友码' }}</strong>
+      <strong class="code-value">{{ props.user.friendCode || text.fallbackCode }}</strong>
     </div>
 
     <div class="meta-row">
-      <span class="user-name">{{ props.user.username || '未命名用户' }}</span>
-      <span class="meta-text">每个注册用户都对应唯一的好友码</span>
+      <span class="user-name">{{ props.user.username || text.unnamedUser }}</span>
+      <span class="meta-text">{{ text.meta }}</span>
     </div>
   </section>
 </template>

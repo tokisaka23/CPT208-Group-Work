@@ -1,6 +1,7 @@
 ﻿<script setup>
 import { computed } from 'vue';
 import { Button, CellGroup, Field, Icon } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 const props = defineProps({
   modelValue: {
@@ -22,6 +23,48 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'submit']);
+const { language } = useLanguage();
+
+const textSource = {
+  title: {
+    zh: '添加好友',
+    en: 'Add a Friend',
+    ja: '友だちを追加',
+    ko: '친구 추가',
+  },
+  desc: {
+    zh: '输入对方的 friend_code 后发起好友申请',
+    en: 'Enter the other person\'s friend code to send a friend request.',
+    ja: '相手の friend_code を入力して友だち申請を送ります。',
+    ko: '상대방의 friend_code 를 입력해 친구 요청을 보냅니다.',
+  },
+  codeLabel: {
+    zh: '好友码',
+    en: 'Friend Code',
+    ja: 'フレンドコード',
+    ko: '친구 코드',
+  },
+  codePlaceholder: {
+    zh: '例如 FIND-8842',
+    en: 'For example FIND-8842',
+    ja: '例: FIND-8842',
+    ko: '예: FIND-8842',
+  },
+  clearCode: {
+    zh: '清空好友码',
+    en: 'Clear friend code',
+    ja: 'フレンドコードをクリア',
+    ko: '친구 코드 지우기',
+  },
+  submit: {
+    zh: '发送好友申请',
+    en: 'Send Friend Request',
+    ja: '友だち申請を送信',
+    ko: '친구 요청 보내기',
+  },
+};
+
+const text = computed(() => resolveLocalized(textSource, language.value));
 
 const friendCodeValue = computed({
   get: () => props.modelValue,
@@ -37,24 +80,24 @@ function clearFriendCode() {
   <form class="panel-card" @submit.prevent="emit('submit')">
     <div class="section-head">
       <div>
-        <h2 class="section-title">添加好友</h2>
-        <p class="section-desc">输入对方的 friend_code 后发起好友申请</p>
+        <h2 class="section-title">{{ text.title }}</h2>
+        <p class="section-desc">{{ text.desc }}</p>
       </div>
     </div>
 
     <CellGroup inset class="input-group">
       <Field
         v-model="friendCodeValue"
-        label="好友码"
+        :label="text.codeLabel"
         maxlength="20"
-        placeholder="例如 FIND-8842"
+        :placeholder="text.codePlaceholder"
         @keyup.enter="emit('submit')"
       >
         <template v-if="friendCodeValue" #right-icon>
           <button
             type="button"
             class="field-clear-button"
-            aria-label="清空好友码"
+            :aria-label="text.clearCode"
             @click="clearFriendCode"
           >
             <Icon name="clear" />
@@ -64,7 +107,7 @@ function clearFriendCode() {
     </CellGroup>
 
     <Button block round type="primary" native-type="submit" :loading="submitting">
-      发送好友申请
+      {{ text.submit }}
     </Button>
 
     <p :class="['feedback-text', `is-${feedbackType}`]">

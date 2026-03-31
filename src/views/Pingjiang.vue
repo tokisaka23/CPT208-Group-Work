@@ -1,7 +1,112 @@
 <script setup>
+import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import InkCard from '../components/InkCard.vue';
-import { chapterCards, pingjiangRhythms } from '../data/siteContent';
+import { currentLanguage, resolveLocalized } from '../i18n';
+import { useSiteContent } from '../data/siteContent';
+
+const { chapterCards, pingjiangRhythms } = useSiteContent();
+
+const pageTextSource = {
+  heroTitle: {
+    zh: '平江古街，在一条临水旧街里打开苏州的园林、文博与市井。',
+    en: 'Pingjiang Road opens Suzhou\'s gardens, museums, and street life along one old canal-side street.',
+    ja: '平江古街は、水辺の旧街路の中で蘇州の庭園・博物館・町の暮らしをひらいてくれる。',
+    ko: '평강고가는 물가의 오래된 거리 안에서 쑤저우의 정원과 박물관, 생활 풍경을 펼쳐 보인다.',
+  },
+  heroLead: {
+    zh: '以平江路为引线，顺着河埠、桥影和白墙黛瓦慢慢走：先入园看水石与花窗，再入馆读城，最后回到巷口的人间烟火。',
+    en: 'Use Pingjiang Road as your guide: follow the canal edge, bridges, and white walls into gardens, museums, and finally the warmth of the lanes.',
+    ja: '平江路を一本の導線にして、河岸や橋影、白壁と黒瓦に沿ってゆっくり歩く。庭園に入り、館で街を読み、最後に路地の生活へ戻る。',
+    ko: '평강로를 한 줄의 동선으로 삼아 하안과 다리 그림자, 백벽과 흑와를 따라 천천히 걷는다. 먼저 정원으로, 그다음 박물관으로, 마지막은 골목의 생활 풍경으로 돌아온다.',
+  },
+  primaryAction: {
+    zh: '先入园林',
+    en: 'Start with Gardens',
+    ja: 'まず庭園へ',
+    ko: '먼저 정원으로',
+  },
+  secondaryAction: {
+    zh: '再看市井',
+    en: 'Then the Streets',
+    ja: '次に町を見る',
+    ko: '다음은 골목으로',
+  },
+  statPrimary: {
+    zh: '平江慢行主线',
+    en: 'Main walking route',
+    ja: '平江の散策主線',
+    ko: '평강 산책 메인 루트',
+  },
+  statSecondary: {
+    zh: '独立主题路径',
+    en: 'Independent routes',
+    ja: '独立した主題ルート',
+    ko: '독립 테마 루트',
+  },
+  statTertiary: {
+    zh: '看完整体气质',
+    en: 'For the full atmosphere',
+    ja: '街の気配をひと通り見る',
+    ko: '전체 분위기를 보는 하루',
+  },
+  poemLabel: {
+    zh: '姑苏意境',
+    en: 'Suzhou Mood',
+    ja: '姑蘇の気配',
+    ko: '고소의 정취',
+  },
+  poemText: {
+    zh: '君到姑苏见，人家尽枕河',
+    en: 'When you arrive in Suzhou, every household seems to rest by the river.',
+    ja: '君、姑蘇に到れば見る。人家ことごとく河に枕す。',
+    ko: '그대가 고소에 이르면, 집집마다 강을 베고 있음을 보게 된다.',
+  },
+  briefLabel: {
+    zh: '慢游提示',
+    en: 'Slow Travel Tip',
+    ja: 'ゆっくり歩くためのヒント',
+    ko: '슬로우 트래블 팁',
+  },
+  briefTitle: {
+    zh: '先顺着主街建立方向，再向两侧支巷轻轻散开。',
+    en: 'First take the main street to orient yourself, then drift gently into the side lanes.',
+    ja: 'まずは大通りで方向感覚をつかみ、そのあと両側の路地へ静かに広がっていく。',
+    ko: '먼저 큰 거리로 방향을 잡고, 그다음 양옆 골목으로 천천히 퍼져 나간다.',
+  },
+  briefBody: {
+    zh: '这样最容易把园林的静、博物馆的雅与市井的活，收束成一条完整的江南叙事。',
+    en: 'That is the easiest way to gather garden quiet, museum elegance, and street vitality into one Jiangnan story.',
+    ja: 'そう歩くと、庭園の静けさと博物館の品格、町のにぎわいがひとつの江南の物語としてまとまる。',
+    ko: '이렇게 걸으면 정원의 고요함과 박물관의 우아함, 골목의 활기를 하나의 강남 서사로 묶기 쉽다.',
+  },
+  sectionTitle: {
+    zh: '从平江古街出发，把苏州拆成四页，各自成章。',
+    en: 'Starting from Pingjiang Road, Suzhou unfolds into four distinct chapters.',
+    ja: '平江古街を起点に、蘇州を四つの頁へと分けて読む。',
+    ko: '평강고가에서 출발해 쑤저우를 네 개의 장면으로 나누어 읽는다.',
+  },
+  sectionLead: {
+    zh: '首页负责打开整体气质，其余三页分别承接园林、文博与非遗市井，让浏览路线更清晰，视觉语言也更专注。',
+    en: 'The home page opens the overall atmosphere, while the other three pages focus on gardens, museums, and living heritage.',
+    ja: 'トップページが全体の気配をひらき、残りの三頁が庭園・博物館・生活文化をそれぞれ受け持つ。',
+    ko: '첫 페이지가 전체 분위기를 열고, 나머지 세 페이지가 정원과 박물관, 생활 유산을 각각 맡는다.',
+  },
+  sectionNote: {
+    zh: '这不是急促的信息堆叠，而是一种像翻册页一样的观看方式：一页一景，一页一气息。',
+    en: 'This is not a stack of rushed information but a way of looking that feels like turning through an album: one page, one scene, one mood.',
+    ja: 'これは情報を急いで積み上げる構成ではなく、冊子をめくるように一頁ずつ景色と気配を読むためのつくりだ。',
+    ko: '이건 서둘러 정보를 쌓아 올린 구성이 아니라, 한 페이지씩 풍경과 기운을 넘겨 보는 방식이다.',
+  },
+  rhythmTitle: {
+    zh: '一日之间，平江路的气息会沿着河岸轻轻换调。',
+    en: 'Across a single day, Pingjiang Road changes its mood along the canal.',
+    ja: '一日のあいだに、平江路の気配は川沿いにそっと調子を変えていく。',
+    ko: '하루 동안 평강로의 기운은 물가를 따라 천천히 결을 바꾼다.',
+  },
+};
+
+const pageText = computed(() => resolveLocalized(pageTextSource, currentLanguage.value));
 </script>
 
 <template>
@@ -13,41 +118,41 @@ import { chapterCards, pingjiangRhythms } from '../data/siteContent';
       <div class="pingjiang-hero__content">
         <div class="pingjiang-hero__copy">
           <p class="eyebrow">Pingjiang Road</p>
-          <h1 class="hero-title">平江古街，在一条临水旧街里打开苏州的园林、文博与市井。</h1>
+          <h1 class="hero-title">{{ pageText.heroTitle }}</h1>
           <p class="hero-lead">
-            以平江路为引线，顺着河埠、桥影和白墙黛瓦慢慢走：先入园看水石与花窗，再入馆读城，最后回到巷口的人间烟火。
+            {{ pageText.heroLead }}
           </p>
 
           <div class="hero-actions">
-            <RouterLink to="/gardens" class="button-primary">先入园林</RouterLink>
-            <RouterLink to="/heritage" class="button-ghost">再看市井</RouterLink>
+            <RouterLink to="/gardens" class="button-primary">{{ pageText.primaryAction }}</RouterLink>
+            <RouterLink to="/heritage" class="button-ghost">{{ pageText.secondaryAction }}</RouterLink>
           </div>
 
           <div class="hero-stat-row">
             <div>
               <strong>1.6 km</strong>
-              <span>平江慢行主线</span>
+              <span>{{ pageText.statPrimary }}</span>
             </div>
             <div>
               <strong>4 条</strong>
-              <span>独立主题路径</span>
+              <span>{{ pageText.statSecondary }}</span>
             </div>
             <div>
-              <strong>一日</strong>
-              <span>看完整体气质</span>
+              <strong>{{ currentLanguage === 'en' ? '1 day' : currentLanguage === 'ja' ? '一日' : currentLanguage === 'ko' ? '하루' : '一日' }}</strong>
+              <span>{{ pageText.statTertiary }}</span>
             </div>
           </div>
         </div>
 
         <aside class="pingjiang-hero__aside">
           <div class="poem-panel">
-            <p class="poem-panel__label">姑苏意境</p>
-            <p class="poem-vertical">君到姑苏见，人家尽枕河</p>
+            <p class="poem-panel__label">{{ pageText.poemLabel }}</p>
+            <p class="poem-vertical">{{ pageText.poemText }}</p>
           </div>
           <div class="floating-brief">
-            <span>慢游提示</span>
-            <h2>先顺着主街建立方向，再向两侧支巷轻轻散开。</h2>
-            <p>这样最容易把园林的静、博物馆的雅与市井的活，收束成一条完整的江南叙事。</p>
+            <span>{{ pageText.briefLabel }}</span>
+            <h2>{{ pageText.briefTitle }}</h2>
+            <p>{{ pageText.briefBody }}</p>
           </div>
         </aside>
       </div>
@@ -57,13 +162,13 @@ import { chapterCards, pingjiangRhythms } from '../data/siteContent';
       <div class="section-header">
         <div>
           <p class="eyebrow">Four Independent Pages</p>
-          <h2 class="section-title">从平江古街出发，把苏州拆成四页，各自成章。</h2>
+          <h2 class="section-title">{{ pageText.sectionTitle }}</h2>
           <p class="section-lead">
-            首页负责打开整体气质，其余三页分别承接园林、文博与非遗市井，让浏览路线更清晰，视觉语言也更专注。
+            {{ pageText.sectionLead }}
           </p>
         </div>
         <div class="section-note serif-copy">
-          这不是急促的信息堆叠，而是一种像翻册页一样的观看方式：一页一景，一页一气息。
+          {{ pageText.sectionNote }}
         </div>
       </div>
 
@@ -81,7 +186,7 @@ import { chapterCards, pingjiangRhythms } from '../data/siteContent';
       <div class="section-header section-header--compact">
         <div>
           <p class="eyebrow">Rhythm Of The Street</p>
-          <h2 class="section-title">一日之间，平江路的气息会沿着河岸轻轻换调。</h2>
+          <h2 class="section-title">{{ pageText.rhythmTitle }}</h2>
         </div>
       </div>
 

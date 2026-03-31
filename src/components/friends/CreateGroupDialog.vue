@@ -1,19 +1,74 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Button, Checkbox, CheckboxGroup, Empty, Field, Popup } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
-const text = {
-  title: '\u53d1\u8d77\u7fa4\u804a',
-  desc: '\u9009\u62e9\u597d\u53cb\u540e\u5373\u53ef\u521b\u5efa\u65b0\u7684\u7fa4\u804a',
-  cancel: '\u53d6\u6d88',
-  fieldLabel: '\u7fa4\u540d\u79f0',
-  fieldPlaceholder: '\u4e0d\u586b\u5219\u81ea\u52a8\u751f\u6210\u7fa4\u540d\u79f0',
-  memberTitle: '\u9009\u62e9\u597d\u53cb',
-  selectedPrefix: '\u5df2\u9009',
-  selectedSuffix: '\u4f4d',
-  empty: '\u5f53\u524d\u8fd8\u6ca1\u6709\u53ef\u9009\u597d\u53cb',
-  submit: '\u521b\u5efa\u7fa4\u804a',
+const { language } = useLanguage();
+
+const textSource = {
+  title: {
+    zh: '发起群聊',
+    en: 'Create Group Chat',
+    ja: 'グループチャットを作成',
+    ko: '그룹 채팅 만들기',
+  },
+  desc: {
+    zh: '选择好友后即可创建新的群聊',
+    en: 'Choose friends to create a new group chat.',
+    ja: '友だちを選ぶと新しいグループチャットを作成できます。',
+    ko: '친구를 선택하면 새 그룹 채팅을 만들 수 있습니다.',
+  },
+  cancel: {
+    zh: '取消',
+    en: 'Cancel',
+    ja: 'キャンセル',
+    ko: '취소',
+  },
+  fieldLabel: {
+    zh: '群聊名称',
+    en: 'Group Name',
+    ja: 'グループ名',
+    ko: '그룹 이름',
+  },
+  fieldPlaceholder: {
+    zh: '不填则自动生成群名称',
+    en: 'Leave blank to generate a name automatically',
+    ja: '空欄の場合は自動でグループ名を生成します',
+    ko: '비워 두면 그룹 이름이 자동으로 생성됩니다',
+  },
+  memberTitle: {
+    zh: '选择好友',
+    en: 'Choose Friends',
+    ja: '友だちを選択',
+    ko: '친구 선택',
+  },
+  selectedPrefix: {
+    zh: '已选',
+    en: 'Selected',
+    ja: '選択済み',
+    ko: '선택',
+  },
+  selectedSuffix: {
+    zh: '位',
+    en: '',
+    ja: '人',
+    ko: '명',
+  },
+  empty: {
+    zh: '当前还没有可选好友',
+    en: 'There are no friends available to add.',
+    ja: '選択できる友だちがいません。',
+    ko: '선택할 수 있는 친구가 없습니다.',
+  },
+  submit: {
+    zh: '创建群聊',
+    en: 'Create Group',
+    ja: 'グループを作成',
+    ko: '그룹 만들기',
+  },
 };
+
+const text = computed(() => resolveLocalized(textSource, language.value));
 
 const props = defineProps({
   show: {

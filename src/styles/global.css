@@ -276,6 +276,34 @@ button {
   flex-shrink: 0;
 }
 
+.language-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.62rem;
+  padding: 0.22rem 0.32rem 0.22rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.12);
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink-700);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.language-switch span {
+  white-space: nowrap;
+}
+
+.language-switch select {
+  min-height: 2.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-900);
+  font: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
 .profile-button {
   position: relative;
   display: inline-flex;
@@ -614,6 +642,14 @@ button {
   .profile-copy {
     display: none;
   }
+
+  .language-switch {
+    padding-right: 0.54rem;
+  }
+
+  .language-switch span {
+    display: none;
+  }
 }
 
 @media (max-width: 1000px) {
@@ -632,6 +668,8 @@ button {
 
   .header-actions {
     margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 

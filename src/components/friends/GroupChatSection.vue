@@ -1,14 +1,63 @@
-<script setup>
+﻿<script setup>
+import { computed } from 'vue';
 import { Empty, Tag } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
-const text = {
-  title: '\u6211\u521b\u5efa\u7684\u7fa4\u804a',
-  desc: '\u8fd9\u91cc\u4f1a\u4fdd\u7559\u4f60\u5728\u5f53\u524d\u6d4f\u89c8\u5668\u91cc\u521b\u5efa\u8fc7\u7684\u7fa4\u804a',
-  empty: '\u8fd8\u6ca1\u6709\u7fa4\u804a\uff0c\u70b9\u51fb\u597d\u53cb\u5217\u8868\u53f3\u4e0a\u89d2\u7684\u52a0\u53f7\u8bd5\u8bd5',
-  peopleSuffix: '\u4eba',
-  createdAt: '\u521b\u5efa\u65f6\u95f4',
-  openHint: '\u70b9\u51fb\u5373\u53ef\u8fdb\u5165\u7fa4\u804a',
+const { language } = useLanguage();
+
+const textSource = {
+  title: {
+    zh: '我创建的群聊',
+    en: 'My Group Chats',
+    ja: '自分のグループチャット',
+    ko: '내 그룹 채팅',
+  },
+  desc: {
+    zh: '这里会保留你在当前浏览器里创建过的群聊',
+    en: 'Group chats created in this browser are kept here.',
+    ja: 'このブラウザで作成したグループチャットがここに残ります。',
+    ko: '이 브라우저에서 만든 그룹 채팅이 여기에 보관됩니다.',
+  },
+  empty: {
+    zh: '还没有群聊，点击好友列表右上角的加号试试',
+    en: 'No group chats yet. Try the plus button in the top-right of the friend list.',
+    ja: 'まだグループチャットがありません。友だち一覧右上のプラスを試してください。',
+    ko: '아직 그룹 채팅이 없습니다. 친구 목록 오른쪽 위의 플러스를 눌러 보세요.',
+  },
+  peopleSuffix: {
+    zh: '人',
+    en: 'people',
+    ja: '人',
+    ko: '명',
+  },
+  createdAt: {
+    zh: '创建时间',
+    en: 'Created',
+    ja: '作成日時',
+    ko: '생성 시간',
+  },
+  openHint: {
+    zh: '点击即可进入群聊',
+    en: 'Tap to enter the chat',
+    ja: 'タップでチャットを開く',
+    ko: '눌러서 채팅 열기',
+  },
+  unreadSection: {
+    zh: '存在未读群消息',
+    en: 'There are unread group messages',
+    ja: '未読のグループメッセージがあります',
+    ko: '읽지 않은 그룹 메시지가 있습니다',
+  },
+  unreadGroup: {
+    zh: '该群聊有未读消息',
+    en: 'This group has unread messages',
+    ja: 'このグループに未読メッセージがあります',
+    ko: '이 그룹에 읽지 않은 메시지가 있습니다',
+  },
 };
+
+const text = computed(() => resolveLocalized(textSource, language.value));
+const locale = computed(() => (language.value === 'zh' ? 'zh-CN' : language.value));
 
 defineProps({
   groups: {
@@ -24,7 +73,7 @@ function countUnreadGroups(groups) {
 }
 
 function formatMembers(group) {
-  return (group.members || []).map((member) => member.username).join('\u3001');
+  return (group.members || []).map((member) => member.username).join(', ');
 }
 
 function formatTime(group) {
@@ -32,7 +81,7 @@ function formatTime(group) {
     return '';
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale.value, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -47,7 +96,7 @@ function formatTime(group) {
       <div>
         <div class="section-title-row">
           <h2 class="section-title">{{ text.title }}</h2>
-          <span v-if="countUnreadGroups(groups)" class="section-unread-dot" aria-label="存在未读群消息" />
+          <span v-if="countUnreadGroups(groups)" class="section-unread-dot" :aria-label="text.unreadSection" />
         </div>
         <p class="section-desc">{{ text.desc }}</p>
       </div>
@@ -72,7 +121,7 @@ function formatTime(group) {
         <div class="group-top">
           <div class="group-avatar-wrap">
             <div class="group-avatar">{{ group.name.slice(0, 1) }}</div>
-            <span v-if="group.hasUnread" class="group-unread-dot" aria-label="该群聊有未读消息" />
+            <span v-if="group.hasUnread" class="group-unread-dot" :aria-label="text.unreadGroup" />
           </div>
           <div class="group-copy">
             <div class="group-title-row">
