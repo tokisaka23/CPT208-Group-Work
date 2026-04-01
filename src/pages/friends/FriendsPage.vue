@@ -1,6 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   Button,
   Loading,
@@ -38,6 +37,7 @@ import {
   sendFriendRequest,
   unblockFriend,
 } from '../../services/friends/friendServiceRuntime';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 defineProps({
   showNavBar: {
@@ -46,7 +46,49 @@ defineProps({
   },
 });
 
-const router = useRouter();
+const { language } = useLanguage();
+
+const textSource = {
+  defaultFeedback: {
+    zh: '当前列表会展示已通过确认的好友，新的好友申请需要等待对方处理。',
+    en: 'This list shows confirmed friends. New requests stay pending until the other person responds.',
+    ja: 'ここには承認済みの友だちが表示されます。新しい申請は相手の対応待ちです。',
+    ko: '이 목록에는 승인된 친구만 표시됩니다. 새 요청은 상대방의 처리를 기다려야 합니다.',
+  },
+  navTitle: {
+    zh: '好友与定位',
+    en: 'Friends and Location',
+    ja: '友だちと位置情報',
+    ko: '친구와 위치',
+  },
+  loading: {
+    zh: '正在加载好友数据...',
+    en: 'Loading friend data...',
+    ja: '友だちデータを読み込み中...',
+    ko: '친구 데이터를 불러오는 중...',
+  },
+  pageLoadFailed: {
+    zh: '页面加载失败',
+    en: 'Page Failed to Load',
+    ja: 'ページの読み込みに失敗しました',
+    ko: '페이지를 불러오지 못했습니다',
+  },
+  pageLoadErrorFallback: {
+    zh: '好友页面加载失败，请稍后重试',
+    en: 'Failed to load the friends page. Please try again later.',
+    ja: '友だちページの読み込みに失敗しました。しばらくしてからお試しください。',
+    ko: '친구 페이지를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  },
+  reload: {
+    zh: '重新加载',
+    en: 'Reload',
+    ja: '再読み込み',
+    ko: '다시 불러오기',
+  },
+};
+
+const text = computed(() => resolveLocalized(textSource, language.value));
+
 const currentUser = ref(null);
 const friends = ref([]);
 const blockedUsers = ref([]);
@@ -70,9 +112,19 @@ const activeGroupChat = ref(null);
 const groupChatPopupVisible = ref(false);
 const activeGroupMessages = ref([]);
 const groupChatPolling = ref(false);
-const feedbackText = ref('当前列表会展示已通过确认的好友，新的好友申请需要等待对方处理。');
+const feedbackText = ref('');
 const feedbackType = ref('info');
 const GROUP_CHAT_POLL_INTERVAL = 12000;
+
+watch(
+  () => language.value,
+  () => {
+    if (feedbackType.value === 'info' || !feedbackText.value) {
+      feedbackText.value = text.value.defaultFeedback;
+    }
+  },
+  { immediate: true },
+);
 
 let groupChatPollTimer = null;
 
@@ -120,7 +172,7 @@ async function loadPage() {
     updateGroupChatState(storedGroups);
   } catch (error) {
     console.error('[FriendsPage] 加载好友页面失败', error);
-    pageError.value = error.message || '好友页面加载失败，请稍后重试';
+    pageError.value = error.message || text.value.pageLoadErrorFallback;
   } finally {
     pageLoading.value = false;
   }
@@ -392,20 +444,6 @@ async function handleFriendDataChanged() {
   }
 }
 
-function handleViewFriendFavorites(friend) {
-  if (!friend?.id) {
-    showFailToast('暂时无法读取这位好友的收藏夹。');
-    return;
-  }
-
-  router.push({
-    path: '/favorites',
-    query: {
-      userId: friend.id,
-    },
-  });
-}
-
 function handleOpenCreateGroup() {
   if (!friends.value.length) {
     showToast('请先添加至少 1 位好友');
@@ -673,19 +711,19 @@ onUnmounted(() => {
 
 <template>
   <div class="friends-page" :class="{ 'is-embedded': !showNavBar }">
-    <NavBar v-if="showNavBar" title="好友与定位" fixed placeholder />
+    <NavBar v-if="showNavBar" :title="text.navTitle" fixed placeholder />
 
     <main class="page-body">
       <section v-if="pageLoading" class="state-card">
         <Loading size="24px" color="#2f8a5c" />
-        <p>正在加载好友数据...</p>
+        <p>{{ text.loading }}</p>
       </section>
 
       <section v-else-if="pageError" class="state-card error-card">
-        <h2>页面加载失败</h2>
+        <h2>{{ text.pageLoadFailed }}</h2>
         <p>{{ pageError }}</p>
         <Button round block type="primary" @click="loadPage">
-          重新加载
+          {{ text.reload }}
         </Button>
       </section>
 
@@ -709,7 +747,6 @@ onUnmounted(() => {
           :processing-id="processingFriendId"
           :processing-action="processingAction"
           @select-friend="handleSelectFriend"
-          @view-favorites="handleViewFriendFavorites"
           @remove-friend="handleRemoveFriend"
           @block-friend="handleBlockFriend"
           @open-create-group="handleOpenCreateGroup"

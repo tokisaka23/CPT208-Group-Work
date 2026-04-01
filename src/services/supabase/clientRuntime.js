@@ -17,7 +17,7 @@ export function getSupabaseClient() {
 
   if (!isSupabaseConfigured()) {
     throw new Error(
-      'Missing Supabase env vars: VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY or VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY',
+      '缺少 Supabase 环境变量，请在 .env.local 中配置 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。'
     );
   }
 

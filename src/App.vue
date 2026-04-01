@@ -10,76 +10,446 @@ import {
   respondToFriendRequest,
 } from './services/friends/friendServiceRuntime';
 import { getGroupChats } from './services/friends/groupChatService';
-import { SECURITY_QUESTION_FIELDS, SECURITY_QUESTION_PROMPTS } from './shared/securityQuestions';
+import { currentLanguage, getDocumentTitle, getRouteTitle, resolveLocalized, useLanguage } from './i18n';
+import { SECURITY_QUESTION_FIELDS, getSecurityQuestionPrompt } from './shared/securityQuestions';
 import { isSupabaseConfigured } from './services/supabase/clientRuntime';
 import { deleteCurrentAccount } from './services/supabase/authRuntime';
 
 const route = useRoute();
 const router = useRouter();
+const { language, languageOptions, setLanguage } = useLanguage();
 
-const navItems = [
-  { label: '苏州慢游', to: '/', icon: 'pingjiang', matchPaths: ['/'] },
-  { label: '古典园林', to: '/gardens', icon: 'gardens', matchPaths: ['/gardens', '/zhuozheng', '/liu', '/wangshi'] },
-  { label: '文博殿堂', to: '/museums', icon: 'museums', matchPaths: ['/museums'] },
-  { label: '非遗市井', to: '/heritage', icon: 'heritage', matchPaths: ['/heritage'] },
-];
+const openFavorites = () => {
+  router.push('/favorites');
+};
 
-const featureButtons = [
-  { id: 'friends', label: '好友同游' },
-  { id: 'ai', label: 'AI 伴游' },
-  { id: 'upload', label: '上传照片' },
-];
-
-const featurePanels = {
-  friends: {
-    label: '好友同游',
-    eyebrow: 'Travel Together',
-    description: '把当前页面、集合点和慢游节奏快速同步给朋友，适合同一条路线结伴看。',
+const appTextSource = {
+  brandTitle: {
+    zh: '平江慢游',
+    en: 'Pingjiang Slow Travel',
+    ja: '平江スロートラベル',
+    ko: '평강 슬로우 트래블',
   },
-  ai: {
-    label: 'AI 伴游',
-    eyebrow: 'Smart Guide',
-    description: '根据你当前打开的页面给出导览建议，也可以直接问它“先看哪里、怎么走更顺”。',
+  brandSubtitle: {
+    zh: '平江 · 园林 · 文博 · 市井',
+    en: 'Pingjiang · Gardens · Museums · Heritage',
+    ja: '平江・庭園・博物館・暮らし',
+    ko: '평강 · 정원 · 박물관 · 생활',
   },
-  upload: {
-    label: '上传照片',
-    eyebrow: 'Photo Upload',
-    description: '把你在园林里的随手拍传上来，上传成功后会在这里显示。',
+  navAria: {
+    zh: '主导航',
+    en: 'Main navigation',
+    ja: 'メインナビゲーション',
+    ko: '메인 내비게이션',
+  },
+  languageLabel: {
+    zh: '语言',
+    en: 'Language',
+    ja: '言語',
+    ko: '언어',
+  },
+  profileMenuLabel: {
+    zh: '打开账户菜单',
+    en: 'Open account menu',
+    ja: 'アカウントメニューを開く',
+    ko: '계정 메뉴 열기',
+  },
+  profileAuthLabel: {
+    zh: '打开登录弹窗',
+    en: 'Open sign-in dialog',
+    ja: 'ログイン画面を開く',
+    ko: '로그인 창 열기',
+  },
+  friendNoticeAria: {
+    zh: '存在好友或群聊未读提醒',
+    en: 'Unread friend or group chat notifications',
+    ja: '未読の友だち通知またはグループチャットがあります',
+    ko: '읽지 않은 친구 또는 그룹 채팅 알림이 있습니다',
+  },
+  footerSignatureAria: {
+    zh: '页脚落款',
+    en: 'Footer signature',
+    ja: 'フッター署名',
+    ko: '푸터 서명',
+  },
+  footerNavAria: {
+    zh: '页脚导航',
+    en: 'Footer navigation',
+    ja: 'フッターナビゲーション',
+    ko: '푸터 내비게이션',
+  },
+  close: {
+    zh: '关闭',
+    en: 'Close',
+    ja: '閉じる',
+    ko: '닫기',
+  },
+  navItems: [
+    {
+      label: { zh: '平江古街', en: 'Pingjiang', ja: '平江古街', ko: '평강고가' },
+      to: '/',
+      icon: 'pingjiang',
+    },
+    {
+      label: { zh: '古典园林', en: 'Gardens', ja: '古典庭園', ko: '고전 정원' },
+      to: '/gardens',
+      icon: 'gardens',
+    },
+    {
+      label: { zh: '文博殿堂', en: 'Museums', ja: '博物館', ko: '박물관' },
+      to: '/museums',
+      icon: 'museums',
+    },
+    {
+      label: { zh: '非遗市井', en: 'Heritage', ja: '生活遺産', ko: '생활 유산' },
+      to: '/heritage',
+      icon: 'heritage',
+    },
+  ],
+  featureButtons: [
+    {
+      id: 'friends',
+      label: { zh: '好友同游', en: 'Friends', ja: '友だちと巡る', ko: '친구와 함께' },
+    },
+    {
+      id: 'ai',
+      label: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
+    },
+    {
+      id: 'upload',
+      label: { zh: '上传照片', en: 'Upload', ja: '写真をアップロード', ko: '사진 업로드' },
+    },
+  ],
+  featurePanels: {
+    friends: {
+      label: { zh: '好友同游', en: 'Travel Together', ja: '友だちと巡る', ko: '친구와 함께' },
+      eyebrow: 'Travel Together',
+      description: {
+        zh: '把当前页面、集合点和慢游节奏快速同步给朋友，适合同一条路线结伴看。',
+        en: 'Sync the current page, meeting point, and travel rhythm with friends when you want to explore the same route together.',
+        ja: '現在のページや集合場所、歩くテンポを友だちにすばやく共有して、同じルートを一緒に回れる。',
+        ko: '현재 페이지와 집합 지점, 걷는 리듬을 친구와 빠르게 공유해 같은 루트를 함께 볼 수 있다.',
+      },
+    },
+    ai: {
+      label: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
+      eyebrow: 'Smart Guide',
+      description: {
+        zh: '根据你当前打开的页面给出导览建议，也可以直接问它先看哪里、怎么走更顺。',
+        en: 'Get guidance based on the page you are viewing now, or ask directly where to start and how to walk more smoothly.',
+        ja: '今見ているページに合わせて案内を受けたり、どこから見るべきか、どう歩くべきかを直接たずねたりできる。',
+        ko: '현재 보고 있는 페이지를 기준으로 안내를 받거나 어디부터 보고 어떻게 걸으면 좋은지 바로 물어볼 수 있다.',
+      },
+    },
+    upload: {
+      label: { zh: '上传照片', en: 'Photo Upload', ja: '写真アップロード', ko: '사진 업로드' },
+      eyebrow: 'Photo Upload',
+      description: {
+        zh: '把你在园林里的随手拍传上来，上传成功后会在这里回显。',
+        en: 'Upload a photo from your walk. After it succeeds, the image will preview here.',
+        ja: '歩きながら撮った写真をアップロードすると、成功後にここでプレビューできる。',
+        ko: '산책 중 찍은 사진을 업로드하면 성공 후 이곳에서 바로 미리 볼 수 있다.',
+      },
+    },
+  },
+  footerTitle: {
+    zh: '一街读姑苏，四页见气韵。',
+    en: 'Read Suzhou through one street and four chapters.',
+    ja: '一つの街路から姑蘇を読み、四つの頁で気配を見る。',
+    ko: '한 거리에서 쑤저우를 읽고, 네 장면에서 분위기를 본다.',
+  },
+  footerBody: {
+    zh: '以宣纸白为底，以水墨黑为骨，以青瓷绿与朱砂红轻轻点醒苏州的静与雅。',
+    en: 'Built on paper white and ink black, with celadon green and cinnabar red lightly waking Suzhou\'s calm elegance.',
+    ja: '宣紙の白と墨の黒を土台に、青磁の緑と朱砂の赤で蘇州の静けさと雅をそっと立ち上げる。',
+    ko: '선지의 흰색과 수묵의 검정을 바탕으로, 청자빛 녹색과 주사빛 붉은색으로 쑤저우의 고요함과 우아함을 살린다.',
+  },
+  footerCopyright: {
+    zh: '© 2026 Jiangnan Gardens. 姑苏漫游指南 保留所有权利。',
+    en: '© 2026 Jiangnan Gardens. All rights reserved.',
+    ja: '© 2026 Jiangnan Gardens. All rights reserved.',
+    ko: '© 2026 Jiangnan Gardens. All rights reserved.',
+  },
+  loginRegister: {
+    zh: '登录 / 注册',
+    en: 'Sign In / Sign Up',
+    ja: 'ログイン / 登録',
+    ko: '로그인 / 회원가입',
+  },
+  loggedIn: {
+    zh: '已登录',
+    en: 'Signed in',
+    ja: 'ログイン済み',
+    ko: '로그인됨',
+  },
+  loggedOut: {
+    zh: '未登录',
+    en: 'Signed out',
+    ja: '未ログイン',
+    ko: '로그아웃 상태',
+  },
+  authNotReady: {
+    zh: '未配置认证',
+    en: 'Auth not configured',
+    ja: '認証未設定',
+    ko: '인증 미설정',
   },
 };
 
-const routeJourneys = {
+const dialogTextSource = {
+  profileName: { zh: '昵称', en: 'Nickname', ja: '表示名', ko: '닉네임' },
+  profileNamePlaceholder: { zh: '输入新的昵称', en: 'Enter a new nickname', ja: '新しい表示名を入力', ko: '새 닉네임 입력' },
+  newPassword: { zh: '新密码', en: 'New Password', ja: '新しいパスワード', ko: '새 비밀번호' },
+  newPasswordPlaceholder: { zh: '留空则不修改密码', en: 'Leave blank to keep the password', ja: '空欄なら変更しません', ko: '비워 두면 비밀번호를 변경하지 않습니다' },
+  confirmNewPassword: { zh: '确认新密码', en: 'Confirm New Password', ja: '新しいパスワードを確認', ko: '새 비밀번호 확인' },
+  confirmNewPasswordPlaceholder: { zh: '再次输入新密码', en: 'Enter the new password again', ja: '新しいパスワードをもう一度入力', ko: '새 비밀번호를 다시 입력' },
+  saving: { zh: '保存中…', en: 'Saving...', ja: '保存中...', ko: '저장 중...' },
+  saveChanges: { zh: '保存修改', en: 'Save Changes', ja: '変更を保存', ko: '변경 사항 저장' },
+  logout: { zh: '退出登录', en: 'Sign Out', ja: 'ログアウト', ko: '로그아웃' },
+  moreActions: { zh: '更多账户操作', en: 'More Account Actions', ja: 'その他のアカウント操作', ko: '추가 계정 작업' },
+  friendsNeedLogin: { zh: '需要登录', en: 'Sign In Required', ja: 'ログインが必要です', ko: '로그인이 필요합니다' },
+  friendsNeedLoginTitle: { zh: '好友功能需要先登录', en: 'Friends features require sign-in first', ja: '友だち機能を使うには先にログインが必要です', ko: '친구 기능을 사용하려면 먼저 로그인해야 합니다' },
+  friendsNeedLoginBody: { zh: '请先完成真实登录后再添加好友、查看好友列表。', en: 'Please sign in with a real account before adding friends or viewing the friend list.', ja: '友だち追加や一覧表示の前に、実際のアカウントでログインしてください。', ko: '친구를 추가하거나 목록을 보기 전에 실제 계정으로 먼저 로그인해 주세요.' },
+  goLogin: { zh: '去登录', en: 'Go to Sign In', ja: 'ログインへ', ko: '로그인하기' },
+  goRegister: { zh: '去注册', en: 'Go to Sign Up', ja: '登録へ', ko: '회원가입하기' },
+  aiHistoryAria: { zh: '历史会话', en: 'Conversation history', ja: '会話履歴', ko: '대화 기록' },
+  aiNewConversation: { zh: '新建对话', en: 'New Chat', ja: '新しい会話', ko: '새 대화' },
+  aiRenameShort: { zh: '改', en: 'Edit', ja: '変更', ko: '수정' },
+  aiDeleteShort: { zh: '删', en: 'Delete', ja: '削除', ko: '삭제' },
+  aiConversationAria: { zh: 'AI 伴游对话', en: 'AI guide chat', ja: 'AI ガイド会話', ko: 'AI 가이드 대화' },
+  aiCurrentPage: { zh: '当前导览页面', en: 'Current Guide Page', ja: '現在の案内ページ', ko: '현재 안내 페이지' },
+  aiExitFullscreen: { zh: '退出全屏', en: 'Exit Fullscreen', ja: '全画面を終了', ko: '전체 화면 종료' },
+  aiEnterFullscreen: { zh: '全屏放大', en: 'Fullscreen', ja: '全画面表示', ko: '전체 화면' },
+  aiStarterLabel: { zh: '你可以从这些问题开始', en: 'You can start with these questions', ja: 'これらの質問から始められます', ko: '이 질문들부터 시작할 수 있습니다' },
+  me: { zh: '我', en: 'Me', ja: '私', ko: '나' },
+  aiLabel: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
+  aiLoading: { zh: '正在整理当前页面的慢游建议…', en: 'Preparing slow-travel suggestions for this page...', ja: 'このページ向けのゆったりした案内を整理しています...', ko: '이 페이지에 맞는 느린 여행 제안을 정리하는 중...' },
+  aiInputAria: { zh: '输入你的问题', en: 'Enter your question', ja: '質問を入力', ko: '질문 입력' },
+  aiInputPlaceholder: { zh: '输入问题，Enter 发送，Shift + Enter 换行', en: 'Type a question. Enter to send, Shift + Enter for a new line', ja: '質問を入力。Enter で送信、Shift + Enter で改行', ko: '질문을 입력하세요. Enter 로 전송, Shift + Enter 로 줄바꿈' },
+  send: { zh: '发送', en: 'Send', ja: '送信', ko: '전송' },
+  uploadHint: { zh: '上传提示', en: 'Upload Tip', ja: 'アップロード案内', ko: '업로드 안내' },
+  uploadTitle: { zh: '上传园林照片', en: 'Upload a Garden Photo', ja: '庭園写真をアップロード', ko: '정원 사진 업로드' },
+  uploadBody: { zh: '选择一张图片后点击上传，后端返回图片地址后会在下方回显。', en: 'Choose an image and upload it. The returned image URL will preview below.', ja: '画像を選んでアップロードすると、返却された画像 URL が下に表示されます。', ko: '이미지를 선택해 업로드하면 반환된 이미지 URL 이 아래에 미리 표시됩니다.' },
+  selectImage: { zh: '选择图片文件', en: 'Choose Image File', ja: '画像ファイルを選択', ko: '이미지 파일 선택' },
+  uploading: { zh: '正在上传…', en: 'Uploading...', ja: 'アップロード中...', ko: '업로드 중...' },
+  startUpload: { zh: '开始上传', en: 'Start Upload', ja: 'アップロード開始', ko: '업로드 시작' },
+  clearPreview: { zh: '清空回显', en: 'Clear Preview', ja: 'プレビューをクリア', ko: '미리보기 지우기' },
+  uploadSuccessPreview: { zh: '上传成功回显', en: 'Upload Preview', ja: 'アップロード結果プレビュー', ko: '업로드 미리보기' },
+  accountInfo: { zh: '账户信息', en: 'Account Info', ja: 'アカウント情報', ko: '계정 정보' },
+  loginAccount: { zh: '登录账户', en: 'Sign In', ja: 'ログイン', ko: '로그인' },
+  createAccount: { zh: '创建账户', en: 'Create Account', ja: 'アカウント作成', ko: '계정 만들기' },
+  resetPassword: { zh: '重置密码', en: 'Reset Password', ja: 'パスワード再設定', ko: '비밀번호 재설정' },
+  login: { zh: '登录', en: 'Sign In', ja: 'ログイン', ko: '로그인' },
+  register: { zh: '注册', en: 'Sign Up', ja: '登録', ko: '회원가입' },
+  authNotConfigured: { zh: '当前尚未配置真实 Supabase 登录环境变量，所以登录、注册和重置密码现在都不可用。请在 `.env.local` 中填写 `VITE_FY_SUPABASE_URL` 和 `VITE_FY_SUPABASE_ANON_KEY`，或填写 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 后重启前端。', en: 'Supabase auth environment variables are not configured yet, so sign-in, sign-up, and password reset are unavailable. Fill in `VITE_FY_SUPABASE_URL` and `VITE_FY_SUPABASE_ANON_KEY` in `.env.local`, or use `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then restart the frontend.', ja: 'Supabase 認証用の環境変数が未設定のため、ログイン、登録、パスワード再設定は現在利用できません。`.env.local` に `VITE_FY_SUPABASE_URL` と `VITE_FY_SUPABASE_ANON_KEY`、または `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を設定してフロントエンドを再起動してください。', ko: 'Supabase 인증 환경 변수가 아직 설정되지 않아 로그인, 회원가입, 비밀번호 재설정을 사용할 수 없습니다. `.env.local` 에 `VITE_FY_SUPABASE_URL` 와 `VITE_FY_SUPABASE_ANON_KEY` 또는 `VITE_SUPABASE_URL` 와 `VITE_SUPABASE_ANON_KEY` 를 입력한 뒤 프런트엔드를 다시 시작하세요.' },
+  currentAccount: { zh: '当前账户', en: 'Current Account', ja: '現在のアカウント', ko: '현재 계정' },
+  friendRequests: { zh: '好友请求', en: 'Friend Requests', ja: '友だち申請', ko: '친구 요청' },
+  deletingAccount: { zh: '注销中…', en: 'Deleting...', ja: '削除中...', ko: '삭제 중...' },
+  deleteAccount: { zh: '注销账号', en: 'Delete Account', ja: 'アカウント削除', ko: '계정 삭제' },
+  nicknamePlaceholder: { zh: '平江旅人', en: 'Pingjiang Traveler', ja: '平江の旅人', ko: '평강 여행자' },
+  email: { zh: '邮箱', en: 'Email', ja: 'メール', ko: '이메일' },
+  emailPlaceholder: { zh: '例如：you@example.com', en: 'For example: you@example.com', ja: '例: you@example.com', ko: '예: you@example.com' },
+  password: { zh: '密码', en: 'Password', ja: 'パスワード', ko: '비밀번호' },
+  passwordPlaceholder: { zh: '请输入密码', en: 'Enter your password', ja: 'パスワードを入力', ko: '비밀번호를 입력하세요' },
+  newPasswordPlaceholderShort: { zh: '请输入新密码', en: 'Enter a new password', ja: '新しいパスワードを入力', ko: '새 비밀번호를 입력하세요' },
+  confirmPassword: { zh: '确认密码', en: 'Confirm Password', ja: 'パスワードを確認', ko: '비밀번호 확인' },
+  confirmPasswordPlaceholder: { zh: '再次输入密码', en: 'Enter the password again', ja: 'もう一度入力', ko: '비밀번호를 다시 입력하세요' },
+  confirmNewPasswordPlaceholderShort: { zh: '再次输入新密码', en: 'Enter the new password again', ja: '新しいパスワードをもう一度入力', ko: '새 비밀번호를 다시 입력하세요' },
+  registerSecurityCopy: { zh: '创建账号时需要设置三个安全问题答案，后续忘记密码时会用它们进行核对。', en: 'Set answers to three security questions when creating the account. They will be used later if you forget your password.', ja: 'アカウント作成時に 3 つの秘密の質問の答えを設定します。あとでパスワードを忘れた場合に照合に使います。', ko: '계정을 만들 때 보안 질문 3개의 답을 설정해야 하며, 나중에 비밀번호를 잊었을 때 확인에 사용됩니다.' },
+  resetSecurityCopy: { zh: '请输入注册邮箱，并回答注册时设置的三个安全问题。验证通过后才能重置密码。', en: 'Enter your registered email and answer the three security questions you set during sign-up. Only then can the password be reset.', ja: '登録メールアドレスを入力し、登録時に設定した 3 つの秘密の質問に答えてください。認証後にのみパスワードを再設定できます。', ko: '가입한 이메일을 입력하고 가입 시 설정한 보안 질문 3개에 답해야 비밀번호를 재설정할 수 있습니다.' },
+  datePlaceholder: { zh: '请选择日期', en: 'Select a date', ja: '日付を選択', ko: '날짜를 선택하세요' },
+  answerPlaceholder: { zh: '请输入答案', en: 'Enter your answer', ja: '答えを入力', ko: '답을 입력하세요' },
+  submitting: { zh: '提交中…', en: 'Submitting...', ja: '送信中...', ko: '제출 중...' },
+  signInNow: { zh: '立即登录', en: 'Sign In Now', ja: '今すぐログイン', ko: '지금 로그인' },
+  verifyAndReset: { zh: '验证并重置', en: 'Verify and Reset', ja: '認証して再設定', ko: '확인 후 재설정' },
+  cancel: { zh: '取消', en: 'Cancel', ja: 'キャンセル', ko: '취소' },
+};
+
+const routeJourneysSource = {
   '/': {
-    meetPoint: '平江路主街 · 顾颉刚故居旁',
-    pace: '先顺着主街认方向，再向园林、文博和支巷慢慢散开。',
-    focus: ['先沿河看整体气质', '再分线进入园林与文博', '傍晚回到评弹与灯影最完整'],
-    prompts: ['我第一次来，应该从哪一段开始走？', '想把园林和博物馆串起来，怎么安排更顺？', '平江路傍晚最适合停在哪一段？'],
+    meetPoint: {
+      zh: '平江路主街 · 顾颉刚故居旁',
+      en: 'Pingjiang Road main street · beside the Gu Jiegang residence',
+      ja: '平江路のメインストリート・顧頡剛旧居のそば',
+      ko: '평강로 메인 거리 · 고결강 옛집 옆',
+    },
+    pace: {
+      zh: '先顺着主街认方向，再向园林、文博和支巷慢慢散开。',
+      en: 'Orient yourself on the main street first, then branch gently into gardens, museums, and side lanes.',
+      ja: 'まず大通りで方向感覚をつかみ、そのあと庭園や博物館、路地へ静かに広がっていく。',
+      ko: '먼저 큰 거리에서 방향을 잡고, 그다음 정원과 박물관, 골목으로 천천히 퍼져 나간다.',
+    },
+    focus: [
+      {
+        zh: '先沿河看整体气质',
+        en: 'Read the overall mood along the canal first',
+        ja: 'まず川沿いで全体の気配を見る',
+        ko: '먼저 강가를 따라 전체 분위기를 본다',
+      },
+      {
+        zh: '再分线进入园林与文博',
+        en: 'Then split into gardens and museums',
+        ja: 'そのあと庭園と博物館へ枝分かれする',
+        ko: '그다음 정원과 박물관으로 나뉘어 들어간다',
+      },
+      {
+        zh: '傍晚回到评弹与灯影最完整',
+        en: 'Return by dusk for the fullest lights and music',
+        ja: '夕方には灯りと評弾がそろう場所へ戻る',
+        ko: '해질 무렵 조명과 평탄이 가장 완전한 곳으로 돌아온다',
+      },
+    ],
+    prompts: [
+      {
+        zh: '我第一次来，应该从哪一段开始走？',
+        en: 'It is my first time here. Which section should I start with?',
+        ja: '初めて来ました。どの区間から歩き始めるのがよいですか。',
+        ko: '처음 왔는데 어느 구간부터 걷는 게 좋을까요?',
+      },
+      {
+        zh: '想把园林和博物馆串起来，怎么安排更顺？',
+        en: 'How should I connect the gardens and museums smoothly?',
+        ja: '庭園と博物館をなめらかにつなぐにはどう歩けばよいですか。',
+        ko: '정원과 박물관을 자연스럽게 이어 보려면 어떻게 짜는 게 좋을까요?',
+      },
+      {
+        zh: '平江路傍晚最适合停在哪一段？',
+        en: 'Which part of Pingjiang Road is best around dusk?',
+        ja: '夕方の平江路ではどのあたりに立ち止まるのがよいですか。',
+        ko: '평강로에서 해질 무렵 머물기 좋은 구간은 어디인가요?',
+      },
+    ],
   },
   '/gardens': {
-    meetPoint: '拙政园外白墙花窗一侧',
-    pace: '先看整体水院比例，再回头看花窗、回廊和框景细节。',
-    focus: ['先整体后细节', '框景和回廊最值得停留', '午后光线更适合慢看'],
-    prompts: ['古典园林这页我应该先看哪一座？', '想拍出园林层次感，站哪里更合适？', '如果时间只有半天，园林路线怎么排？'],
+    meetPoint: {
+      zh: '拙政园外白墙花窗一侧',
+      en: 'Outside Humble Administrator\'s Garden by the white wall and lattice window',
+      ja: '拙政園外の白壁と花窓のそば',
+      ko: '졸정원 밖 백벽과 화창 옆',
+    },
+    pace: {
+      zh: '先看整体水院比例，再回头看花窗、回廊和框景细节。',
+      en: 'Read the overall water-court proportions first, then return to the details of windows, corridors, and framed views.',
+      ja: 'まず水庭の全体比率を見て、そのあと花窓や回廊、フレームの細部へ戻る。',
+      ko: '먼저 수원의 전체 비례를 보고, 그다음 화창과 회랑, 프레임 풍경의 세부로 돌아온다.',
+    },
+    focus: [
+      { zh: '先整体后细节', en: 'Whole first, details later', ja: '全体を先に、細部はあとで', ko: '전체를 먼저, 세부는 나중에' },
+      { zh: '框景和回廊最值得停留', en: 'Framed scenes and corridors deserve the pause', ja: 'フレーム景と回廊で立ち止まる', ko: '프레임 풍경과 회랑에서 멈춘다' },
+      { zh: '午后光线更适合慢看', en: 'Afternoon light suits a slower look', ja: '午後の光がゆっくり見るのに合う', ko: '오후의 빛이 천천히 보기에 좋다' },
+    ],
+    prompts: [
+      {
+        zh: '古典园林这页我应该先看哪一座？',
+        en: 'Which garden should I begin with on this page?',
+        ja: 'この庭園ページではどこから見始めるのがよいですか。',
+        ko: '이 정원 페이지에서는 어느 정원부터 보는 게 좋을까요?',
+      },
+      {
+        zh: '想拍出园林层次感，站哪里更合适？',
+        en: 'Where should I stand to photograph the layers of the garden?',
+        ja: '庭園の層を撮るなら、どこに立つのがよいですか。',
+        ko: '정원의 층위를 사진으로 담으려면 어디에 서는 게 좋을까요?',
+      },
+      {
+        zh: '如果时间只有半天，园林路线怎么排？',
+        en: 'If I only have half a day, how should I arrange the garden route?',
+        ja: '半日しかない場合、庭園ルートはどう組むべきですか。',
+        ko: '반나절만 있다면 정원 동선을 어떻게 짜는 게 좋을까요?',
+      },
+    ],
   },
   '/museums': {
-    meetPoint: '苏州博物馆主入口外',
-    pace: '先看建筑与光影，再进入展陈，最后把昆曲和旧宅声景连起来。',
-    focus: ['先读建筑空间再看文物', '昆曲馆更适合带着“听”的心情', '留一点时间给庭院与过渡空间'],
-    prompts: ['文博殿堂这页先看苏博还是昆曲博物馆？', '昆曲博物馆最值得留意哪些细节？', '想走一条安静一点的文博路线，怎么安排？'],
+    meetPoint: {
+      zh: '苏州博物馆主入口外',
+      en: 'Outside the main entrance of Suzhou Museum',
+      ja: '蘇州博物館の正面入口前',
+      ko: '쑤저우 박물관 정문 앞',
+    },
+    pace: {
+      zh: '先看建筑与光影，再进入展陈，最后把昆曲和旧宅声景连起来。',
+      en: 'Begin with architecture and light, then move into the collections, and finally connect them with Kunqu and the soundscape of old residences.',
+      ja: 'まず建築と光を見てから展示へ入り、最後に昆曲や旧宅の音風景へつなげる。',
+      ko: '먼저 건축과 빛을 보고 전시로 들어간 뒤, 마지막에 곤곡과 옛 저택의 소리 풍경으로 이어 간다.',
+    },
+    focus: [
+      { zh: '先读建筑空间再看文物', en: 'Read the architecture before the objects', ja: '文物より先に空間を読む', ko: '유물보다 먼저 공간을 읽기' },
+      { zh: '昆曲馆更适合带着听的心情', en: 'The Kunqu museum works best with listening in mind', ja: '昆曲館は聴く気分で入る', ko: '곤곡관은 듣는 마음으로 보기' },
+      { zh: '留一点时间给庭院与过渡空间', en: 'Leave time for courtyards and transitions', ja: '中庭と移行空間にも時間を残す', ko: '중정과 전이 공간에도 시간을 남기기' },
+    ],
+    prompts: [
+      {
+        zh: '文博殿堂这页先看苏博还是昆曲博物馆？',
+        en: 'On this page, should I start with Suzhou Museum or the Kunqu Museum?',
+        ja: 'このページでは蘇州博物館と昆曲博物館のどちらを先に見るべきですか。',
+        ko: '이 페이지에서는 쑤저우 박물관과 곤곡 박물관 중 어디부터 가는 게 좋을까요?',
+      },
+      {
+        zh: '昆曲博物馆最值得留意哪些细节？',
+        en: 'What details are most worth noticing in the Kunqu Museum?',
+        ja: '昆曲博物館ではどの細部に注目すべきですか。',
+        ko: '곤곡 박물관에서는 어떤 디테일을 가장 눈여겨봐야 하나요?',
+      },
+      {
+        zh: '想走一条安静一点的文博路线，怎么安排？',
+        en: 'How can I plan a quieter museum route?',
+        ja: 'もう少し静かな文博ルートにするにはどう組めばよいですか。',
+        ko: '조금 더 조용한 박물관 동선으로 짜려면 어떻게 하면 좋을까요?',
+      },
+    ],
   },
   '/heritage': {
-    meetPoint: '平江路书场门口',
-    pace: '先吃后听，再进手作与支巷，把烟火气按节奏收拢起来。',
-    focus: ['苏式汤面适合做起点', '评弹和昆曲适合放在傍晚', '手作店更适合最后慢慢看'],
-    prompts: ['非遗市井这页我应该先吃还是先听？', '想体验评弹和昆曲，晚上怎么排更顺？', '有什么适合买回去的苏州小物件？'],
+    meetPoint: {
+      zh: '平江路书场门口',
+      en: 'At the entrance of the Pingjiang storytelling hall',
+      ja: '平江路の書場の入口前',
+      ko: '평강로 서장 입구 앞',
+    },
+    pace: {
+      zh: '先吃后听，再进手作与支巷，把烟火气按节奏收拢起来。',
+      en: 'Eat first, listen next, then move into crafts and side lanes, gathering the street\'s warmth step by step.',
+      ja: 'まず食べて、そのあと聴き、最後に手仕事と路地へ入って、暮らしの熱を順に受け取っていく。',
+      ko: '먼저 먹고, 그다음 듣고, 마지막에 수공예와 골목으로 들어가 생활의 온기를 순서대로 모은다.',
+    },
+    focus: [
+      { zh: '苏式汤面适合做起点', en: 'Suzhou noodles make a good beginning', ja: '蘇州の麺から始めるのがよい', ko: '쑤저우식 면으로 시작하기 좋다' },
+      { zh: '评弹和昆曲适合放在傍晚', en: 'Pingtan and Kunqu suit the evening', ja: '評弾と昆曲は夕方がよく似合う', ko: '평탄과 곤곡은 저녁이 잘 어울린다' },
+      { zh: '手作店更适合最后慢慢看', en: 'Craft shops work best at the end', ja: '手仕事の店は最後にゆっくり見る', ko: '수공예 가게는 마지막에 천천히 보기 좋다' },
+    ],
+    prompts: [
+      {
+        zh: '非遗市井这页我应该先吃还是先听？',
+        en: 'On this page, should I eat first or listen first?',
+        ja: 'このページではまず食べるべきですか、それとも聴くべきですか。',
+        ko: '이 페이지에서는 먼저 먹는 게 좋을까요, 듣는 게 좋을까요?',
+      },
+      {
+        zh: '想体验评弹和昆曲，晚上怎么排更顺？',
+        en: 'How should I arrange the evening if I want both Pingtan and Kunqu?',
+        ja: '評弾と昆曲の両方を体験したいなら、夜はどう組むのがよいですか。',
+        ko: '평탄과 곤곡을 모두 경험하고 싶다면 저녁 동선을 어떻게 짜는 게 좋을까요?',
+      },
+      {
+        zh: '有什么适合买回去的苏州小物件？',
+        en: 'What small Suzhou items are worth taking home?',
+        ja: '持ち帰りに向く蘇州の小さな品はありますか。',
+        ko: '사서 가져가기 좋은 쑤저우의 작은 물건에는 뭐가 있나요?',
+      },
+    ],
   },
 };
 
-const pageContextLabel = computed(() => route.meta.title || '苏州慢游');
-const currentJourney = computed(() => routeJourneys[route.path] || routeJourneys['/']);
+const appText = computed(() => resolveLocalized(appTextSource, currentLanguage.value));
+const dialogText = computed(() => resolveLocalized(dialogTextSource, currentLanguage.value));
+const navItems = computed(() => appText.value.navItems);
+const featureButtons = computed(() => appText.value.featureButtons);
+const featurePanels = computed(() => appText.value.featurePanels);
+const routeJourneys = computed(() => resolveLocalized(routeJourneysSource, currentLanguage.value));
+const pageContextLabel = computed(() => getRouteTitle(route.meta.titleKey || route.path));
+const currentJourney = computed(() => routeJourneys.value[route.path] || routeJourneys.value['/']);
 
 const activeFeature = ref('');
-const activeFeatureInfo = computed(() => featurePanels[activeFeature.value] || null);
+const activeFeatureInfo = computed(() => featurePanels.value[activeFeature.value] || null);
 const isFeatureOpen = computed(() => Boolean(activeFeature.value));
 
 const createInviteCode = () => `PJ-${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.floor(Math.random() * 9) + 1}`;
@@ -87,7 +457,7 @@ const createInviteCode = () => `PJ-${Math.random().toString(36).slice(2, 6).toUp
 const friendTrip = reactive({
   roomCode: createInviteCode(),
   members: 2,
-  meetingPoint: routeJourneys['/'].meetPoint,
+  meetingPoint: currentJourney.value.meetPoint,
 });
 
 const inviteFeedback = ref('');
@@ -113,8 +483,20 @@ const profileMenuRef = ref(null);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
 const MAX_PERSISTED_CHAT_ROUNDS = 30;
-const AI_GREETING_HINT = '当前页智能导览';
-const DEFAULT_AI_CONVERSATION_TITLE = '新建对话';
+const AI_GREETING_HINT_SOURCE = {
+  zh: '当前页智能导览',
+  en: 'Guide for this page',
+  ja: 'このページの案内',
+  ko: '현재 페이지 안내',
+};
+
+function getAiGreetingHint() {
+  return resolveLocalized(AI_GREETING_HINT_SOURCE, currentLanguage.value);
+}
+
+function getDefaultAiConversationTitle() {
+  return dialogText.value.aiNewConversation;
+}
 
 function createAiMessageId(prefix) {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -159,7 +541,7 @@ function truncateAiText(value, maxLength = 20) {
 }
 
 function getJourneyByContextKey(contextKey) {
-  return routeJourneys[contextKey] || routeJourneys['/'];
+  return routeJourneys.value[contextKey] || routeJourneys.value['/'];
 }
 
 const activeAiConversation = computed(
@@ -180,26 +562,69 @@ const hasFriendFeatureNotification = computed(
   () => hasPendingFriendRequests.value || hasUnreadGroupChats.value,
 );
 
-function isNavItemActive(item) {
-  return (item?.matchPaths || [item?.to]).includes(route.path);
-}
-
 function buildAiGreeting(pageLabel = pageContextLabel.value) {
+  const language = currentLanguage.value;
+
+  if (language === 'en') {
+    return `You are viewing "${pageLabel}" now. I can suggest where to start, how to move through it smoothly, and which details deserve a slower look.`;
+  }
+
+  if (language === 'ja') {
+    return `いま見ているのは「${pageLabel}」です。このページに合わせて、どこから見るべきか、どう歩くと自然か、どの細部で立ち止まるべきかを案内できます。`;
+  }
+
+  if (language === 'ko') {
+    return `지금 보고 있는 페이지는 "${pageLabel}"입니다. 어디부터 보고 어떻게 걸으면 좋은지, 어떤 디테일에서 천천히 머물면 좋은지 안내할 수 있습니다.`;
+  }
+
   return `你现在浏览的是「${pageLabel}」。我可以按当前页面告诉你先看哪里、怎么走更顺，以及哪些细节最值得慢下来。`;
 }
 
 function buildOfflineAiReply(prompt, conversation = activeAiConversation.value) {
   const pageLabel = conversation?.pageLabel || pageContextLabel.value;
   const journey = getJourneyByContextKey(conversation?.contextKey || route.fullPath);
+  const language = currentLanguage.value;
+  const promptText = String(prompt || '').toLowerCase();
+  const focusSummary = journey.focus.slice(0, 2).join(language === 'en' ? ', ' : '、');
+  const focusAll = journey.focus.join(language === 'en' ? ', ' : '、');
+  const asksRoute = /(先|怎么走|start|route|walk|first|どこから|歩|먼저|동선|어떻게)/i.test(promptText);
+  const asksPhoto = /(拍|照片|好看|photo|picture|shoot|撮|写真|예쁘|사진)/i.test(promptText);
 
-  if (prompt.includes('先') || prompt.includes('怎么走')) {
+  if (asksRoute) {
+    if (language === 'en') {
+      return `If you are at "${pageLabel}" now, I suggest this rhythm: ${journey.pace} Focus first on ${focusSummary}.`;
+    }
+    if (language === 'ja') {
+      return `もし今「${pageLabel}」にいるなら、この流れがおすすめです。${journey.pace} とくに ${focusSummary} を先に意識してみてください。`;
+    }
+    if (language === 'ko') {
+      return `지금 "${pageLabel}"에 있다면 이런 흐름을 추천합니다. ${journey.pace} 우선 ${focusSummary} 에 집중해 보세요.`;
+    }
     return `如果你现在在「${pageLabel}」，建议 ${journey.pace} 重点可以放在：${journey.focus.slice(0, 2).join('、')}。`;
   }
 
-  if (prompt.includes('拍') || prompt.includes('照片') || prompt.includes('好看')) {
+  if (asksPhoto) {
+    if (language === 'en') {
+      return `In "${pageLabel}", the most compelling photos are often not the obvious wide shot, but layered angles like ${journey.focus[0]}. Pause for a minute before choosing where to shoot.`;
+    }
+    if (language === 'ja') {
+      return `「${pageLabel}」では、正面の大きな景色よりも、${journey.focus[0]} のような層のある角度のほうが印象的です。まず少し立ち止まってから撮る場所を決めるのがおすすめです。`;
+    }
+    if (language === 'ko') {
+      return `"${pageLabel}"에서는 정면의 큰 장면보다 ${journey.focus[0]} 같은 층이 있는 각도가 더 오래 남습니다. 먼저 잠시 멈춘 뒤 촬영 위치를 정해 보세요.`;
+    }
     return `在「${pageLabel}」里，更耐看的往往不是正面大景，而是 ${journey.focus[0]} 这类有层次的角度。可以先停一分钟，再决定从哪里拍。`;
   }
 
+  if (language === 'en') {
+    return `This page is "${pageLabel}". If you want a smoother slow-travel rhythm, keep these three points in mind: ${focusAll}.`;
+  }
+  if (language === 'ja') {
+    return `このページは「${pageLabel}」です。ゆっくり見る流れを整えたいなら、まずこの 3 つを意識してください。${focusAll}。`;
+  }
+  if (language === 'ko') {
+    return `지금 페이지는 "${pageLabel}"입니다. 더 자연스럽게 천천히 보려면 이 세 가지를 기억하세요. ${focusAll}.`;
+  }
   return `现在这页是「${pageLabel}」。如果想慢游得更顺，可以记住这三个重点：${journey.focus.join('、')}。`;
 }
 
@@ -208,7 +633,7 @@ function createAiGreetingMessage(pageLabel = pageContextLabel.value) {
     id: createAiMessageId('assistant'),
     role: 'assistant',
     content: buildAiGreeting(pageLabel),
-    hint: AI_GREETING_HINT,
+    hint: getAiGreetingHint(),
   };
 }
 
@@ -216,7 +641,7 @@ function createAiConversation({
   id = createAiConversationId(),
   pageLabel = pageContextLabel.value,
   contextKey = route.fullPath,
-  title = DEFAULT_AI_CONVERSATION_TITLE,
+  title = getDefaultAiConversationTitle(),
   createdAt = Date.now(),
   updatedAt = Date.now(),
   titleManuallyEdited = false,
@@ -236,7 +661,13 @@ function createAiConversation({
 
 function deriveAiConversationTitle(messages, pageLabel) {
   const firstUserMessage = messages.find((item) => item.role === 'user');
-  return truncateAiText(firstUserMessage?.content, 18) || `${pageLabel} 导览`;
+  return truncateAiText(firstUserMessage?.content, 18) || (currentLanguage.value === 'en'
+    ? `${pageLabel} Guide`
+    : currentLanguage.value === 'ja'
+      ? `${pageLabel} 案内`
+      : currentLanguage.value === 'ko'
+        ? `${pageLabel} 안내`
+        : `${pageLabel} 导览`);
 }
 
 function deriveAiConversationPreview(conversation) {
@@ -244,7 +675,13 @@ function deriveAiConversationPreview(conversation) {
     .reverse()
     .find((item) => item.role === 'user' || item.role === 'assistant');
 
-  return truncateAiText(lastMessage?.content, 28) || '从这里继续聊苏州园林。';
+  return truncateAiText(lastMessage?.content, 28) || (currentLanguage.value === 'en'
+    ? 'Continue your Suzhou garden chat here.'
+    : currentLanguage.value === 'ja'
+      ? 'ここから蘇州庭園の話を続けましょう。'
+      : currentLanguage.value === 'ko'
+        ? '여기서 쑤저우 정원 이야기를 이어 가세요.'
+        : '从这里继续聊苏州园林。');
 }
 
 function trimConversationMessages(conversation) {
@@ -252,10 +689,10 @@ function trimConversationMessages(conversation) {
     return;
   }
 
-  const greetingMessage = conversation.messages.find((item) => item.hint === AI_GREETING_HINT) || null;
+  const greetingMessage = conversation.messages.find((item) => item.hint === getAiGreetingHint()) || null;
   const regularMessages = conversation.messages
     .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
-    .filter((item) => item.hint !== AI_GREETING_HINT)
+    .filter((item) => item.hint !== getAiGreetingHint())
     .slice(-(MAX_PERSISTED_CHAT_ROUNDS * 2));
 
   conversation.messages = greetingMessage ? [greetingMessage, ...regularMessages] : regularMessages;
@@ -269,7 +706,7 @@ function buildConversationMessagesForApi(conversation = activeAiConversation.val
   return conversation.messages
     .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
     // 初始欢迎语只是 UI 引导，不必回传给模型，避免噪音。
-    .filter((item) => item.hint !== AI_GREETING_HINT)
+    .filter((item) => item.hint !== getAiGreetingHint())
     .map((item) => ({ role: item.role, content: item.content }))
     .filter((item) => String(item.content || '').trim())
     .slice(-MAX_AI_CONTEXT_MESSAGES);
@@ -302,7 +739,7 @@ function buildConversationFromHistoryItem(item) {
 
   return createAiConversation({
     id: item?.id || createAiConversationId(),
-    title: item?.title || DEFAULT_AI_CONVERSATION_TITLE,
+    title: item?.title || getDefaultAiConversationTitle(),
     contextKey: route.fullPath,
     pageLabel: pageContextLabel.value,
     createdAt: item?.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
@@ -441,7 +878,16 @@ async function promptRenameAiConversation(conversation) {
     return;
   }
 
-  const nextTitle = window.prompt('请输入新的对话标题', conversation.title || DEFAULT_AI_CONVERSATION_TITLE);
+  const nextTitle = window.prompt(
+    currentLanguage.value === 'en'
+      ? 'Enter a new conversation title'
+      : currentLanguage.value === 'ja'
+        ? '新しい会話タイトルを入力してください'
+        : currentLanguage.value === 'ko'
+          ? '새 대화 제목을 입력하세요'
+          : '请输入新的对话标题',
+    conversation.title || getDefaultAiConversationTitle(),
+  );
 
   if (nextTitle === null) {
     return;
@@ -532,7 +978,6 @@ const openFeature = async (featureId) => {
 
   if (featureId === 'upload') {
     uploadError.value = '';
-    requestUploadLocation();
   }
 };
 
@@ -540,8 +985,6 @@ const closeFeature = () => {
   activeFeature.value = '';
   aiDraft.value = '';
   uploadError.value = '';
-  clearUploadDraft();
-  resetUploadLocation();
 };
 
 const regenerateInviteCode = () => {
@@ -562,10 +1005,6 @@ const copyInviteCode = async () => {
   } catch {
     inviteFeedback.value = `房间口令：${friendTrip.roomCode}；集合点：${friendTrip.meetingPoint}`;
   }
-};
-
-const openFavorites = () => {
-  router.push('/favorites');
 };
 
 const sendAiMessage = async (prefilledPrompt = '') => {
@@ -681,12 +1120,12 @@ const currentUser = ref(null);
 const isProfileMenuOpen = ref(false);
 const isAuthOpen = ref(false);
 const authMode = ref('login');
-const securityQuestionItems = SECURITY_QUESTION_FIELDS.map((field) => ({
+const securityQuestionItems = computed(() => SECURITY_QUESTION_FIELDS.map((field) => ({
   field,
-  prompt: SECURITY_QUESTION_PROMPTS[field],
+  prompt: getSecurityQuestionPrompt(field, currentLanguage.value),
   type: field === 'birthday' ? 'date' : 'text',
   autocomplete: field === 'birthday' ? 'bday' : 'off',
-}));
+})));
 const authForm = reactive({
   displayName: '',
   account: '',
@@ -996,7 +1435,7 @@ async function submitAuth() {
 
   if (!isSupabaseConfigured()) {
     setAuthFeedback(
-      '当前还没有配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
+      '当前还没有配置真实 Supabase 登录环境变量。请在 .env.local 中填写 VITE_FY_SUPABASE_URL / VITE_FY_SUPABASE_ANON_KEY，或使用 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY。',
       'warning'
     );
     return;
@@ -1161,318 +1600,56 @@ async function deleteAccount() {
 }
 
 const avatarLabel = computed(() => currentUser.value?.username?.slice(0, 1) || '游');
-const profileLabel = computed(() => currentUser.value?.username || '登录 / 注册');
+const profileLabel = computed(() => currentUser.value?.username || appText.value.loginRegister);
 const profileStatus = computed(() => {
   if (currentUser.value) {
-    return '已登录';
+    return appText.value.loggedIn;
   }
 
-  return isSupabaseConfigured() ? '未登录' : '未配置认证';
+  return isSupabaseConfigured() ? appText.value.loggedOut : appText.value.authNotReady;
 });
 
 // 上传图片相关状态
 const selectedImageFile = ref(null);
-const selectedImagePreviewUrl = ref('');
 const uploadedImageUrl = ref('');
-const uploadedImageTitle = ref('');
-const uploadedImageDescription = ref('');
 const isUploadingImage = ref(false);
 const uploadError = ref('');
-const uploadForm = reactive({
-  title: '',
-  description: '',
-});
-const uploadLocation = reactive({
-  lat: null,
-  lng: null,
-  status: 'idle',
-  message: '',
-});
-const cropImageElement = ref(null);
-const cropFrameRect = ref({ left: 0, top: 0, width: 0, height: 0 });
-const cropImageMetrics = ref({ width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 });
-const isCropDragging = ref(false);
-const cropDragOrigin = ref({ x: 0, y: 0 });
-const isCropEditorOpen = ref(false);
-const isCropReady = computed(
-  () => cropFrameRect.value.width > 12 && cropFrameRect.value.height > 12 && Boolean(selectedImagePreviewUrl.value),
-);
-
-function resetCropState() {
-  cropFrameRect.value = { left: 0, top: 0, width: 0, height: 0 };
-  cropImageMetrics.value = { width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 };
-  isCropDragging.value = false;
-  cropDragOrigin.value = { x: 0, y: 0 };
-}
-
-function revokeSelectedPreviewUrl() {
-  if (selectedImagePreviewUrl.value?.startsWith('blob:')) {
-    URL.revokeObjectURL(selectedImagePreviewUrl.value);
-  }
-}
-
-function clearUploadDraft() {
-  selectedImageFile.value = null;
-  revokeSelectedPreviewUrl();
-  selectedImagePreviewUrl.value = '';
-  resetCropState();
-  isCropEditorOpen.value = false;
-}
-
-function resetUploadLocation() {
-  uploadLocation.lat = null;
-  uploadLocation.lng = null;
-  uploadLocation.status = 'idle';
-  uploadLocation.message = '';
-}
-
-function requestUploadLocation() {
-  if (!navigator?.geolocation) {
-    uploadLocation.status = 'error';
-    uploadLocation.message = '当前浏览器不支持定位，请换一个浏览器再试。';
-    return;
-  }
-
-  uploadLocation.status = 'loading';
-  uploadLocation.message = '正在获取当前位置…';
-
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      uploadLocation.lat = Number(position.coords.latitude);
-      uploadLocation.lng = Number(position.coords.longitude);
-      uploadLocation.status = 'success';
-      uploadLocation.message = '已获取当前位置，提交时会自动一并保存。';
-    },
-    (error) => {
-      uploadLocation.lat = null;
-      uploadLocation.lng = null;
-      uploadLocation.status = 'error';
-
-      if (error?.code === error.PERMISSION_DENIED) {
-        uploadLocation.message = '你拒绝了定位权限，请允许定位后再上传。';
-        return;
-      }
-
-      if (error?.code === error.POSITION_UNAVAILABLE) {
-        uploadLocation.message = '暂时无法获取位置，请稍后重试。';
-        return;
-      }
-
-      if (error?.code === error.TIMEOUT) {
-        uploadLocation.message = '定位超时了，请再试一次。';
-        return;
-      }
-
-      uploadLocation.message = '获取位置失败，请稍后重试。';
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 60000,
-    },
-  );
-}
-
-function clampCropPosition(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function handleCropImageLoad(event) {
-  const element = event?.target;
-
-  if (!element) {
-    return;
-  }
-
-  cropImageMetrics.value = {
-    width: element.clientWidth,
-    height: element.clientHeight,
-    naturalWidth: element.naturalWidth,
-    naturalHeight: element.naturalHeight,
-  };
-
-  if (!cropFrameRect.value.width || !cropFrameRect.value.height) {
-    const frameWidth = Math.max(120, Math.round(element.clientWidth * 0.68));
-    const frameHeight = Math.max(120, Math.round(element.clientHeight * 0.68));
-    cropFrameRect.value = {
-      left: Math.max(0, Math.round((element.clientWidth - frameWidth) / 2)),
-      top: Math.max(0, Math.round((element.clientHeight - frameHeight) / 2)),
-      width: Math.min(frameWidth, element.clientWidth),
-      height: Math.min(frameHeight, element.clientHeight),
-    };
-  }
-}
-
-function startCropSelection(event) {
-  if (!selectedImagePreviewUrl.value || !cropImageElement.value) {
-    return;
-  }
-
-  const rect = cropImageElement.value.getBoundingClientRect();
-  const startX = clampCropPosition(event.clientX - rect.left, 0, rect.width);
-  const startY = clampCropPosition(event.clientY - rect.top, 0, rect.height);
-
-  cropDragOrigin.value = { x: startX, y: startY };
-  cropFrameRect.value = { left: startX, top: startY, width: 0, height: 0 };
-  isCropDragging.value = true;
-}
-
-function updateCropSelection(event) {
-  if (!isCropDragging.value || !cropImageElement.value) {
-    return;
-  }
-
-  const rect = cropImageElement.value.getBoundingClientRect();
-  const currentX = clampCropPosition(event.clientX - rect.left, 0, rect.width);
-  const currentY = clampCropPosition(event.clientY - rect.top, 0, rect.height);
-  const origin = cropDragOrigin.value;
-
-  cropFrameRect.value = {
-    left: Math.min(origin.x, currentX),
-    top: Math.min(origin.y, currentY),
-    width: Math.abs(currentX - origin.x),
-    height: Math.abs(currentY - origin.y),
-  };
-}
-
-function stopCropSelection() {
-  isCropDragging.value = false;
-}
-
-async function applyCropSelection() {
-  if (!isCropReady.value || !selectedImageFile.value || !cropImageElement.value) {
-    return;
-  }
-
-  const frame = cropFrameRect.value;
-  const metrics = cropImageMetrics.value;
-
-  if (!metrics.width || !metrics.height || !metrics.naturalWidth || !metrics.naturalHeight) {
-    return;
-  }
-
-  const scaleX = metrics.naturalWidth / metrics.width;
-  const scaleY = metrics.naturalHeight / metrics.height;
-  const sourceX = Math.round(frame.left * scaleX);
-  const sourceY = Math.round(frame.top * scaleY);
-  const sourceWidth = Math.max(1, Math.round(frame.width * scaleX));
-  const sourceHeight = Math.max(1, Math.round(frame.height * scaleY));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = sourceWidth;
-  canvas.height = sourceHeight;
-  const ctx = canvas.getContext('2d');
-
-  if (!ctx) {
-    showFailToast('暂时无法裁剪图片，请稍后再试');
-    return;
-  }
-
-  ctx.drawImage(
-    cropImageElement.value,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    sourceWidth,
-    sourceHeight,
-  );
-
-  const mimeType = selectedImageFile.value.type || 'image/jpeg';
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, 0.92));
-
-  if (!blob) {
-    showFailToast('裁剪失败，请重新框选一次');
-    return;
-  }
-
-  const nextFile = new File([blob], selectedImageFile.value.name, {
-    type: blob.type || mimeType,
-    lastModified: Date.now(),
-  });
-
-  selectedImageFile.value = nextFile;
-  revokeSelectedPreviewUrl();
-  selectedImagePreviewUrl.value = URL.createObjectURL(blob);
-  resetCropState();
-  isCropEditorOpen.value = false;
-  showSuccessToast('已应用裁剪');
-}
 
 function handleSelectImage(event) {
   const file = event?.target?.files?.[0];
 
   if (!file) {
-    clearUploadDraft();
+    selectedImageFile.value = null;
     return;
   }
 
   selectedImageFile.value = file;
-  revokeSelectedPreviewUrl();
-  selectedImagePreviewUrl.value = URL.createObjectURL(file);
-  resetCropState();
-  isCropEditorOpen.value = true;
   uploadError.value = '';
 }
 
 async function submitUploadImage() {
-  if (isUploadingImage.value) {
-    return;
-  }
-
-  if (!uploadForm.title.trim()) {
-    uploadError.value = '请填写照片标题。';
-    return;
-  }
-
-  if (!uploadForm.description.trim()) {
-    uploadError.value = '请填写照片描述。';
-    return;
-  }
-
-  if (!selectedImageFile.value) {
-    uploadError.value = '请选择图片文件。';
-    return;
-  }
-
-  if (uploadLocation.status !== 'success' || uploadLocation.lat === null || uploadLocation.lng === null) {
-    uploadError.value = uploadLocation.message || '请先允许定位，获取当前位置后再上传。';
-    showFailToast(uploadError.value);
+  if (!selectedImageFile.value || isUploadingImage.value) {
     return;
   }
 
   isUploadingImage.value = true;
   uploadError.value = '';
-  uploadedImageUrl.value = '';
-  uploadedImageTitle.value = '';
-  uploadedImageDescription.value = '';
 
   try {
     const formData = new FormData();
     formData.append('image', selectedImageFile.value);
-    formData.append('title', uploadForm.title.trim());
-    formData.append('description', uploadForm.description.trim());
-    formData.append('lat', String(uploadLocation.lat));
-    formData.append('lng', String(uploadLocation.lng));
 
     // 中文注释：这里连接后端图片上传接口 /api/ugc，使用 FormData 以 multipart/form-data 发送图片文件。
     // 注意：使用 fetch/axios 发送 FormData 时，不要手动写死 Content-Type，浏览器会自动补上 boundary。
     const result = await uploadApi.uploadGardenImage(formData);
     uploadedImageUrl.value = result?.image_url || result?.imageUrl || '';
-    uploadedImageTitle.value = result?.title || uploadForm.title.trim();
-    uploadedImageDescription.value = result?.description || uploadForm.description.trim();
 
     if (!uploadedImageUrl.value) {
       throw new Error('上传成功但未拿到图片地址，请检查后端返回字段 image_url/imageUrl。');
     }
-
-    showSuccessToast('上传成功');
   } catch (error) {
     console.error('[Upload] 上传图片失败', error);
     uploadError.value = error.message || '上传失败，请稍后再试。';
-    showFailToast(uploadError.value);
   } finally {
     isUploadingImage.value = false;
   }
@@ -1522,12 +1699,21 @@ onUnmounted(() => {
   stopGroupChatUnreadPolling();
   window.removeEventListener('group-chats-updated', handleGroupChatUnreadChanged);
   authSubscription?.data?.subscription?.unsubscribe?.();
-  revokeSelectedPreviewUrl();
 
   if (typeof window !== 'undefined') {
     window.removeEventListener('click', handleWindowClickForProfileMenu);
   }
 });
+
+watch(
+  [() => route.meta.titleKey, () => language.value],
+  ([titleKey]) => {
+    if (typeof document !== 'undefined') {
+      document.title = getDocumentTitle(titleKey || 'pingjiang');
+    }
+  },
+  { immediate: true },
+);
 
 watch(
   () => currentUser.value?.id || '',
@@ -1563,19 +1749,13 @@ watch(
         <RouterLink to="/" class="brand-link">
           <span class="brand-seal">平</span>
           <span class="brand-copy">
-            <strong class="brand-title">苏州慢游</strong>
-            <small class="brand-subtitle">Suzhou · Gardens · Museums · Heritage</small>
+            <strong class="brand-title">{{ appText.brandTitle }}</strong>
+            <small class="brand-subtitle">{{ appText.brandSubtitle }}</small>
           </span>
         </RouterLink>
 
-        <nav class="site-nav site-nav--desktop" aria-label="主导航">
-          <RouterLink
-            v-for="item in navItems"
-            :key="item.to"
-            :to="item.to"
-            class="nav-link"
-            :class="{ 'is-active': isNavItemActive(item) }"
-          >
+        <nav class="site-nav" :aria-label="appText.navAria">
+          <RouterLink v-for="item in navItems" :key="item.to" :to="item.to" class="nav-link">
             <span class="nav-link__icon" aria-hidden="true">
               <svg v-if="item.icon === 'pingjiang'" viewBox="0 0 24 24" fill="none">
                 <path
@@ -1661,7 +1841,6 @@ watch(
             :key="feature.id"
             type="button"
             class="nav-link"
-            :class="{ 'is-active': activeFeature === feature.id }"
             @click="openFeature(feature.id)"
           >
             <span class="nav-link__icon" aria-hidden="true">
@@ -1686,7 +1865,7 @@ watch(
               <span
                 v-if="feature.id === 'friends' && hasFriendFeatureNotification"
                 class="nav-link__dot"
-                aria-label="存在好友或群聊未读提醒"
+                :aria-label="appText.friendNoticeAria"
               />
             </span>
             <span class="nav-link__text">{{ feature.label }}</span>
@@ -1694,11 +1873,20 @@ watch(
         </nav>
 
         <div class="header-actions">
+          <label class="language-switch">
+            <span>{{ appText.languageLabel }}</span>
+            <select :value="language" @change="setLanguage($event.target.value)">
+              <option v-for="item in languageOptions" :key="item.value" :value="item.value">
+                {{ item.label }}
+              </option>
+            </select>
+          </label>
+
           <div ref="profileMenuRef" class="profile-menu-wrap">
             <button
               type="button"
               class="profile-button"
-              :aria-label="currentUser ? '打开账户菜单' : '打开登录弹窗'"
+              :aria-label="currentUser ? appText.profileMenuLabel : appText.profileAuthLabel"
               @click.stop="toggleProfileMenu"
             >
                 <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
@@ -1722,32 +1910,12 @@ watch(
 
               <form class="profile-dropdown__form" @submit.prevent="submitProfileUpdate">
                 <label class="field">
-                  <span>昵称</span>
+                  <span>{{ dialogText.profileName }}</span>
                   <input
                     v-model.trim="profileForm.displayName"
                     type="text"
-                    placeholder="输入新的昵称"
+                    :placeholder="dialogText.profileNamePlaceholder"
                     autocomplete="nickname"
-                  />
-                </label>
-
-                <label class="field">
-                  <span>新密码</span>
-                  <input
-                    v-model="profileForm.password"
-                    type="password"
-                    placeholder="留空则不修改密码"
-                    autocomplete="new-password"
-                  />
-                </label>
-
-                <label class="field">
-                  <span>确认新密码</span>
-                  <input
-                    v-model="profileForm.confirmPassword"
-                    type="password"
-                    placeholder="再次输入新密码"
-                    autocomplete="new-password"
                   />
                 </label>
 
@@ -1757,44 +1925,25 @@ watch(
 
                 <div class="profile-dropdown__actions">
                   <button type="submit" class="dialog__primary" :disabled="profileSubmitting">
-                    {{ profileSubmitting ? '保存中…' : '保存修改' }}
+                    {{ profileSubmitting ? dialogText.saving : dialogText.saveChanges }}
                   </button>
                   <button type="button" class="dialog__ghost" @click="logout" :disabled="profileSubmitting">
-                    退出登录
+                    {{ dialogText.logout }}
                   </button>
                 </div>
                 <div class="profile-dropdown__actions">
-                  <button type="button" class="dialog__ghost" @click="openAuthDialog('profile')">
-                    更多账户操作
+                  <button
+                    type="button"
+                    class="dialog__ghost"
+                    :disabled="authDeletingAccount || profileSubmitting"
+                    @click="deleteAccount"
+                  >
+                    {{ authDeletingAccount ? dialogText.deletingAccount : dialogText.deleteAccount }}
                   </button>
                 </div>
               </form>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="mobile-header-strip">
-        <div class="mobile-header-strip__inner">
-          <p class="mobile-header-strip__page">当前页 · {{ pageContextLabel }}</p>
-
-          <nav class="mobile-feature-nav" aria-label="快捷功能">
-            <button
-              v-for="feature in featureButtons"
-              :key="`mobile-${feature.id}`"
-              type="button"
-              class="mobile-feature-chip"
-              :class="{ 'is-active': activeFeature === feature.id }"
-              @click="openFeature(feature.id)"
-            >
-              <span>{{ feature.label }}</span>
-              <span
-                v-if="feature.id === 'friends' && hasFriendFeatureNotification"
-                class="mobile-feature-chip__dot"
-                aria-label="存在好友或群聊未读提醒"
-              />
-            </button>
-          </nav>
         </div>
       </div>
     </header>
@@ -1809,43 +1958,25 @@ watch(
 
     <footer class="global-footer">
       <div class="footer-content">
-        <section class="footer-signature" aria-label="页脚落款">
+        <section class="footer-signature" :aria-label="appText.footerSignatureAria">
           <div class="footer-signature__headline">
             <span class="seal-stamp">苏</span>
-            <h3>一街读姑苏，四页见气韵。</h3>
+            <h3>{{ appText.footerTitle }}</h3>
           </div>
-          <p>以宣纸白为底，以水墨黑为骨，以青瓷绿与朱砂红轻轻点醒苏州的静与雅。</p>
+          <p>{{ appText.footerBody }}</p>
         </section>
 
-        <nav class="footer-nav" aria-label="页脚导航">
-          <RouterLink
-            v-for="item in navItems"
-            :key="`footer-${item.to}`"
-            :to="item.to"
-            class="footer-link"
-            :class="{ 'is-active': isNavItemActive(item) }"
-          >
+        <nav class="footer-nav" :aria-label="appText.footerNavAria">
+          <RouterLink v-for="item in navItems" :key="`footer-${item.to}`" :to="item.to" class="footer-link">
             {{ item.label }}
           </RouterLink>
         </nav>
       </div>
 
       <div class="footer-bottom">
-        <p>© 2026 Jiangnan Gardens. 姑苏漫游指南 保留所有权利。</p>
+        <p>{{ appText.footerCopyright }}</p>
       </div>
     </footer>
-
-    <nav class="mobile-tab-bar" aria-label="移动端主导航">
-      <RouterLink
-        v-for="item in navItems"
-        :key="`mobile-tab-${item.to}`"
-        :to="item.to"
-        class="mobile-tab"
-        :class="{ 'is-active': isNavItemActive(item) }"
-      >
-        <span class="mobile-tab__label">{{ item.label }}</span>
-      </RouterLink>
-    </nav>
 
     <button type="button" class="favorites-fab" aria-label="打开收藏夹" @click="openFavorites">
       <span class="favorites-fab__icon" aria-hidden="true">
@@ -1865,10 +1996,7 @@ watch(
       <div
         v-if="isFeatureOpen"
         class="overlay"
-        :class="{
-          'overlay--ai': activeFeature === 'ai',
-          'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen,
-        }"
+        :class="{ 'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen }"
         role="dialog"
         aria-modal="true"
         @click.self="closeFeature"
@@ -1878,25 +2006,25 @@ watch(
           :class="{ 'dialog--ai': activeFeature === 'ai', 'dialog--ai-fullscreen': activeFeature === 'ai' && isAiFullscreen }"
           @click.stop
         >
-          <header v-if="activeFeature !== 'ai'" class="dialog__header">
+          <header class="dialog__header">
             <div class="dialog__intro">
               <p class="dialog__eyebrow">{{ activeFeatureInfo?.eyebrow }}</p>
               <h2 class="dialog__title">{{ activeFeatureInfo?.label }}</h2>
             </div>
-            <button type="button" class="dialog__close" @click="closeFeature">关闭</button>
+            <button type="button" class="dialog__close" @click="closeFeature">{{ appText.close }}</button>
           </header>
 
-          <p v-if="activeFeature !== 'ai'" class="dialog__copy">{{ activeFeatureInfo?.description }}</p>
+          <p class="dialog__copy">{{ activeFeatureInfo?.description }}</p>
 
           <template v-if="activeFeature === 'friends'">
             <div v-if="!currentUser" class="feature-context">
-              <span>需要登录</span>
-              <strong>好友功能需要先登录</strong>
-              <p>请先完成真实登录后再添加好友、查看好友列表。</p>
+              <span>{{ dialogText.friendsNeedLogin }}</span>
+              <strong>{{ dialogText.friendsNeedLoginTitle }}</strong>
+              <p>{{ dialogText.friendsNeedLoginBody }}</p>
 
               <div class="dialog__actions">
-                <button type="button" class="dialog__primary" @click="openAuthDialog('login')">去登录</button>
-                <button type="button" class="dialog__ghost" @click="openAuthDialog('register')">去注册</button>
+                <button type="button" class="dialog__primary" @click="openAuthDialog('login')">{{ dialogText.goLogin }}</button>
+                <button type="button" class="dialog__ghost" @click="openAuthDialog('register')">{{ dialogText.goRegister }}</button>
               </div>
             </div>
 
@@ -1908,14 +2036,11 @@ watch(
 
           <template v-else-if="activeFeature === 'ai'">
             <div class="ai-shell">
-              <aside class="ai-sidebar" aria-label="历史会话">
-                <div class="ai-sidebar__header">
-                  <div class="ai-sidebar__intro">
-                    <p class="ai-sidebar__label">历史会话</p>
-                    <span class="ai-sidebar__meta">{{ aiConversations.length }} 个会话</span>
-                  </div>
-                  <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">新对话</button>
-                </div>
+              <aside class="ai-sidebar" :aria-label="dialogText.aiHistoryAria">
+                <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">
+                  <span aria-hidden="true">+</span>
+                  {{ dialogText.aiNewConversation }}
+                </button>
 
                 <div class="ai-sidebar__list" role="list">
                   <div
@@ -1941,7 +2066,7 @@ watch(
                         :aria-label="`重命名会话 ${conversation.title}`"
                         @click="promptRenameAiConversation(conversation)"
                       >
-                        改
+                        {{ dialogText.aiRenameShort }}
                       </button>
                       <button
                         type="button"
@@ -1950,69 +2075,32 @@ watch(
                         :aria-label="`删除会话 ${conversation.title}`"
                         @click="deleteAiConversation(conversation.id)"
                       >
-                        {{ aiConversationDeletingId === conversation.id ? '...' : '删' }}
+                        {{ aiConversationDeletingId === conversation.id ? '...' : dialogText.aiDeleteShort }}
                       </button>
                     </div>
                   </div>
                 </div>
               </aside>
 
-              <section class="ai-main" aria-label="AI 伴游对话">
-                <header class="ai-topbar">
-                  <div class="ai-topbar__copy">
-                    <p class="ai-topbar__eyebrow">AI 伴游</p>
-                    <h2 class="ai-topbar__title">{{ activeAiPageLabel }}</h2>
-                    <p class="ai-topbar__status">当前导览节奏：{{ activeAiJourney.pace || '默认讲解' }}</p>
+              <section class="ai-main" :aria-label="dialogText.aiConversationAria">
+                <header class="ai-main__header">
+                  <div class="ai-main__context">
+                    <span>{{ dialogText.aiCurrentPage }}</span>
+                    <strong>{{ activeAiPageLabel }}</strong>
+                    <p>{{ activeAiJourney.pace }}</p>
                   </div>
-                  <div class="ai-topbar__actions">
-                    <button type="button" class="ai-topbar__exit" @click="closeFeature">退出 AI 伴游</button>
+
+                  <div class="ai-main__header-actions">
+                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
+                      {{ isAiFullscreen ? dialogText.aiExitFullscreen : dialogText.aiEnterFullscreen }}
+                    </button>
                   </div>
                 </header>
 
                 <div class="ai-main__body">
-                  <div ref="aiChatScroller" class="ai-chat ai-chat--main" aria-live="polite">
-                    <article
-                      v-for="message in aiMessages"
-                      :key="message.id"
-                      :class="[
-                        'message-row',
-                        message.role === 'user' ? 'message-row--user' : 'message-row--assistant',
-                      ]"
-                    >
-                      <div class="message-avatar" aria-hidden="true">
-                        {{ message.role === 'user' ? '我' : 'AI' }}
-                      </div>
-                      <div
-                        :class="[
-                          'message-bubble',
-                          message.role === 'user' ? 'message-bubble--user' : 'message-bubble--assistant',
-                        ]"
-                      >
-                        <span class="message-bubble__role">{{ message.role === 'user' ? '我' : 'AI 伴游' }}</span>
-                        <p>{{ message.content }}</p>
-                        <small v-if="message.hint">{{ message.hint }}</small>
-                      </div>
-                    </article>
-
-                    <article
-                      v-if="isActiveAiConversationLoading"
-                      class="message-row message-row--assistant message-row--loading"
-                    >
-                      <div class="message-avatar" aria-hidden="true">AI</div>
-                      <div class="message-bubble message-bubble--assistant is-loading">
-                        <span class="message-bubble__role">AI 伴游</span>
-                        <p>正在整理当前页面的慢游建议…</p>
-                      </div>
-                    </article>
-                  </div>
-                </div>
-
-                <p v-if="aiError" class="feature-feedback feature-feedback--ai">{{ aiError }}</p>
-
-                <div class="ai-bottom">
                   <div class="ai-starters" v-if="aiShouldShowStarter">
-                    <p class="ai-starters__label">你可以从这些问题开始</p>
-                    <div class="prompt-chips prompt-chips--scroll">
+                    <p class="ai-starters__label">{{ dialogText.aiStarterLabel }}</p>
+                    <div class="prompt-chips">
                       <button
                         v-for="prompt in activeAiPrompts"
                         :key="prompt"
@@ -2025,186 +2113,99 @@ watch(
                     </div>
                   </div>
 
-                  <form class="ai-composer" @submit.prevent="sendAiMessage()">
-                    <label class="ai-composer__field">
-                      <textarea
-                        ref="aiComposerInput"
-                        v-model="aiDraft"
-                        rows="1"
-                        aria-label="输入你的问题"
-                        placeholder="输入问题，Enter 发送，Shift + Enter 换行"
-                        @compositionstart="isAiComposing = true"
-                        @compositionend="isAiComposing = false"
-                        @keydown="handleAiComposerKeydown"
-                      />
-                    </label>
-
-                    <button
-                      type="submit"
-                      class="dialog__primary ai-composer__send"
-                      :disabled="isAiLoading || !aiDraft.trim()"
+                  <div ref="aiChatScroller" class="ai-chat ai-chat--main" aria-live="polite">
+                    <article
+                      v-for="message in aiMessages"
+                      :key="message.id"
+                      :class="[
+                        'message-row',
+                        message.role === 'user' ? 'message-row--user' : 'message-row--assistant',
+                      ]"
                     >
-                      发送
-                    </button>
-                  </form>
+                      <div class="message-avatar" aria-hidden="true">
+                        {{ message.role === 'user' ? dialogText.me : 'AI' }}
+                      </div>
+                      <div
+                        :class="[
+                          'message-bubble',
+                          message.role === 'user' ? 'message-bubble--user' : 'message-bubble--assistant',
+                        ]"
+                      >
+                        <span class="message-bubble__role">{{ message.role === 'user' ? dialogText.me : dialogText.aiLabel }}</span>
+                        <p>{{ message.content }}</p>
+                        <small v-if="message.hint">{{ message.hint }}</small>
+                      </div>
+                    </article>
+
+                    <article
+                      v-if="isActiveAiConversationLoading"
+                      class="message-row message-row--assistant message-row--loading"
+                    >
+                      <div class="message-avatar" aria-hidden="true">AI</div>
+                      <div class="message-bubble message-bubble--assistant is-loading">
+                        <span class="message-bubble__role">{{ dialogText.aiLabel }}</span>
+                        <p>{{ dialogText.aiLoading }}</p>
+                      </div>
+                    </article>
+                  </div>
                 </div>
+
+                <p v-if="aiError" class="feature-feedback feature-feedback--ai">{{ aiError }}</p>
+
+                <form class="ai-composer" @submit.prevent="sendAiMessage()">
+                  <label class="ai-composer__field">
+                    <textarea
+                      ref="aiComposerInput"
+                      v-model="aiDraft"
+                      rows="1"
+                      :aria-label="dialogText.aiInputAria"
+                      :placeholder="dialogText.aiInputPlaceholder"
+                      @compositionstart="isAiComposing = true"
+                      @compositionend="isAiComposing = false"
+                      @keydown="handleAiComposerKeydown"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    class="dialog__primary ai-composer__send"
+                    :disabled="isAiLoading || !aiDraft.trim()"
+                  >
+                    {{ dialogText.send }}
+                  </button>
+                </form>
               </section>
             </div>
           </template>
 
           <template v-else-if="activeFeature === 'upload'">
             <div class="feature-context">
-              <span>上传提示</span>
-              <strong>上传园林照片</strong>
-              <p>上传照片时补充标题和描述，上传成功后会在下方显示成完整卡片。</p>
-              <p
-                class="upload-location-status"
-                :class="{
-                  'is-loading': uploadLocation.status === 'loading',
-                  'is-success': uploadLocation.status === 'success',
-                  'is-error': uploadLocation.status === 'error',
-                }"
-              >
-                {{ uploadLocation.message || '打开表单后会自动获取当前位置。' }}
-              </p>
+              <span>{{ dialogText.uploadHint }}</span>
+              <strong>{{ dialogText.uploadTitle }}</strong>
+              <p>{{ dialogText.uploadBody }}</p>
             </div>
 
             <form class="dialog__form" @submit.prevent="submitUploadImage">
               <label class="field field--full">
-                <span>照片标题</span>
-                <input v-model="uploadForm.title" type="text" placeholder="例如：雨后的拙政园回廊" />
+                <span>{{ dialogText.selectImage }}</span>
+                <input type="file" accept="image/*" @change="handleSelectImage" />
               </label>
-
-              <label class="field field--full">
-                <span>照片描述</span>
-                <textarea
-                  v-model="uploadForm.description"
-                  rows="3"
-                  placeholder="写一句你拍下这张照片时的感受或画面描述"
-                />
-              </label>
-
-              <label class="field field--full">
-                <span>选择图片文件</span>
-                <input class="upload-picker__input" type="file" accept="image/*" @change="handleSelectImage" />
-                <div class="upload-picker">
-                  <span class="upload-picker__camera" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M8 6.5 9.2 5h5.6L16 6.5H18A2.5 2.5 0 0 1 20.5 9v7A2.5 2.5 0 0 1 18 18.5H6A2.5 2.5 0 0 1 3.5 16V9A2.5 2.5 0 0 1 6 6.5h2Z"
-                        stroke="currentColor"
-                        stroke-width="1.6"
-                        stroke-linejoin="round"
-                      />
-                      <circle cx="12" cy="12.5" r="3.2" stroke="currentColor" stroke-width="1.6" />
-                    </svg>
-                  </span>
-                  <div class="upload-picker__copy">
-                    <strong>{{ selectedImageFile ? '更换照片' : '选择照片' }}</strong>
-                    <p>{{ selectedImageFile?.name || '支持 JPG / PNG，选择后会直接显示在这里' }}</p>
-                  </div>
-                </div>
-              </label>
-
-              <div v-if="selectedImagePreviewUrl && !uploadedImageUrl" class="upload-preview upload-preview--draft">
-                <p class="upload-preview__label">你选择的照片</p>
-                <img :src="selectedImagePreviewUrl" alt="selected" class="upload-preview__image" />
-                <div class="crop-stage__actions">
-                  <span>如果想调整画面范围，可以再重新裁一下。</span>
-                  <button type="button" class="dialog__ghost" @click="isCropEditorOpen = true">重新调整范围</button>
-                </div>
-              </div>
 
               <div class="dialog__actions dialog__actions--compact">
-                <button
-                  type="button"
-                  class="dialog__primary"
-                  :disabled="!selectedImageFile || !uploadForm.title.trim() || !uploadForm.description.trim() || isUploadingImage"
-                  @click="submitUploadImage"
-                >
-                  {{ isUploadingImage ? '正在上传…' : '开始上传' }}
+                <button type="submit" class="dialog__primary" :disabled="!selectedImageFile || isUploadingImage">
+                  {{ isUploadingImage ? dialogText.uploading : dialogText.startUpload }}
                 </button>
-                <button
-                  type="button"
-                  class="dialog__ghost"
-                  @click="
-                    clearUploadDraft();
-                    uploadedImageUrl = '';
-                    uploadedImageTitle = '';
-                    uploadedImageDescription = '';
-                  "
-                >
-                  清空内容
-                </button>
+                <button type="button" class="dialog__ghost" @click="uploadedImageUrl = ''">{{ dialogText.clearPreview }}</button>
               </div>
             </form>
 
             <p v-if="uploadError" class="feature-feedback">{{ uploadError }}</p>
 
             <div v-if="uploadedImageUrl" class="upload-preview">
-              <p class="upload-preview__label">上传后的显示效果</p>
+              <p class="upload-preview__label">{{ dialogText.uploadSuccessPreview }}</p>
               <img :src="uploadedImageUrl" alt="uploaded" class="upload-preview__image" />
-              <div class="upload-preview__meta">
-                <strong>{{ uploadedImageTitle }}</strong>
-                <p>{{ uploadedImageDescription }}</p>
-              </div>
             </div>
           </template>
-        </section>
-      </div>
-    </transition>
-
-    <transition name="veil">
-      <div
-        v-if="isCropEditorOpen && selectedImagePreviewUrl"
-        class="overlay"
-        role="dialog"
-        aria-modal="true"
-        @click.self="isCropEditorOpen = false"
-      >
-        <section class="dialog dialog--feature dialog--crop" @click.stop>
-          <header class="dialog__header">
-            <div class="dialog__intro">
-              <p class="dialog__eyebrow">Crop Photo</p>
-              <h2 class="dialog__title">裁剪照片</h2>
-            </div>
-            <button type="button" class="dialog__close" @click="isCropEditorOpen = false">关闭</button>
-          </header>
-
-          <p class="dialog__copy">选图后先框选范围，点“应用裁剪”后再回到上传表单。</p>
-
-          <div
-            class="crop-stage crop-stage--modal"
-            @mousedown.prevent="startCropSelection"
-            @mousemove.prevent="updateCropSelection"
-            @mouseup="stopCropSelection"
-            @mouseleave="stopCropSelection"
-          >
-            <img
-              ref="cropImageElement"
-              :src="selectedImagePreviewUrl"
-              alt="crop target"
-              class="upload-preview__image crop-stage__image"
-              @load="handleCropImageLoad"
-            />
-            <div
-              v-if="cropFrameRect.width > 0 && cropFrameRect.height > 0"
-              class="crop-stage__selection"
-              :style="{
-                left: `${cropFrameRect.left}px`,
-                top: `${cropFrameRect.top}px`,
-                width: `${cropFrameRect.width}px`,
-                height: `${cropFrameRect.height}px`,
-              }"
-            />
-          </div>
-
-          <div class="dialog__actions">
-            <button type="button" class="dialog__ghost" @click="isCropEditorOpen = false">暂不裁剪</button>
-            <button type="button" class="dialog__primary" :disabled="!isCropReady" @click="applyCropSelection">
-              应用裁剪
-            </button>
-          </div>
         </section>
       </div>
     </transition>
@@ -2216,15 +2217,15 @@ watch(
             <h2 class="dialog__title">
               {{
                 currentUser
-                  ? '账户信息'
+                  ? dialogText.accountInfo
                   : authMode === 'login'
-                    ? '登录账户'
+                    ? dialogText.loginAccount
                     : authMode === 'register'
-                      ? '创建账户'
-                      : '重置密码'
+                      ? dialogText.createAccount
+                      : dialogText.resetPassword
               }}
             </h2>
-            <button type="button" class="dialog__close" @click="closeAuthDialog">关闭</button>
+            <button type="button" class="dialog__close" @click="closeAuthDialog">{{ appText.close }}</button>
           </header>
 
           <div v-if="!currentUser" class="dialog__tabs">
@@ -2234,7 +2235,7 @@ watch(
               :class="{ 'is-active': authMode === 'login' }"
               @click="setAuthMode('login')"
             >
-              登录
+              {{ dialogText.login }}
             </button>
             <button
               type="button"
@@ -2242,7 +2243,7 @@ watch(
               :class="{ 'is-active': authMode === 'register' }"
               @click="setAuthMode('register')"
             >
-              注册
+              {{ dialogText.register }}
             </button>
             <button
               type="button"
@@ -2250,18 +2251,17 @@ watch(
               :class="{ 'is-active': authMode === 'reset' }"
               @click="setAuthMode('reset')"
             >
-              重置密码
+              {{ dialogText.resetPassword }}
             </button>
           </div>
 
           <p v-if="!currentUser && !isSupabaseConfigured()" class="auth-feedback is-warning">
-            当前尚未配置真实 Supabase 登录环境变量，所以登录、注册和重置密码现在都不可用。请在
-            `.env.local` 中填写 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 后重启前端。
+            {{ dialogText.authNotConfigured }}
           </p>
 
           <template v-if="currentUser">
             <div class="feature-context">
-              <span>当前账户</span>
+              <span>{{ dialogText.currentAccount }}</span>
               <strong>{{ currentUser.username }}</strong>
               <p>{{ currentUser.email }}</p>
             </div>
@@ -2273,16 +2273,16 @@ watch(
                 class="dialog__ghost"
                 @click="pendingRequestPopupVisible = true"
               >
-                好友请求 {{ pendingFriendRequests.length }}
+                {{ dialogText.friendRequests }} {{ pendingFriendRequests.length }}
               </button>
-              <button type="button" class="dialog__primary" @click="logout">退出登录</button>
+              <button type="button" class="dialog__primary" @click="logout">{{ dialogText.logout }}</button>
               <button
                 type="button"
                 class="dialog__ghost"
                 :disabled="authDeletingAccount"
                 @click="deleteAccount"
               >
-                {{ authDeletingAccount ? '注销中…' : '注销账号' }}
+                {{ authDeletingAccount ? dialogText.deletingAccount : dialogText.deleteAccount }}
               </button>
               <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
             </div>
@@ -2290,41 +2290,41 @@ watch(
 
           <form v-else class="dialog__form" @submit.prevent="submitAuth">
             <label v-if="authMode === 'register'" class="field">
-              <span>昵称</span>
+              <span>{{ dialogText.profileName }}</span>
               <input
                 v-model.trim="authForm.displayName"
                 type="text"
-                placeholder="平江旅人"
+                :placeholder="dialogText.nicknamePlaceholder"
                 autocomplete="nickname"
               />
             </label>
 
             <label class="field">
-              <span>邮箱</span>
+              <span>{{ dialogText.email }}</span>
               <input
                 v-model.trim="authForm.account"
                 type="email"
-                placeholder="例如：you@example.com"
+                :placeholder="dialogText.emailPlaceholder"
                 autocomplete="username"
               />
             </label>
 
             <label class="field">
-              <span>{{ authMode === 'reset' ? '新密码' : '密码' }}</span>
+              <span>{{ authMode === 'reset' ? dialogText.newPassword : dialogText.password }}</span>
               <input
                 v-model="authForm.password"
                 type="password"
-                :placeholder="authMode === 'reset' ? '请输入新密码' : '请输入密码'"
+                :placeholder="authMode === 'reset' ? dialogText.newPasswordPlaceholderShort : dialogText.passwordPlaceholder"
                 :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'"
               />
             </label>
 
             <label v-if="authMode === 'register' || authMode === 'reset'" class="field">
-              <span>{{ authMode === 'reset' ? '确认新密码' : '确认密码' }}</span>
+              <span>{{ authMode === 'reset' ? dialogText.confirmNewPassword : dialogText.confirmPassword }}</span>
               <input
                 v-model="authForm.confirmPassword"
                 type="password"
-                :placeholder="authMode === 'reset' ? '再次输入新密码' : '再次输入密码'"
+                :placeholder="authMode === 'reset' ? dialogText.confirmNewPasswordPlaceholderShort : dialogText.confirmPasswordPlaceholder"
                 autocomplete="new-password"
               />
             </label>
@@ -2333,8 +2333,8 @@ watch(
               <p class="auth-security-copy">
                 {{
                   authMode === 'register'
-                    ? '创建账号时需要设置三个安全问题答案，后续忘记密码时会用它们进行核对。'
-                    : '请输入注册邮箱，并回答注册时设置的三个安全问题。验证通过后才能重置密码。'
+                    ? dialogText.registerSecurityCopy
+                    : dialogText.resetSecurityCopy
                 }}
               </p>
 
@@ -2347,7 +2347,7 @@ watch(
                 <input
                   v-model="authForm[item.field]"
                   :type="item.type"
-                  :placeholder="item.type === 'date' ? '请选择日期' : '请输入答案'"
+                  :placeholder="item.type === 'date' ? dialogText.datePlaceholder : dialogText.answerPlaceholder"
                   :autocomplete="item.autocomplete"
                 />
               </label>
@@ -2361,15 +2361,15 @@ watch(
               <button type="submit" class="dialog__primary" :disabled="authSubmitting">
                 {{
                   authSubmitting
-                    ? '提交中…'
+                    ? dialogText.submitting
                     : authMode === 'login'
-                      ? '立即登录'
+                      ? dialogText.signInNow
                       : authMode === 'register'
-                        ? '创建账号'
-                        : '验证并重置'
+                        ? dialogText.createAccount
+                        : dialogText.verifyAndReset
                 }}
               </button>
-              <button type="button" class="dialog__ghost" @click="closeAuthDialog" :disabled="authSubmitting">取消</button>
+              <button type="button" class="dialog__ghost" @click="closeAuthDialog" :disabled="authSubmitting">{{ dialogText.cancel }}</button>
             </div>
           </form>
         </section>
@@ -2389,162 +2389,6 @@ watch(
 </template>
 
 <style>
-.nav-link.is-active {
-  border-color: rgba(95, 127, 114, 0.26);
-  background: rgba(95, 127, 114, 0.12);
-  color: var(--ink-900);
-}
-
-.footer-link.is-active {
-  color: var(--celadon-700);
-  transform: translateX(-4px);
-}
-
-.mobile-header-strip,
-.mobile-tab-bar {
-  display: none;
-}
-
-.mobile-header-strip {
-  border-top: 1px solid rgba(28, 25, 23, 0.05);
-  background:
-    linear-gradient(180deg, rgba(250, 250, 249, 0.94), rgba(250, 250, 249, 0.82)),
-    rgba(250, 250, 249, 0.9);
-}
-
-.mobile-header-strip__inner {
-  width: min(100%, calc(var(--max-width) + 3rem));
-  margin: 0 auto;
-  padding: 0 1rem 0.78rem;
-  display: grid;
-  gap: 0.72rem;
-}
-
-.mobile-header-strip__page {
-  width: fit-content;
-  margin: 0;
-  padding: 0.42rem 0.82rem;
-  border-radius: 999px;
-  border: 1px solid rgba(28, 25, 23, 0.08);
-  background: rgba(255, 255, 255, 0.66);
-  color: var(--ink-600);
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-}
-
-.mobile-feature-nav {
-  display: flex;
-  gap: 0.55rem;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  scroll-snap-type: x mandatory;
-}
-
-.mobile-feature-nav::-webkit-scrollbar {
-  display: none;
-}
-
-.mobile-feature-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.5rem;
-  padding: 0.38rem 0.95rem;
-  border-radius: 999px;
-  border: 1px solid rgba(28, 25, 23, 0.08);
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--ink-700);
-  white-space: nowrap;
-  flex: 0 0 auto;
-  scroll-snap-align: start;
-  transition:
-    transform 0.26s ease,
-    border-color 0.26s ease,
-    background-color 0.26s ease,
-    color 0.26s ease;
-}
-
-.mobile-feature-chip.is-active {
-  border-color: rgba(95, 127, 114, 0.26);
-  background: rgba(95, 127, 114, 0.14);
-  color: var(--ink-900);
-}
-
-.mobile-feature-chip__dot {
-  position: absolute;
-  top: 0.38rem;
-  right: 0.42rem;
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 999px;
-  background: #ee4f44;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.88);
-}
-
-.mobile-tab-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 45;
-  padding: 0.72rem 1rem calc(0.78rem + env(safe-area-inset-bottom));
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
-  border-top: 1px solid rgba(28, 25, 23, 0.08);
-  background:
-    linear-gradient(180deg, rgba(250, 250, 249, 0.8), rgba(250, 250, 249, 0.98)),
-    rgba(250, 250, 249, 0.94);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 -12px 36px rgba(28, 25, 23, 0.08);
-}
-
-.mobile-tab {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 3.25rem;
-  padding: 0.45rem 0.3rem;
-  border-radius: 1.1rem;
-  border: 1px solid rgba(28, 25, 23, 0.08);
-  background: rgba(255, 255, 255, 0.76);
-  color: var(--ink-600);
-  text-align: center;
-  transition:
-    transform 0.26s ease,
-    border-color 0.26s ease,
-    background-color 0.26s ease,
-    color 0.26s ease,
-    box-shadow 0.26s ease;
-}
-
-.mobile-tab__label {
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  line-height: 1.25;
-}
-
-.mobile-tab.is-active {
-  border-color: rgba(95, 127, 114, 0.28);
-  background: rgba(95, 127, 114, 0.14);
-  color: var(--ink-900);
-  box-shadow: 0 10px 24px rgba(95, 127, 114, 0.12);
-}
-
-.mobile-tab.is-active::before {
-  content: '';
-  position: absolute;
-  top: 0.34rem;
-  left: 50%;
-  width: 1.3rem;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(95, 127, 114, 0.72);
-  transform: translateX(-50%);
-}
-
 .profile-request-badge {
   position: absolute;
   top: -0.4rem;
@@ -2801,10 +2645,6 @@ watch(
   color: rgba(74, 74, 74, 0.9);
 }
 
-.overlay--ai {
-  align-items: stretch;
-}
-
 .overlay--fullscreen {
   place-items: stretch;
   padding: 0;
@@ -2820,53 +2660,21 @@ watch(
   padding: 1.25rem 1.3rem 1.35rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  box-sizing: border-box;
-}
-
-.dialog::-webkit-scrollbar {
-  width: 10px;
-}
-
-.dialog::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 14px 6px 14px 0;
-}
-
-.dialog::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  border: 2px solid rgba(250, 250, 249, 0.92);
-  background: linear-gradient(180deg, rgba(160, 180, 169, 0.8), rgba(120, 145, 132, 0.82));
-}
-
-.dialog::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(145, 168, 156, 0.9), rgba(104, 129, 116, 0.92));
-}
-
-.dialog {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(120, 145, 132, 0.82) transparent;
 }
 
 .dialog--feature {
   width: min(94vw, 680px);
 }
 
-.dialog--crop {
-  width: min(94vw, 760px);
-}
-
 .dialog--ai {
   width: min(98vw, 1120px);
-  height: calc(100vh - 3rem);
   height: calc(100dvh - 3rem);
-  max-height: calc(100vh - 3rem);
   max-height: calc(100dvh - 3rem);
   padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable both-edges;
-  box-sizing: border-box;
 }
 
 .dialog--ai-fullscreen {
@@ -2888,12 +2696,10 @@ watch(
 
 .ai-shell {
   flex: 1;
-  height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   border-top: 1px solid rgba(28, 25, 23, 0.06);
-  overflow: hidden;
 }
 
 .dialog__header {
@@ -3006,34 +2812,6 @@ watch(
   color: var(--ink-700);
 }
 
-.upload-location-status {
-  margin: 0.15rem 0 0;
-  padding: 0.72rem 0.85rem;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(28, 25, 23, 0.08);
-  color: var(--ink-700);
-  font-size: 0.92rem;
-  line-height: 1.55;
-}
-
-.upload-location-status.is-loading {
-  background: rgba(95, 127, 114, 0.08);
-  border-color: rgba(95, 127, 114, 0.14);
-}
-
-.upload-location-status.is-success {
-  background: rgba(24, 121, 78, 0.1);
-  border-color: rgba(24, 121, 78, 0.16);
-  color: rgba(24, 121, 78, 0.95);
-}
-
-.upload-location-status.is-error {
-  background: rgba(159, 63, 52, 0.08);
-  border-color: rgba(159, 63, 52, 0.12);
-  color: var(--cinnabar-700);
-}
-
 .feature-stat-grid {
   margin-top: 1rem;
   display: grid;
@@ -3116,56 +2894,27 @@ watch(
 }
 
 .ai-sidebar {
-  background: linear-gradient(180deg, rgba(248, 246, 242, 0.96), rgba(245, 242, 236, 0.88));
-  border-bottom: 1px solid rgba(28, 25, 23, 0.08);
-  padding: 0.9rem 1.2rem 0.82rem;
-  display: grid;
-  gap: 0.7rem;
-  min-height: 0;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.ai-sidebar__header {
+  background: rgba(28, 25, 23, 0.06);
+  border-right: 1px solid rgba(28, 25, 23, 0.08);
+  padding: 1rem 0.9rem;
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.ai-sidebar__intro {
-  min-width: 0;
-  display: grid;
-  gap: 0.18rem;
-}
-
-.ai-sidebar__label {
-  margin: 0;
-  color: var(--ink-500);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.ai-sidebar__meta {
-  color: var(--ink-500);
-  font-size: 0.78rem;
-  line-height: 1.2;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
 }
 
 .ai-sidebar__new {
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2rem;
-  padding: 0 0.78rem;
+  gap: 0.55rem;
+  min-height: 2.85rem;
   border-radius: 999px;
   border: 1px solid rgba(28, 25, 23, 0.14);
   background: rgba(255, 255, 255, 0.65);
-  color: var(--ink-800);
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  flex: 0 0 auto;
+  color: var(--ink-900);
+  letter-spacing: 0.08em;
   transition:
     transform 0.25s ease,
     background-color 0.25s ease,
@@ -3177,53 +2926,39 @@ watch(
 }
 
 .ai-sidebar__list {
+  flex: 1;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  display: flex;
-  gap: 0.7rem;
-  align-items: stretch;
-  padding: 0 0.05rem 0.15rem;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(95, 127, 114, 0.28) transparent;
-}
-
-.ai-sidebar__list::-webkit-scrollbar {
-  height: 6px;
-}
-
-.ai-sidebar__list::-webkit-scrollbar-thumb {
-  background: rgba(95, 127, 114, 0.24);
-  border-radius: 999px;
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 0.5rem;
+  align-content: start;
+  padding-right: 0.2rem;
 }
 
 .ai-sidebar__row {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.45rem;
-  align-items: start;
-  flex: 0 0 clamp(13rem, 22vw, 16rem);
-  min-width: 0;
+  align-items: stretch;
 }
 
 .ai-sidebar__actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 0.35rem;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .ai-sidebar__item {
   width: 100%;
   text-align: left;
-  min-height: 4.9rem;
-  padding: 0.72rem 0.78rem;
-  border-radius: 16px;
+  padding: 0.75rem 0.8rem;
+  border-radius: 18px;
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.55);
   display: grid;
-  align-content: start;
-  gap: 0.24rem;
+  gap: 0.28rem;
   transition:
     border-color 0.25s ease,
     background-color 0.25s ease,
@@ -3242,14 +2977,11 @@ watch(
 
 .ai-sidebar__rename,
 .ai-sidebar__delete {
-  min-width: 2.4rem;
-  min-height: 2rem;
-  padding: 0 0.62rem;
-  border-radius: 14px;
+  width: 2.5rem;
+  border-radius: 16px;
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.7);
   color: var(--ink-700);
-  font-size: 0.8rem;
   transition:
     background-color 0.25s ease,
     border-color 0.25s ease,
@@ -3280,7 +3012,7 @@ watch(
 .ai-sidebar__title {
   font-weight: 600;
   color: var(--ink-900);
-  font-size: 0.88rem;
+  font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3288,7 +3020,7 @@ watch(
 
 .ai-sidebar__subtitle {
   color: var(--ink-600);
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3299,81 +3031,61 @@ watch(
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
   background: rgba(250, 250, 249, 0.94);
-  overflow: hidden;
-  box-sizing: border-box;
 }
 
-.ai-topbar {
-  flex-shrink: 0;
-  padding: 1rem 1.2rem 0.7rem;
+.ai-main__header {
+  padding: 1rem 1.2rem;
   border-bottom: 1px solid rgba(28, 25, 23, 0.06);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
   background: rgba(250, 250, 249, 0.9);
   backdrop-filter: blur(12px);
 }
 
-.ai-topbar__copy {
-  min-width: 0;
-  display: grid;
-  align-content: start;
-  gap: 0.28rem;
+.ai-main__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
 }
 
-.ai-topbar__eyebrow {
-  margin: 0;
+.ai-main__context {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ai-main__context span {
   color: var(--ink-500);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.ai-topbar__title {
-  margin: 0;
-  font-size: 1.18rem;
+.ai-main__context strong {
+  font-size: 1.05rem;
   color: var(--ink-900);
-}
-
-.ai-topbar__status {
-  margin: 0;
-  color: var(--ink-500);
-  font-size: 0.84rem;
-  line-height: 1.4;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ai-topbar__actions {
-  display: flex;
-  align-items: center;
+.ai-main__context p {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 0.92rem;
+}
+
+.ai-main__resize {
   flex: 0 0 auto;
-}
-
-.ai-topbar__exit {
   min-height: 2.35rem;
-  padding: 0 0.95rem;
+  padding: 0 1rem;
   border-radius: 999px;
   border: 1px solid rgba(28, 25, 23, 0.14);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.65);
   color: var(--ink-800);
-  font-size: 0.84rem;
-  line-height: 1;
-  transition:
-    transform 0.25s ease,
-    background-color 0.25s ease,
-    border-color 0.25s ease,
-    color 0.25s ease;
-}
-
-.ai-topbar__exit:hover {
-  transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--ink-900);
 }
 
 .ai-main__body {
@@ -3384,29 +3096,15 @@ watch(
   overflow: hidden;
 }
 
-.ai-bottom {
-  flex-shrink: 0;
-  padding-bottom: env(safe-area-inset-bottom);
-  border-top: 1px solid rgba(28, 25, 23, 0.06);
-  background: linear-gradient(
-    to bottom,
-    rgba(250, 250, 249, 0.88) 0%,
-    rgba(250, 250, 249, 0.94) 24%,
-    rgba(250, 250, 249, 0.98) 100%
-  );
-  backdrop-filter: blur(12px);
-}
-
 .ai-starters {
-  flex-shrink: 0;
-  padding: 0.7rem 1.2rem 0.2rem;
+  padding: 1rem 1.2rem 0;
 }
 
 .ai-starters__label {
   margin: 0;
-  color: var(--ink-500);
-  font-size: 0.76rem;
-  letter-spacing: 0.06em;
+  color: var(--ink-600);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
 }
 
 .ai-chat.ai-chat--main {
@@ -3425,10 +3123,12 @@ watch(
   padding: 1.35rem 1.5rem;
 }
 
-.dialog--ai-fullscreen .ai-topbar,
-.dialog--ai-fullscreen .ai-starters,
-.dialog--ai-fullscreen .ai-composer,
-.dialog--ai-fullscreen .feature-feedback--ai {
+.dialog--ai-fullscreen .ai-composer {
+  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.dialog--ai-fullscreen .ai-main__header,
+.dialog--ai-fullscreen .dialog__header {
   padding-left: 1.5rem;
   padding-right: 1.5rem;
 }
@@ -3481,32 +3181,37 @@ watch(
 }
 
 .ai-composer {
-  flex-shrink: 0;
-  padding: 0.7rem 1.2rem 0.95rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  padding: 0.95rem 1.2rem calc(0.95rem + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(28, 25, 23, 0.06);
+  background: linear-gradient(
+    to bottom,
+    rgba(250, 250, 249, 0) 0%,
+    rgba(250, 250, 249, 0.9) 20%,
+    rgba(250, 250, 249, 0.96) 100%
+  );
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: flex-end;
   gap: 0.75rem;
 }
 
 .ai-composer__field {
+  flex: 1;
   min-width: 0;
 }
 
 .ai-composer__field textarea {
-  display: block;
   width: 100%;
-  min-height: 3.5rem;
-  max-height: 10.5rem;
-  padding: 0.95rem 1rem;
-  border-radius: 20px;
+  min-height: 2.85rem;
+  max-height: 9.5rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 18px;
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.72);
   outline: none;
   resize: none;
   line-height: 1.45;
   font-family: inherit;
-  box-sizing: border-box;
 }
 
 .ai-composer__field textarea:focus {
@@ -3515,14 +3220,13 @@ watch(
 }
 
 .dialog__primary.ai-composer__send {
-  min-width: 5.85rem;
-  min-height: 3.5rem;
-  padding: 0 1.2rem;
-  align-self: stretch;
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  padding: 0 1.15rem;
 }
 
 .feature-feedback--ai {
-  margin: 0 1.2rem 0.55rem;
+  margin-bottom: 0.35rem;
 }
 
 .field {
@@ -3549,112 +3253,11 @@ watch(
   border: 1px solid rgba(28, 25, 23, 0.12);
   background: rgba(255, 255, 255, 0.72);
   outline: none;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background-color 0.2s ease;
 }
 
 .field input:focus {
   border-color: rgba(95, 127, 114, 0.42);
   box-shadow: 0 0 0 4px rgba(95, 127, 114, 0.12);
-}
-
-.field textarea {
-  width: 100%;
-  min-height: 6.4rem;
-  padding: 0.9rem 0.95rem;
-  border-radius: 20px;
-  border: 1px solid rgba(28, 25, 23, 0.12);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 244, 241, 0.92));
-  outline: none;
-  resize: vertical;
-  line-height: 1.6;
-  font-family: inherit;
-  color: var(--ink-900);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background-color 0.2s ease;
-}
-
-.field textarea::placeholder {
-  color: rgba(87, 83, 78, 0.58);
-}
-
-.field textarea:focus {
-  border-color: rgba(95, 127, 114, 0.42);
-  box-shadow:
-    0 0 0 4px rgba(95, 127, 114, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.98);
-}
-
-.field input[type='file'] {
-  display: none;
-}
-
-.upload-picker {
-  min-height: 4.8rem;
-  padding: 0.55rem 0.8rem;
-  border-radius: 22px;
-  border: 1px dashed rgba(95, 127, 114, 0.28);
-  background:
-    linear-gradient(180deg, rgba(243, 248, 245, 0.95), rgba(255, 255, 255, 0.92));
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0.8rem;
-  align-items: center;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.upload-picker:hover {
-  border-color: rgba(95, 127, 114, 0.42);
-  background:
-    linear-gradient(180deg, rgba(239, 246, 242, 0.98), rgba(255, 255, 255, 0.96));
-  transform: translateY(-1px);
-}
-
-.upload-picker__camera {
-  width: 5rem;
-  height: 5rem;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  background: rgba(235, 242, 238, 0.92);
-  color: var(--ink-900);
-  box-shadow: inset 0 0 0 1px rgba(95, 127, 114, 0.08);
-  backdrop-filter: blur(2px);
-}
-
-.upload-picker__camera svg {
-  width: 1.7rem;
-  height: 1.7rem;
-}
-
-.upload-picker__copy {
-  min-width: 0;
-  display: grid;
-  gap: 0.22rem;
-}
-
-.upload-picker__copy strong {
-  color: var(--ink-900);
-  font-size: 1rem;
-}
-
-.upload-picker__copy p {
-  margin: 0;
-  color: rgba(68, 64, 60, 0.78);
-  line-height: 1.45;
-  word-break: break-word;
 }
 
 .dialog__actions {
@@ -3714,37 +3317,28 @@ watch(
 }
 
 .prompt-chips {
+  margin-top: 1rem;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.55rem;
 }
 
-.prompt-chips--scroll {
-  margin-top: 0.55rem;
-  overflow-x: auto;
-  white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.prompt-chips--scroll::-webkit-scrollbar {
-  display: none;
-}
-
 .prompt-chip {
-  flex: 0 0 auto;
   min-height: 2.45rem;
   padding: 0.5rem 0.95rem;
-  white-space: nowrap;
 }
 
 .ai-chat {
-  min-height: 0;
+  margin-top: 1rem;
+  min-height: min(38vh, 280px);
+  max-height: min(46vh, 360px);
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   display: grid;
   gap: 0.75rem;
   align-content: start;
+  padding-bottom: 0.35rem;
   padding-right: 0.15rem;
 }
 
@@ -3811,73 +3405,11 @@ watch(
 }
 
 .upload-preview__image {
-  width: min(100%, 420px);
-  max-height: 320px;
+  width: 100%;
   height: auto;
-  justify-self: start;
   border-radius: 18px;
   border: 1px solid rgba(28, 25, 23, 0.08);
-  object-fit: contain;
-  background: rgba(243, 248, 245, 0.9);
-}
-
-.upload-preview--draft {
-  margin-top: 0.7rem;
-}
-
-.crop-stage {
-  position: relative;
-  width: fit-content;
-  max-width: 100%;
-  user-select: none;
-}
-
-.crop-stage--modal {
-  margin-top: 1rem;
-}
-
-.crop-stage__image {
-  width: min(100%, 680px);
-  max-height: 68vh;
-}
-
-.crop-stage__selection {
-  position: absolute;
-  border: 2px solid rgba(255, 255, 255, 0.95);
-  box-shadow:
-    0 0 0 9999px rgba(28, 25, 23, 0.34),
-    0 0 0 1px rgba(95, 127, 114, 0.42);
-  border-radius: 14px;
-  pointer-events: none;
-}
-
-.crop-stage__actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-}
-
-.crop-stage__actions span {
-  color: var(--ink-600);
-  font-size: 0.88rem;
-}
-
-.upload-preview__meta {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.upload-preview__meta strong {
-  font-size: 1rem;
-  color: var(--ink-900);
-}
-
-.upload-preview__meta p {
-  margin: 0;
-  color: var(--ink-700);
-  line-height: 1.65;
+  object-fit: cover;
 }
 
 .auth-feedback {
@@ -3921,11 +3453,6 @@ watch(
     padding: 1rem 0.8rem;
   }
 
-  .overlay--ai {
-    place-items: stretch;
-    padding: 0;
-  }
-
   .dialog {
     width: min(100%, 680px);
     max-height: calc(100dvh - 2rem);
@@ -3950,178 +3477,29 @@ watch(
   }
 
   .ai-shell {
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
 
   .ai-sidebar {
-    padding: 0.7rem 1rem 0.68rem;
-    gap: 0.45rem;
+    border-right: 0;
+    border-bottom: 1px solid rgba(28, 25, 23, 0.08);
   }
 
-  .dialog--ai {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100vh;
-    max-height: 100dvh;
-    padding: 0;
-    border-radius: 0;
-    border: 0;
-    box-shadow: none;
-  }
-
-  .ai-sidebar__list {
-    gap: 0.45rem;
-    scrollbar-width: none;
-  }
-
-  .ai-sidebar__list::-webkit-scrollbar {
-    display: none;
-  }
-
-  .ai-sidebar__row {
-    min-width: min(56vw, 12.5rem);
-    flex: 0 0 auto;
-  }
-
-  .ai-sidebar__header {
-    align-items: center;
-  }
-
-  .ai-sidebar__item {
-    padding: 0.56rem 0.68rem;
-    gap: 0.12rem;
-    min-height: 4.3rem;
-  }
-
-  .ai-sidebar__title {
-    font-size: 0.82rem;
-  }
-
-  .ai-sidebar__subtitle {
-    display: none;
-  }
-
+  .ai-main__header,
   .dialog__header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .ai-topbar {
-    align-items: center;
-  }
-
-  .ai-topbar {
-    padding-top: calc(0.95rem + env(safe-area-inset-top));
-  }
-
-  .ai-topbar__eyebrow {
-    font-size: 0.68rem;
-  }
-
-  .ai-topbar__title {
-    font-size: 1.02rem;
-  }
-
-  .ai-topbar__status {
-    font-size: 0.8rem;
-  }
-
-  .ai-topbar__actions {
-    gap: 0.38rem;
-  }
-
-  .ai-topbar__exit {
-    min-height: 2.1rem;
-    padding: 0 0.8rem;
-    font-size: 0.78rem;
-  }
-
-  .ai-chat.ai-chat--main {
-    padding: 1rem;
-  }
-
-  .ai-starters,
-  .ai-composer,
-  .feature-feedback--ai {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  .ai-composer {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: stretch;
-    gap: 0.6rem;
-  }
-
-  .dialog__primary.ai-composer__send {
-    min-width: 5rem;
-    min-height: 3.5rem;
-  }
-
-  .ai-composer__field textarea {
-    min-height: 3.7rem;
-  }
-
-  .message-row {
-    gap: 0.55rem;
-  }
-
-  .message-avatar {
-    width: 30px;
-    height: 30px;
-    flex-basis: 30px;
+  .ai-main__header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
 @media (max-width: 768px) {
-  .site-nav--desktop {
-    display: none;
-  }
-
-  .mobile-header-strip,
-  .mobile-tab-bar {
-    display: grid;
-  }
-
-  .header-inner {
-    padding-top: 0.8rem;
-    padding-bottom: 0.72rem;
-  }
-
-  .brand-link {
-    min-width: 0;
-  }
-
-  .brand-copy {
-    min-width: 0;
-  }
-
-  .brand-title {
-    white-space: nowrap;
-  }
-
-  .brand-subtitle {
-    display: none;
-  }
-
-  .header-actions {
-    margin-left: auto;
-  }
-
-  .profile-button {
-    min-height: 2.45rem;
-    padding-right: 0.3rem;
-  }
-
-  .profile-dropdown {
-    top: calc(100% + 0.65rem);
-    right: 0;
-  }
-
   .global-footer {
     padding-top: 52px;
-    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
   }
 
   .footer-content {
@@ -4130,14 +3508,8 @@ watch(
   }
 
   .footer-nav {
-    display: none;
-  }
-
-  .footer-signature {
-    padding-left: 0;
-    border-left: 0;
-    padding-top: 0.2rem;
-    border-top: 1px solid rgba(28, 25, 23, 0.08);
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 }
 </style>

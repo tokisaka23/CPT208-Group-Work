@@ -1,6 +1,7 @@
-<script setup>
-import { computed, ref } from 'vue';
+﻿<script setup>
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
+import { currentLanguage, resolveLocalized } from '../i18n';
 import ScenicMapDialog from './maps/ScenicMapDialog.vue';
 import { resolveSuzhouPoi } from '../data/poiMapData';
 
@@ -18,6 +19,7 @@ const legacyRouteMap = {
   '#/gardens/wangshiyuan': '/wangshi',
 };
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const isExternalLink = (target) => typeof target === 'string' && /^(https?:)?\/\//.test(target);
 
 const resolveRouteTarget = (target) => {
@@ -53,6 +55,615 @@ const mapVisible = ref(false);
 const resolvedPoi = computed(() => (
   resolveSuzhouPoi(props.garden.mapSlug || props.garden.slug || props.garden.name)
 ));
+const immersive = computed(() => props.garden.immersive || null);
+const arExperience = computed(() => immersive.value?.ar || null);
+const vrExperience = computed(() => immersive.value?.vr || null);
+const arHotspots = computed(() => arExperience.value?.hotspots || []);
+const vrScenes = computed(() => vrExperience.value?.scenes || []);
+
+const activeImmersiveMode = ref('');
+const activeArHotspotId = ref('');
+const activeVrSceneId = ref('');
+const activeVrHotspotId = ref('');
+const vrPan = ref(50);
+const vrDragging = ref(false);
+const vrDragStartX = ref(0);
+const vrDragStartPan = ref(50);
+
+const arVideoRef = ref(null);
+const cameraStream = ref(null);
+const cameraState = ref('idle');
+const cameraError = ref('');
+
+const pageTextSource = {
+  preludeLabel: {
+    zh: '观园引子',
+    en: 'Garden Prelude',
+    ja: 'Garden Prelude',
+    ko: 'Garden Prelude',
+  },
+  backLabel: {
+    zh: '返回首页',
+    en: 'Back to Home',
+    ja: 'Back to Home',
+    ko: 'Back to Home',
+  },
+  nextPrefix: {
+    zh: '继续看 ',
+    en: 'Next: ',
+    ja: 'Next: ',
+    ko: 'Next: ',
+  },
+  highlightsEyebrow: {
+    zh: '核心看点',
+    en: 'Highlights',
+    ja: 'Highlights',
+    ko: 'Highlights',
+  },
+  highlightsTitle: {
+    zh: '这座园林值得慢慢看的地方',
+    en: 'Why this garden deserves a slower look',
+    ja: 'Why this garden deserves a slower look',
+    ko: 'Why this garden deserves a slower look',
+  },
+  highlightIntro: {
+    zh: '把速度放慢一点，园林真正的层次会在转折、停顿与回望中浮现出来。',
+    en: 'Slow down a little and the garden\'s real layers will emerge through turns, pauses, and return glances.',
+    ja: 'Slow down a little and the garden\'s real layers will emerge through turns, pauses, and return glances.',
+    ko: 'Slow down a little and the garden\'s real layers will emerge through turns, pauses, and return glances.',
+  },
+  galleryEyebrow: {
+    zh: '横向画卷',
+    en: 'Horizontal Scroll',
+    ja: 'Horizontal Scroll',
+    ko: 'Horizontal Scroll',
+  },
+  galleryTitle: {
+    zh: '沿着一卷景色慢慢展开',
+    en: 'Unfold the scenery like a long handscroll',
+    ja: 'Unfold the scenery like a long handscroll',
+    ko: 'Unfold the scenery like a long handscroll',
+  },
+  galleryIntro: {
+    zh: '横向轻扫，让视线像展开手卷一样，一景接一景地慢慢打开。',
+    en: 'Move sideways and let the view open scene by scene, like unrolling a scroll.',
+    ja: 'Move sideways and let the view open scene by scene, like unrolling a scroll.',
+    ko: 'Move sideways and let the view open scene by scene, like unrolling a scroll.',
+  },
+  stepperEyebrow: {
+    zh: '可视化游线',
+    en: 'Route in View',
+    ja: 'Route in View',
+    ko: 'Route in View',
+  },
+  stepperTitle: {
+    zh: '一条更顺的游览顺序',
+    en: 'A smoother order for walking through the garden',
+    ja: 'A smoother order for walking through the garden',
+    ko: 'A smoother order for walking through the garden',
+  },
+  stepperIntro: {
+    zh: '先建立整体感，再回到细节和边缘位置，游园节奏会更顺。',
+    en: 'Build an overall sense first, then return to details and edge spaces.',
+    ja: 'Build an overall sense first, then return to details and edge spaces.',
+    ko: 'Build an overall sense first, then return to details and edge spaces.',
+  },
+  tipsEyebrow: {
+    zh: '慢游贴士',
+    en: 'Slow Travel Notes',
+    ja: 'Slow Travel Notes',
+    ko: 'Slow Travel Notes',
+  },
+  tipsTitle: {
+    zh: '第一次来可以这样安排',
+    en: 'A good way to arrange your first visit',
+    ja: 'A good way to arrange your first visit',
+    ko: 'A good way to arrange your first visit',
+  },
+  tipsIntro: {
+    zh: '不赶时间时，景会慢慢长出来；留白和停顿，也是这页设计里很重要的一部分。',
+    en: 'When you are not in a hurry, the scenery grows slowly. Emptiness and pause are part of the design too.',
+    ja: 'When you are not in a hurry, the scenery grows slowly. Emptiness and pause are part of the design too.',
+    ko: 'When you are not in a hurry, the scenery grows slowly. Emptiness and pause are part of the design too.',
+  },
+  immersiveEyebrow: {
+    zh: '沉浸互动',
+    en: 'Immersive Modes',
+    ja: 'Immersive Modes',
+    ko: 'Immersive Modes',
+  },
+  immersiveTitle: {
+    zh: 'AR / VR 游园体验',
+    en: 'AR / VR Garden Experience',
+    ja: 'AR / VR Garden Experience',
+    ko: 'AR / VR Garden Experience',
+  },
+  immersiveIntro: {
+    zh: '切换到 AR 导览或 VR 漫游，用更贴近现场的方式重新读这座园林。',
+    en: 'Switch into AR guidance or VR roaming to read the garden in a more spatial way.',
+    ja: 'Switch into AR guidance or VR roaming to read the garden in a more spatial way.',
+    ko: 'Switch into AR guidance or VR roaming to read the garden in a more spatial way.',
+  },
+  arLabel: {
+    zh: 'AR 导览',
+    en: 'AR Guide',
+    ja: 'AR Guide',
+    ko: 'AR Guide',
+  },
+  vrLabel: {
+    zh: 'VR 漫游',
+    en: 'VR Tour',
+    ja: 'VR Tour',
+    ko: 'VR Tour',
+  },
+  hotspotStatLabel: {
+    zh: '交互热点',
+    en: 'Hotspots',
+    ja: 'Hotspots',
+    ko: 'Hotspots',
+  },
+  sceneStatLabel: {
+    zh: '漫游场景',
+    en: 'Scenes',
+    ja: 'Scenes',
+    ko: 'Scenes',
+  },
+  arAction: {
+    zh: '开启 AR 导览',
+    en: 'Launch AR Guide',
+    ja: 'Launch AR Guide',
+    ko: 'Launch AR Guide',
+  },
+  vrAction: {
+    zh: '开启 VR 漫游',
+    en: 'Launch VR Tour',
+    ja: 'Launch VR Tour',
+    ko: 'Launch VR Tour',
+  },
+  closeImmersive: {
+    zh: '关闭',
+    en: 'Close',
+    ja: 'Close',
+    ko: 'Close',
+  },
+  selectedPoint: {
+    zh: '当前讲解',
+    en: 'Current Hotspot',
+    ja: 'Current Hotspot',
+    ko: 'Current Hotspot',
+  },
+  currentScene: {
+    zh: '当前场景',
+    en: 'Current Scene',
+    ja: 'Current Scene',
+    ko: 'Current Scene',
+  },
+  observeLabel: {
+    zh: '建议留意',
+    en: 'Look For',
+    ja: 'Look For',
+    ko: 'Look For',
+  },
+  arUsageHint: {
+    zh: '点击画面中的热点，查看园林重点说明。',
+    en: 'Tap the hotspots to inspect key garden details.',
+    ja: 'Tap the hotspots to inspect key garden details.',
+    ko: 'Tap the hotspots to inspect key garden details.',
+  },
+  vrUsageHint: {
+    zh: '左右拖拽画面切换视角，再点热点读取场景说明。',
+    en: 'Drag left or right to pan, then tap hotspots to read the scene.',
+    ja: 'Drag left or right to pan, then tap hotspots to read the scene.',
+    ko: 'Drag left or right to pan, then tap hotspots to read the scene.',
+  },
+  liveCameraReady: {
+    zh: '实景摄像头已开启',
+    en: 'Live camera active',
+    ja: 'Live camera active',
+    ko: 'Live camera active',
+  },
+  requestingCamera: {
+    zh: '正在请求摄像头权限',
+    en: 'Requesting camera access',
+    ja: 'Requesting camera access',
+    ko: 'Requesting camera access',
+  },
+  cameraFallback: {
+    zh: '已切换到图像叠加模式',
+    en: 'Switched to image overlay mode',
+    ja: 'Switched to image overlay mode',
+    ko: 'Switched to image overlay mode',
+  },
+  cameraUnsupported: {
+    zh: '当前设备不支持摄像头叠加',
+    en: 'Camera overlay is not supported on this device',
+    ja: 'Camera overlay is not supported on this device',
+    ko: 'Camera overlay is not supported on this device',
+  },
+  cameraBlocked: {
+    zh: '摄像头未授权，已改为图像叠加模式',
+    en: 'Camera access denied, using image overlay mode',
+    ja: 'Camera access denied, using image overlay mode',
+    ko: 'Camera access denied, using image overlay mode',
+  },
+  previousScene: {
+    zh: '上一景',
+    en: 'Previous',
+    ja: 'Previous',
+    ko: 'Previous',
+  },
+  nextSceneAction: {
+    zh: '下一景',
+    en: 'Next',
+    ja: 'Next',
+    ko: 'Next',
+  },
+  relatedAction: {
+    zh: '跳转详情',
+    en: 'Open Detail',
+    ja: 'Open Detail',
+    ko: 'Open Detail',
+  },
+  panoramaAction: {
+    zh: '全景漫游',
+    en: 'Panorama Tour',
+    ja: 'Panorama Tour',
+    ko: 'Panorama Tour',
+  },
+  mapAction: {
+    zh: '地图导航',
+    en: 'Map Navigation',
+    ja: 'Map Navigation',
+    ko: 'Map Navigation',
+  },
+  mapTitleSuffix: {
+    zh: ' 导航地图',
+    en: ' Map',
+    ja: ' マップ',
+    ko: ' 지도',
+  },
+};
+
+const pageText = computed(() => resolveLocalized(pageTextSource, currentLanguage.value));
+
+const immersiveModes = computed(() => {
+  const modes = [];
+
+  if (arExperience.value) {
+    modes.push({
+      id: 'ar',
+      badge: pageText.value.arLabel,
+      headline: arExperience.value.headline || pageText.value.arLabel,
+      summary: arExperience.value.summary || pageText.value.arUsageHint,
+      statLabel: pageText.value.hotspotStatLabel,
+      statValue: String(arHotspots.value.length).padStart(2, '0'),
+      actionLabel: pageText.value.arAction,
+    });
+  }
+
+  if (vrExperience.value) {
+    modes.push({
+      id: 'vr',
+      badge: pageText.value.vrLabel,
+      headline: vrExperience.value.headline || pageText.value.vrLabel,
+      summary: vrExperience.value.summary || pageText.value.vrUsageHint,
+      statLabel: pageText.value.sceneStatLabel,
+      statValue: String(vrScenes.value.length).padStart(2, '0'),
+      actionLabel: pageText.value.vrAction,
+    });
+  }
+
+  return modes;
+});
+
+const activeArHotspot = computed(
+  () => arHotspots.value.find((item) => item.id === activeArHotspotId.value) || arHotspots.value[0] || null,
+);
+
+const activeVrScene = computed(
+  () => vrScenes.value.find((scene) => scene.id === activeVrSceneId.value) || vrScenes.value[0] || null,
+);
+
+const activeVrHotspot = computed(
+  () =>
+    activeVrScene.value?.hotspots?.find((item) => item.id === activeVrHotspotId.value)
+    || activeVrScene.value?.hotspots?.[0]
+    || null,
+);
+
+const activeVrSceneIndex = computed(() =>
+  vrScenes.value.findIndex((scene) => scene.id === activeVrScene.value?.id),
+);
+
+const hasPreviousVrScene = computed(() => activeVrSceneIndex.value > 0);
+const hasNextVrScene = computed(
+  () => activeVrSceneIndex.value >= 0 && activeVrSceneIndex.value < vrScenes.value.length - 1,
+);
+
+const activeImmersiveTitle = computed(() =>
+  activeImmersiveMode.value === 'ar'
+    ? arExperience.value?.headline || pageText.value.arLabel
+    : vrExperience.value?.headline || pageText.value.vrLabel,
+);
+
+const activeImmersiveSummary = computed(() =>
+  activeImmersiveMode.value === 'ar'
+    ? arExperience.value?.summary || pageText.value.arUsageHint
+    : vrExperience.value?.summary || pageText.value.vrUsageHint,
+);
+
+const cameraStatusLabel = computed(() => {
+  switch (cameraState.value) {
+    case 'ready':
+      return pageText.value.liveCameraReady;
+    case 'loading':
+      return pageText.value.requestingCamera;
+    case 'unsupported':
+      return pageText.value.cameraUnsupported;
+    case 'fallback':
+      return pageText.value.cameraFallback;
+    default:
+      return pageText.value.arUsageHint;
+  }
+});
+
+const vrSceneTrackStyle = computed(() => {
+  const range = activeVrScene.value?.panRange ?? 32;
+  const safePan = clamp(vrPan.value, 0, 100);
+  const translate = -((range * safePan) / (100 + range));
+
+  return {
+    width: `${100 + range}%`,
+    transform: `translate3d(${translate}%, 0, 0)`,
+  };
+});
+
+watch(
+  arHotspots,
+  (items) => {
+    if (!items.length) {
+      activeArHotspotId.value = '';
+      return;
+    }
+
+    if (!items.some((item) => item.id === activeArHotspotId.value)) {
+      activeArHotspotId.value = items[0].id;
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  vrScenes,
+  (scenes) => {
+    if (!scenes.length) {
+      activeVrSceneId.value = '';
+      activeVrHotspotId.value = '';
+      return;
+    }
+
+    if (!scenes.some((scene) => scene.id === activeVrSceneId.value)) {
+      setActiveVrScene(scenes[0].id);
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  activeVrScene,
+  (scene) => {
+    const hotspots = scene?.hotspots || [];
+
+    if (!hotspots.length) {
+      activeVrHotspotId.value = '';
+      return;
+    }
+
+    if (!hotspots.some((item) => item.id === activeVrHotspotId.value)) {
+      activeVrHotspotId.value = hotspots[0].id;
+    }
+  },
+  { immediate: true },
+);
+
+const setBodyScrollLocked = (locked) => {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  document.body.style.overflow = locked ? 'hidden' : '';
+};
+
+const handleImmersiveKeydown = (event) => {
+  if (event.key === 'Escape' && activeImmersiveMode.value) {
+    closeImmersive();
+  }
+};
+
+const setKeyboardListener = (enabled) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const method = enabled ? 'addEventListener' : 'removeEventListener';
+  window[method]('keydown', handleImmersiveKeydown);
+};
+
+watch(activeImmersiveMode, (mode, previousMode) => {
+  const isOpen = Boolean(mode);
+  const wasOpen = Boolean(previousMode);
+
+  if (isOpen && !wasOpen) {
+    setKeyboardListener(true);
+  }
+
+  if (!isOpen && wasOpen) {
+    setKeyboardListener(false);
+  }
+
+  setBodyScrollLocked(isOpen);
+
+  if (mode !== 'ar') {
+    stopArCamera();
+  }
+
+  if (mode !== 'vr') {
+    releaseVrDrag();
+  }
+});
+
+async function startArCamera() {
+  if (!arExperience.value) {
+    return;
+  }
+
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    cameraState.value = 'unsupported';
+    return;
+  }
+
+  cameraError.value = '';
+  cameraState.value = 'loading';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment',
+      },
+      audio: false,
+    });
+
+    if (activeImmersiveMode.value !== 'ar') {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
+    cameraStream.value = stream;
+    await nextTick();
+
+    if (arVideoRef.value) {
+      arVideoRef.value.srcObject = stream;
+      await arVideoRef.value.play().catch(() => {});
+    }
+
+    cameraState.value = 'ready';
+  } catch (error) {
+    cameraState.value = 'fallback';
+    cameraError.value =
+      error?.name === 'NotAllowedError' || error?.name === 'SecurityError'
+        ? pageText.value.cameraBlocked
+        : error?.message || pageText.value.cameraFallback;
+  }
+}
+
+function stopArCamera() {
+  if (arVideoRef.value) {
+    arVideoRef.value.pause();
+    arVideoRef.value.srcObject = null;
+  }
+
+  if (cameraStream.value) {
+    cameraStream.value.getTracks().forEach((track) => track.stop());
+    cameraStream.value = null;
+  }
+
+  cameraState.value = 'idle';
+}
+
+async function openImmersive(mode) {
+  activeImmersiveMode.value = mode;
+
+  if (mode === 'ar') {
+    await nextTick();
+    await startArCamera();
+  }
+
+  if (mode === 'vr' && !activeVrScene.value && vrScenes.value.length) {
+    setActiveVrScene(vrScenes.value[0].id);
+  }
+}
+
+function closeImmersive() {
+  activeImmersiveMode.value = '';
+}
+
+function hotspotStyle(hotspot) {
+  return {
+    left: `${hotspot.x}%`,
+    top: `${hotspot.y}%`,
+  };
+}
+
+function setActiveArHotspot(hotspotId) {
+  activeArHotspotId.value = hotspotId;
+}
+
+function setActiveVrScene(sceneId) {
+  const nextScene = vrScenes.value.find((scene) => scene.id === sceneId);
+
+  if (!nextScene) {
+    return;
+  }
+
+  activeVrSceneId.value = sceneId;
+  vrPan.value = nextScene.initialPan ?? 50;
+}
+
+function setActiveVrHotspot(hotspotId) {
+  activeVrHotspotId.value = hotspotId;
+}
+
+function showPreviousScene() {
+  if (!hasPreviousVrScene.value) {
+    return;
+  }
+
+  setActiveVrScene(vrScenes.value[activeVrSceneIndex.value - 1].id);
+}
+
+function showNextScene() {
+  if (!hasNextVrScene.value) {
+    return;
+  }
+
+  setActiveVrScene(vrScenes.value[activeVrSceneIndex.value + 1].id);
+}
+
+function releaseVrDrag() {
+  vrDragging.value = false;
+}
+
+function handleVrPointerDown(event) {
+  if (event.pointerType === 'mouse' && event.button !== 0) {
+    return;
+  }
+
+  vrDragging.value = true;
+  vrDragStartX.value = event.clientX;
+  vrDragStartPan.value = vrPan.value;
+  event.currentTarget?.setPointerCapture?.(event.pointerId);
+}
+
+function handleVrPointerMove(event) {
+  if (!vrDragging.value) {
+    return;
+  }
+
+  const width = event.currentTarget?.clientWidth || 1;
+  const deltaX = event.clientX - vrDragStartX.value;
+  vrPan.value = clamp(vrDragStartPan.value - (deltaX / width) * 100, 0, 100);
+}
+
+function handleVrPointerUp(event) {
+  releaseVrDrag();
+  event.currentTarget?.releasePointerCapture?.(event.pointerId);
+}
+
+onBeforeUnmount(() => {
+  stopArCamera();
+  setBodyScrollLocked(false);
+  setKeyboardListener(false);
+});
 
 const themeStyle = computed(() => ({
   '--garden-accent': design.value.accent || '#5F7F72',
@@ -101,7 +712,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
             class="detail-prelude"
           >
             <div class="detail-prelude__copy">
-              <span class="detail-prelude__label">{{ design.heroPreludeLabel || '观园引子' }}</span>
+              <span class="detail-prelude__label">{{ design.heroPreludeLabel || pageText.preludeLabel }}</span>
               <strong v-if="design.heroPreludeTitle">{{ design.heroPreludeTitle }}</strong>
               <p v-if="design.heroPreludeText">{{ design.heroPreludeText }}</p>
             </div>
@@ -134,7 +745,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
             class="detail-action-link detail-action-link--primary"
             v-bind="resolveLinkProps(garden.backHref || '/')"
           >
-            {{ garden.backLabel || '返回首页' }}
+            {{ garden.backLabel || pageText.backLabel }}
           </component>
           <component
             v-if="garden.nextGarden"
@@ -142,15 +753,22 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
             class="detail-action-link detail-action-link--ghost"
             v-bind="resolveLinkProps(garden.nextGarden.href)"
           >
-            继续看 {{ garden.nextGarden.label }}
+            {{ pageText.nextPrefix }}{{ garden.nextGarden.label }}
           </component>
+          <RouterLink
+            v-if="garden.panoramaHref"
+            :to="garden.panoramaHref"
+            class="detail-action-link detail-action-link--soft"
+          >
+            {{ pageText.panoramaAction }}
+          </RouterLink>
           <button
             v-if="resolvedPoi"
             type="button"
             class="detail-action-link detail-action-link--ghost"
             @click="mapVisible = true"
           >
-            地图导航
+            {{ pageText.mapAction }}
           </button>
         </div>
       </div>
@@ -163,9 +781,9 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 
     <section class="detail-panel detail-panel--highlights">
       <div class="detail-panel__header">
-        <p class="eyebrow">核心看点</p>
-        <h2>这座园林值得慢慢看的地方</h2>
-        <p>{{ design.highlightIntro || '把速度放慢一点，园林真正的层次会在转折、停顿与回望中浮出来。' }}</p>
+        <p class="eyebrow">{{ pageText.highlightsEyebrow }}</p>
+        <h2>{{ pageText.highlightsTitle }}</h2>
+        <p>{{ design.highlightIntro || pageText.highlightIntro }}</p>
       </div>
 
       <div class="detail-highlight-list">
@@ -178,9 +796,9 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 
     <section v-if="galleryItems.length" class="detail-panel horizontal-gallery">
       <div class="detail-panel__header horizontal-gallery__header">
-        <p class="eyebrow">横向画卷</p>
-        <h2>{{ design.galleryTitle || '沿着一卷景色慢慢展开' }}</h2>
-        <p>{{ design.galleryIntro || '横向轻扫，让视线像展开手卷一样，一景接一景地慢慢打开。' }}</p>
+        <p class="eyebrow">{{ pageText.galleryEyebrow }}</p>
+        <h2>{{ design.galleryTitle || pageText.galleryTitle }}</h2>
+        <p>{{ design.galleryIntro || pageText.galleryIntro }}</p>
       </div>
 
       <div class="horizontal-gallery__track">
@@ -206,9 +824,9 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     <section class="detail-grid">
       <aside class="detail-panel detail-panel--stepper">
         <div class="detail-panel__header">
-          <p class="eyebrow">可视化游线</p>
-          <h2>一条更顺的游览顺序</h2>
-          <p>{{ design.stepperIntro || '先建立整体感，再回到细节和边缘位置，游园节奏会更顺。' }}</p>
+          <p class="eyebrow">{{ pageText.stepperEyebrow }}</p>
+          <h2>{{ pageText.stepperTitle }}</h2>
+          <p>{{ design.stepperIntro || pageText.stepperIntro }}</p>
         </div>
 
         <ol class="tour-stepper">
@@ -225,9 +843,9 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 
       <section class="detail-panel detail-panel--tips">
         <div class="detail-panel__header">
-          <p class="eyebrow">慢游贴士</p>
-          <h2>{{ design.tipsTitle || '第一次来可以这样安排' }}</h2>
-          <p>{{ design.tipsIntro || '不赶时间时，景会慢慢长出来；留白和停顿，也是这页设计里很重要的一部分。' }}</p>
+          <p class="eyebrow">{{ pageText.tipsEyebrow }}</p>
+          <h2>{{ design.tipsTitle || pageText.tipsTitle }}</h2>
+          <p>{{ design.tipsIntro || pageText.tipsIntro }}</p>
         </div>
 
         <ul class="detail-tips-list">
@@ -246,7 +864,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
           class="detail-action-link detail-action-link--inline"
           v-bind="resolveLinkProps(item.href)"
         >
-          跳转详情
+          {{ pageText.relatedAction }}
         </component>
       </article>
     </section>
@@ -254,7 +872,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     <ScenicMapDialog
       :show="mapVisible"
       :poi="resolvedPoi"
-      :title="`${garden.name} 导航地图`"
+      :title="`${garden.name}${pageText.mapTitleSuffix}`"
       @update:show="mapVisible = $event"
     />
   </article>
@@ -268,7 +886,6 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   padding-top: 28px;
   padding-bottom: 104px;
   isolation: isolate;
-  overflow-x: hidden;
 }
 
 .garden-detail-page > * {
@@ -563,6 +1180,12 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   color: var(--garden-accent);
 }
 
+.detail-action-link--soft {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(var(--garden-accent-rgb), 0.12);
+  color: white;
+}
+
 .detail-hero-note {
   position: absolute;
   right: 2rem;
@@ -637,6 +1260,65 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     0 18px 40px rgba(28, 25, 23, 0.06);
 }
 
+.immersive-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.immersive-card {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(var(--garden-accent-rgb), 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 18px 40px rgba(28, 25, 23, 0.06);
+}
+
+.immersive-card__head {
+  display: grid;
+  gap: 10px;
+}
+
+.immersive-card__head strong {
+  line-height: 1.4;
+}
+
+.immersive-card > p {
+  margin: 0;
+  color: var(--garden-muted);
+  line-height: 1.82;
+}
+
+.immersive-card__badge {
+  width: fit-content;
+  padding: 0.4rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(var(--garden-accent-rgb), 0.08);
+  color: rgba(var(--garden-accent-rgb), 0.9);
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+}
+
+.immersive-card__stats {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--garden-muted);
+}
+
+.immersive-card__stats strong {
+  color: var(--garden-accent);
+  font-size: 1.8rem;
+}
+
+.immersive-card__action {
+  justify-self: start;
+}
+
 .horizontal-gallery {
   overflow: hidden;
 }
@@ -646,12 +1328,9 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   gap: 18px;
   overflow-x: auto;
   padding-bottom: 6px;
-  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scroll-padding-inline: 2px;
   touch-action: pan-x;
 }
 
@@ -668,7 +1347,6 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   background: rgba(var(--garden-accent-rgb), 0.08);
   box-shadow: 0 18px 42px rgba(28, 25, 23, 0.08);
   scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 .gallery-card--panorama {
@@ -861,50 +1539,347 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   background: linear-gradient(90deg, var(--garden-accent), rgba(var(--garden-secondary-rgb), 0.38));
 }
 
+.immersive-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.immersive-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(10, 14, 20, 0.72);
+  cursor: pointer;
+}
+
+.immersive-dialog__panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 20px;
+  width: min(1200px, 100%);
+  max-height: calc(100vh - 4rem);
+  padding: 24px;
+  overflow: auto;
+  border-radius: 32px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 246, 243, 0.94)),
+    rgba(255, 255, 255, 0.96);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.34);
+}
+
+.immersive-dialog__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.immersive-dialog__copy {
+  display: grid;
+  gap: 10px;
+  max-width: 56rem;
+}
+
+.immersive-dialog__copy h2,
+.immersive-sidepanel__section h3 {
+  margin: 0;
+}
+
+.immersive-dialog__copy p:last-child,
+.immersive-sidepanel__section p,
+.immersive-sidepanel__item span {
+  color: var(--garden-muted);
+  line-height: 1.82;
+}
+
+.immersive-dialog__close,
+.vr-stage__nav {
+  padding: 0.8rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--garden-accent-rgb), 0.18);
+  background: white;
+  color: var(--garden-accent);
+  cursor: pointer;
+}
+
+.immersive-dialog__body {
+  display: grid;
+  gap: 20px;
+}
+
+.immersive-dialog__body--ar,
+.vr-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  gap: 20px;
+}
+
+.immersive-stage,
+.immersive-sidepanel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 28px;
+  border: 1px solid rgba(var(--garden-accent-rgb), 0.12);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.immersive-stage__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  color: var(--garden-muted);
+}
+
+.immersive-status-chip {
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(var(--garden-accent-rgb), 0.08);
+  color: var(--garden-accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.immersive-stage__media,
+.vr-stage__viewport {
+  position: relative;
+  overflow: hidden;
+  min-height: 460px;
+  border-radius: 24px;
+  background: rgba(10, 14, 20, 0.08);
+}
+
+.immersive-stage__media::after,
+.vr-stage__viewport::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.28)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.14), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.14));
+  pointer-events: none;
+}
+
+.immersive-video,
+.immersive-fallback,
+.vr-stage__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vr-stage__track {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  transition: transform 0.36s ease;
+}
+
+.ar-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ar-hud__reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 110px;
+  height: 110px;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 18px rgba(255, 255, 255, 0.08);
+}
+
+.ar-hud__scanline {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.84), transparent);
+  animation: scanline 3.2s ease-in-out infinite;
+}
+
+.immersive-hotspot {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transform: translate(-50%, -50%);
+  padding: 0.5rem 0.82rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(13, 18, 24, 0.44);
+  color: white;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition:
+    transform 0.24s ease,
+    background-color 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+.immersive-hotspot:hover,
+.immersive-hotspot.is-active {
+  transform: translate(-50%, -50%) scale(1.04);
+  background: rgba(var(--garden-accent-rgb), 0.76);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.immersive-hotspot span {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.immersive-hotspot::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.14);
+}
+
+.immersive-sidepanel {
+  align-content: start;
+}
+
+.immersive-sidepanel__section {
+  display: grid;
+  gap: 10px;
+}
+
+.immersive-sidepanel__section p {
+  margin: 0;
+}
+
+.immersive-sidepanel__fact {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(var(--garden-accent-rgb), 0.06);
+  color: var(--garden-muted);
+}
+
+.immersive-sidepanel__fact strong {
+  color: var(--garden-accent);
+}
+
+.immersive-sidepanel__note {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(159, 63, 52, 0.08);
+  color: #8d3a30;
+  line-height: 1.7;
+}
+
+.immersive-sidepanel__list {
+  display: grid;
+  gap: 10px;
+}
+
+.immersive-sidepanel__item {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  text-align: left;
+  border-radius: 18px;
+  border: 1px solid rgba(var(--garden-accent-rgb), 0.12);
+  background: rgba(255, 255, 255, 0.76);
+  cursor: pointer;
+  transition:
+    transform 0.24s ease,
+    border-color 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+.immersive-sidepanel__item:hover,
+.immersive-sidepanel__item.is-active {
+  transform: translateY(-1px);
+  border-color: rgba(var(--garden-accent-rgb), 0.28);
+  box-shadow: 0 12px 24px rgba(28, 25, 23, 0.08);
+}
+
+.immersive-sidepanel__item strong {
+  line-height: 1.45;
+}
+
+.vr-stage__viewport {
+  touch-action: none;
+  cursor: grab;
+}
+
+.vr-stage__viewport:active {
+  cursor: grabbing;
+}
+
+.vr-stage__hint {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2;
+  padding: 0.75rem 0.95rem;
+  border-radius: 16px;
+  background: rgba(13, 18, 24, 0.4);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.vr-stage__controls {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.vr-stage__nav:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+
+.vr-stage__meter {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(var(--garden-accent-rgb), 0.08);
+}
+
+.vr-stage__meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--garden-accent), rgba(var(--garden-secondary-rgb), 0.56));
+}
+
 .garden-detail-page--zhuozheng .detail-hero {
-  min-height: min(72vh, 680px);
+  min-height: min(78vh, 760px);
 }
 
 .garden-detail-page--zhuozheng .detail-hero-card {
-  background: rgba(242, 248, 245, 0.34);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow:
-    0 24px 56px rgba(28, 25, 23, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: rgba(242, 248, 245, 0.18);
 }
 
 .garden-detail-page--zhuozheng .detail-hero-note {
-  background: rgba(240, 248, 244, 0.34);
-}
-
-.garden-detail-page--zhuozheng .detail-copy .eyebrow,
-.garden-detail-page--zhuozheng .detail-title span,
-.garden-detail-page--zhuozheng .detail-intro,
-.garden-detail-page--zhuozheng .detail-metric span {
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.garden-detail-page--zhuozheng .detail-title,
-.garden-detail-page--zhuozheng .detail-metric strong,
-.garden-detail-page--zhuozheng .detail-prelude__copy strong {
-  color: #ffffff;
-}
-
-.garden-detail-page--zhuozheng .detail-prelude {
-  background: rgba(242, 248, 245, 0.2);
-  border-color: rgba(255, 255, 255, 0.22);
-}
-
-.garden-detail-page--zhuozheng .detail-prelude__copy p,
-.garden-detail-page--zhuozheng .detail-prelude__chips span,
-.garden-detail-page--zhuozheng .detail-badges span {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.garden-detail-page--zhuozheng .detail-badges span,
-.garden-detail-page--zhuozheng .detail-metric {
-  background: rgba(255, 255, 255, 0.24);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(240, 248, 244, 0.24);
 }
 
 .garden-detail-page--zhuozheng .tour-stepper::before {
@@ -1022,14 +1997,14 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 
 .garden-detail-page--wangshiyuan .detail-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.8fr);
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
   grid-template-areas:
     'card media'
     'note media';
-  gap: 20px 24px;
-  align-items: center;
-  min-height: 660px;
-  padding: 2.4rem;
+  gap: 24px 30px;
+  align-items: start;
+  min-height: 760px;
+  padding: 3rem;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 246, 243, 0.98)),
     rgba(255, 255, 255, 0.92);
@@ -1040,7 +2015,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   inset: auto;
   grid-area: media;
   display: grid;
-  align-content: center;
+  align-content: start;
   min-height: 100%;
 }
 
@@ -1050,8 +2025,8 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   right: auto;
   bottom: auto;
   left: auto;
-  width: min(100%, 360px);
-  height: clamp(420px, 56vh, 520px);
+  width: min(100%, 380px);
+  height: clamp(520px, 66vh, 620px);
   margin-left: auto;
   border-radius: 32px;
   box-shadow: 0 26px 60px rgba(28, 25, 23, 0.18);
@@ -1139,8 +2114,8 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   position: relative;
   inset: auto;
   grid-area: note;
-  width: min(380px, 100%);
-  margin-top: 0;
+  width: min(420px, 100%);
+  margin-top: 4px;
   background: rgba(28, 25, 23, 0.04);
   border-color: rgba(159, 63, 52, 0.18);
   color: var(--ink-900);
@@ -1165,196 +2140,41 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   box-shadow: 0 0 0 6px rgba(159, 63, 52, 0.1);
 }
 
-/* 拙政园：雅绿色系 */
-.garden-detail-page--zhuozheng {
-  --garden-accent: #637768;
-  --garden-accent-rgb: 99, 119, 104;
-  --garden-secondary: #A4B7A5;
-  --garden-secondary-rgb: 164, 183, 165;
+@keyframes page-reveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
 }
 
-.garden-detail-page--zhuozheng .detail-hero-card {
-  background: rgba(238, 244, 239, 0.88);
-  border-color: rgba(99, 119, 104, 0.18);
-  box-shadow:
-    0 24px 56px rgba(28, 25, 23, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
+@keyframes scanline {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
 
-.garden-detail-page--zhuozheng .detail-hero-note,
-.garden-detail-page--zhuozheng .detail-badges span,
-.garden-detail-page--zhuozheng .detail-metric {
-  background: rgba(244, 248, 244, 0.76);
-  border-color: rgba(99, 119, 104, 0.14);
+  50% {
+    transform: translateY(260px);
+    opacity: 1;
+  }
 }
-
-.garden-detail-page--zhuozheng .detail-prelude {
-  background: linear-gradient(135deg, rgba(164, 183, 165, 0.18), rgba(255, 255, 255, 0.55));
-  border-color: rgba(99, 119, 104, 0.16);
-}
-
-.garden-detail-page--zhuozheng .detail-copy .eyebrow,
-.garden-detail-page--zhuozheng .detail-prelude__label,
-.garden-detail-page--zhuozheng .detail-title span,
-.garden-detail-page--zhuozheng .detail-intro,
-.garden-detail-page--zhuozheng .detail-metric span,
-.garden-detail-page--zhuozheng .detail-prelude__copy p,
-.garden-detail-page--zhuozheng .detail-hero-note span {
-  color: rgba(44, 57, 48, 0.8);
-}
-
-.garden-detail-page--zhuozheng .detail-title,
-.garden-detail-page--zhuozheng .detail-metric strong,
-.garden-detail-page--zhuozheng .detail-prelude__copy strong,
-.garden-detail-page--zhuozheng .detail-hero-note strong,
-.garden-detail-page--zhuozheng .detail-badges span,
-.garden-detail-page--zhuozheng .detail-prelude__chips span {
-  color: #2f3d34;
-}
-
-.garden-detail-page--zhuozheng .detail-prelude__chips span {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: rgba(99, 119, 104, 0.14);
-}
-
-.garden-detail-page--zhuozheng .detail-floating-tags span {
-  background: rgba(244, 248, 244, 0.84);
-  border-color: rgba(99, 119, 104, 0.16);
-  color: #2f3d34;
-}
-
-/* 留园：温润高级灰 */
-.garden-detail-page--liuyuan {
-  --garden-accent: #8E9295;
-  --garden-accent-rgb: 142, 146, 149;
-  --garden-secondary: #5C5F62;
-  --garden-secondary-rgb: 92, 95, 98;
-}
-
-.garden-detail-page--liuyuan .detail-watermark {
-  color: rgba(92, 95, 98, 0.06);
-}
-
-.garden-detail-page--liuyuan .detail-hero-card {
-  background: rgba(244, 244, 242, 0.88);
-  border-color: rgba(92, 95, 98, 0.16);
-  box-shadow:
-    0 24px 56px rgba(28, 25, 23, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-.garden-detail-page--liuyuan .detail-prelude {
-  background: linear-gradient(135deg, rgba(142, 146, 149, 0.16), rgba(255, 255, 255, 0.58));
-  border-color: rgba(92, 95, 98, 0.14);
-}
-
-.garden-detail-page--liuyuan .detail-copy .eyebrow,
-.garden-detail-page--liuyuan .detail-prelude__label,
-.garden-detail-page--liuyuan .detail-title span,
-.garden-detail-page--liuyuan .detail-intro,
-.garden-detail-page--liuyuan .detail-metric span,
-.garden-detail-page--liuyuan .detail-prelude__copy p,
-.garden-detail-page--liuyuan .detail-hero-note span {
-  color: rgba(74, 78, 82, 0.82);
-}
-
-.garden-detail-page--liuyuan .detail-title,
-.garden-detail-page--liuyuan .detail-metric strong,
-.garden-detail-page--liuyuan .detail-prelude__copy strong,
-.garden-detail-page--liuyuan .detail-hero-note strong,
-.garden-detail-page--liuyuan .detail-badges span,
-.garden-detail-page--liuyuan .detail-prelude__chips span {
-  color: #4d5154;
-}
-
-.garden-detail-page--liuyuan .detail-badges span,
-.garden-detail-page--liuyuan .detail-metric,
-.garden-detail-page--liuyuan .detail-hero-note,
-.garden-detail-page--liuyuan .detail-floating-tags span {
-  background: rgba(248, 248, 246, 0.8);
-  border-color: rgba(92, 95, 98, 0.14);
-}
-
-.garden-detail-page--liuyuan .detail-floating-tags span {
-  color: #5c5f62;
-}
-
-.garden-detail-page--liuyuan .detail-prelude__chips span {
-  background: rgba(255, 255, 255, 0.76);
-  border-color: rgba(92, 95, 98, 0.14);
-}
-
-/* 网师园：黛色 + 纸纱黄 */
-.garden-detail-page--wangshiyuan {
-  --garden-accent: #3D4C53;
-  --garden-accent-rgb: 61, 76, 83;
-  --garden-secondary: #D4C4A9;
-  --garden-secondary-rgb: 212, 196, 169;
-}
-
-.garden-detail-page--wangshiyuan .detail-hero-card {
-  background: rgba(244, 241, 235, 0.9);
-  border-color: rgba(61, 76, 83, 0.16);
-  box-shadow:
-    0 24px 56px rgba(28, 25, 23, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-.garden-detail-page--wangshiyuan .detail-hero-note,
-.garden-detail-page--wangshiyuan .detail-badges span,
-.garden-detail-page--wangshiyuan .detail-metric {
-  background: rgba(250, 245, 235, 0.78);
-  border-color: rgba(61, 76, 83, 0.14);
-}
-
-.garden-detail-page--wangshiyuan .detail-prelude {
-  background: linear-gradient(135deg, rgba(212, 196, 169, 0.24), rgba(255, 255, 255, 0.52));
-  border-color: rgba(61, 76, 83, 0.16);
-}
-
-.garden-detail-page--wangshiyuan .detail-copy .eyebrow,
-.garden-detail-page--wangshiyuan .detail-prelude__label,
-.garden-detail-page--wangshiyuan .detail-title span,
-.garden-detail-page--wangshiyuan .detail-intro,
-.garden-detail-page--wangshiyuan .detail-metric span,
-.garden-detail-page--wangshiyuan .detail-prelude__copy p,
-.garden-detail-page--wangshiyuan .detail-hero-note span {
-  color: rgba(61, 76, 83, 0.8);
-}
-
-.garden-detail-page--wangshiyuan .detail-title,
-.garden-detail-page--wangshiyuan .detail-metric strong,
-.garden-detail-page--wangshiyuan .detail-prelude__copy strong,
-.garden-detail-page--wangshiyuan .detail-hero-note strong,
-.garden-detail-page--wangshiyuan .detail-badges span,
-.garden-detail-page--wangshiyuan .detail-prelude__chips span {
-  color: #2f3b41;
-}
-
-.garden-detail-page--wangshiyuan .detail-prelude__chips span {
-  background: rgba(255, 249, 239, 0.82);
-  border-color: rgba(212, 196, 169, 0.36);
-}
-
-.garden-detail-page--wangshiyuan .detail-floating-tags span {
-  background: rgba(250, 245, 235, 0.84);
-  border-color: rgba(61, 76, 83, 0.14);
-  color: #2f3b41;
-}
-
 
 @media (max-width: 1180px) {
   .detail-highlight-list,
+  .immersive-mode-grid,
   .detail-related,
-  .detail-grid {
+  .detail-grid,
+  .immersive-dialog__body--ar,
+  .vr-layout {
     grid-template-columns: 1fr;
   }
 
   .garden-detail-page--wangshiyuan .detail-hero {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.74fr);
-    gap: 18px 20px;
-    min-height: 600px;
-    padding: 2rem;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.78fr);
+    gap: 22px 24px;
+    padding: 2.4rem;
   }
 
   .garden-detail-page--wangshiyuan .detail-hero-card {
@@ -1451,6 +2271,24 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     order: 3;
   }
 
+  .immersive-dialog {
+    padding: 1rem;
+  }
+
+  .immersive-dialog__panel {
+    max-height: calc(100vh - 2rem);
+    padding: 18px;
+  }
+
+  .immersive-dialog__header {
+    flex-direction: column;
+  }
+
+  .immersive-stage__media,
+  .vr-stage__viewport {
+    min-height: 360px;
+  }
+
   .gallery-card--panorama,
   .gallery-card--landscape,
   .gallery-card--portrait,
@@ -1470,348 +2308,12 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   }
 }
 
-@media (max-width: 768px) {
-  .garden-detail-page {
-    width: 100%;
-    max-width: 100vw;
-    gap: 18px;
-    padding-top: 16px;
-    padding-bottom: calc(92px + env(safe-area-inset-bottom));
-    overflow-x: hidden;
-    box-sizing: border-box;
-  }
-
-  .garden-detail-page--zhuozheng .detail-hero-card {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(95, 127, 114, 0.16);
-  }
-
-  .garden-detail-page--zhuozheng .detail-copy .eyebrow,
-  .garden-detail-page--zhuozheng .detail-prelude__label,
-  .garden-detail-page--zhuozheng .detail-title span,
-  .garden-detail-page--zhuozheng .detail-intro,
-  .garden-detail-page--zhuozheng .detail-prelude__copy p,
-  .garden-detail-page--zhuozheng .detail-prelude__chips span,
-  .garden-detail-page--zhuozheng .detail-badges span,
-  .garden-detail-page--zhuozheng .detail-metric span {
-    color: rgba(28, 25, 23, 0.78);
-  }
-
-  .garden-detail-page--zhuozheng .detail-title,
-  .garden-detail-page--zhuozheng .detail-prelude__copy strong,
-  .garden-detail-page--zhuozheng .detail-metric strong {
-    color: var(--ink-900, #333333);
-  }
-
-  .garden-detail-page--zhuozheng .detail-prelude,
-  .garden-detail-page--zhuozheng .detail-badges span,
-  .garden-detail-page--zhuozheng .detail-metric {
-    background: rgba(255, 255, 255, 0.72);
-    border-color: rgba(95, 127, 114, 0.14);
-  }
-
-  /* 2. 留园：标签换行，避免重叠溢出 */
-  .garden-detail-page--liuyuan .detail-badges,
-  .garden-detail-page--liuyuan .detail-floating-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: flex-start;
-  }
-
-  .garden-detail-page--liuyuan .detail-badges span,
-  .garden-detail-page--liuyuan .detail-floating-tags span {
-    position: static;
-    margin: 0;
-    max-width: 100%;
-    flex: 0 1 auto;
-  }
-
-  /* 3. 网师园：移动端强制改为上下堆叠 */
-  .garden-detail-page--wangshiyuan .detail-hero {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .garden-detail-page--wangshiyuan .detail-hero-media,
-  .garden-detail-page--wangshiyuan .detail-hero-card,
-  .garden-detail-page--wangshiyuan .detail-hero-note,
-  .garden-detail-page--wangshiyuan .detail-copy,
-  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-  }
-
-  .garden-detail-page--wangshiyuan .detail-hero-media {
-    display: block;
-  }
-
-  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
-    margin-left: 0;
-    height: auto;
-  }
-
-  .detail-hero,
-  .detail-panel,
-  .related-card,
-  .detail-hero-card,
-  .detail-hero-note,
-  .detail-highlight-item,
-  .detail-metric,
-  .detail-action-link,
-  .detail-tips-list li,
-  .gallery-card__overlay,
-  .horizontal-gallery,
-  .horizontal-gallery__track,
-  .detail-highlight-list,
-  .detail-grid,
-  .detail-related {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
-  .detail-copy,
-  .detail-panel__header,
-  .detail-highlight-item,
-  .related-card,
-  .tour-stepper__item,
-  .tour-stepper__content,
-  .detail-action-link {
-    min-width: 0;
-  }
-
-  .detail-watermark,
-  .garden-detail-page--liuyuan .detail-watermark,
-  .garden-detail-page--wangshiyuan .detail-watermark {
-    top: 5.5rem;
-    right: -0.18em;
-    font-size: clamp(7rem, 34vw, 12rem);
-    line-height: 0.9;
-  }
-
-  .detail-hero,
-  .garden-detail-page--liuyuan .detail-hero,
-  .garden-detail-page--wangshiyuan .detail-hero {
-    gap: 14px;
-    padding: 16px;
-    border-radius: 28px;
-  }
-
-  .detail-hero-media,
-  .garden-detail-page--wangshiyuan .detail-hero-media {
-    min-height: auto;
-  }
-
-  .detail-hero-image-shell,
-  .garden-detail-page--liuyuan .detail-hero-image-shell,
-  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
-    width: 100%;
-    max-width: 100%;
-    aspect-ratio: 5 / 4;
-    min-height: 240px;
-    border-radius: 24px;
-    box-sizing: border-box;
-  }
-
-  .detail-hero-image,
-  .gallery-card__image {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .detail-floating-tags {
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .detail-floating-tags span,
-  .garden-detail-page--liuyuan .detail-floating-tags span,
-  .garden-detail-page--wangshiyuan .detail-floating-tags span {
-    padding: 0.5rem 0.78rem;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    box-sizing: border-box;
-  }
-
-  .detail-panel,
-  .related-card,
-  .detail-hero-card,
-  .detail-hero-note,
-  .garden-detail-page--liuyuan .detail-hero-note,
-  .garden-detail-page--wangshiyuan .detail-hero-note {
-    padding: 18px;
-    border-radius: 24px;
-  }
-
-  .detail-copy,
-  .detail-panel,
-  .related-card {
-    gap: 16px;
-  }
-
-  .detail-title {
-    font-size: clamp(2rem, 9vw, 2.8rem);
-    gap: 6px;
-  }
-
-  .detail-title span {
-    font-size: clamp(0.92rem, 4vw, 1.12rem);
-  }
-
-  .detail-intro,
-  .detail-panel__header p:last-child,
-  .related-card span,
-  .detail-highlight-item p,
-  .tour-stepper__content span,
-  .detail-tips-list li,
-  .gallery-card__overlay span {
-    line-height: 1.72;
-  }
-
-  .detail-badges {
-    gap: 8px;
-  }
-
-  .detail-badges span {
-    padding: 0.42rem 0.72rem;
-    font-size: 0.76rem;
-  }
-
-  .detail-metrics {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .detail-metric {
-    padding: 12px 14px;
-    border-radius: 18px;
-  }
-
-  .detail-actions {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .detail-badges,
-  .detail-prelude__chips,
-  .detail-floating-tags {
-    max-width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .detail-action-link {
-    width: 100%;
-    min-height: 3rem;
-  }
-
-  .detail-panel__header {
-    gap: 10px;
-  }
-
-  .detail-highlight-list,
-  .detail-grid,
-  .detail-related {
-    gap: 14px;
-  }
-
-  .detail-highlight-item {
-    padding: 18px;
-    border-radius: 20px;
-  }
-
-  .horizontal-gallery {
-    overflow: hidden;
-  }
-
-  .horizontal-gallery__track {
-    flex-wrap: nowrap;
-    gap: 12px;
-    padding-bottom: 2px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-  }
-
-  .gallery-card--panorama,
-  .gallery-card--landscape,
-  .gallery-card--square {
-    width: min(82vw, 360px);
-  }
-
-  .gallery-card--portrait,
-  .gallery-card--tall {
-    width: min(68vw, 280px);
-  }
-
-  .detail-hero-card,
-  .detail-hero-note,
-  .garden-detail-page--liuyuan .detail-hero-card,
-  .garden-detail-page--liuyuan .detail-hero-note,
-  .garden-detail-page--wangshiyuan .detail-hero-note {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .gallery-card__overlay {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-    gap: 4px;
-    padding: 12px 13px;
-    border-radius: 16px;
-  }
-
-  .gallery-card__overlay strong {
-    font-size: 0.94rem;
-  }
-
-  .gallery-card__overlay span {
-    font-size: 0.84rem;
-  }
-
-  .tour-stepper {
-    gap: 18px;
-    padding-top: 2px;
-  }
-
-  .tour-stepper::before {
-    left: 17px;
-    width: 8px;
-  }
-
-  .tour-stepper__item {
-    gap: 12px;
-  }
-
-  .tour-stepper__count {
-    min-width: 2rem;
-    font-size: 0.94rem;
-  }
-
-  .detail-tips-list {
-    gap: 10px;
-  }
-
-  .detail-tips-list li {
-    padding: 14px 16px 14px 40px;
-    border-radius: 18px;
-  }
-
-  .detail-tips-list li::before {
-    top: 19px;
-    left: 16px;
-  }
-}
-
 @media (max-width: 640px) {
   .detail-panel,
   .related-card,
-  .detail-hero-card {
+  .detail-hero-card,
+  .immersive-stage,
+  .immersive-sidepanel {
     padding: 22px;
   }
 
@@ -1835,6 +2337,15 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     font-size: 52vw;
   }
 
+  .immersive-stage__media,
+  .vr-stage__viewport {
+    min-height: 300px;
+  }
+
+  .vr-stage__controls {
+    grid-template-columns: 1fr;
+  }
+
   .gallery-card--panorama,
   .gallery-card--landscape,
   .gallery-card--portrait,
@@ -1844,3 +2355,5 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   }
 }
 </style>
+
+

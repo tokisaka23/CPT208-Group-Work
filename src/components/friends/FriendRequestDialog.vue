@@ -1,5 +1,7 @@
 ﻿<script setup>
+import { computed } from 'vue';
 import { Button, Empty, Popup, Tag } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 defineProps({
   show: {
@@ -17,6 +19,54 @@ defineProps({
 });
 
 const emit = defineEmits(['update:show', 'accept', 'reject']);
+const { language } = useLanguage();
+
+const textSource = {
+  eyebrow: {
+    zh: '好友请求',
+    en: 'Friend Requests',
+    ja: '友だち申請',
+    ko: '친구 요청',
+  },
+  title: {
+    zh: '待你处理的申请',
+    en: 'Requests Waiting for You',
+    ja: 'あなたの対応待ち',
+    ko: '처리 대기 중인 요청',
+  },
+  desc: {
+    zh: '同意后才会进入好友列表，拒绝后本次申请不会生效。',
+    en: 'A request enters your friend list only after acceptance. Rejecting it cancels this attempt.',
+    ja: '承認すると友だち一覧に入り、拒否すると今回の申請は無効になります。',
+    ko: '수락해야 친구 목록에 들어가며, 거절하면 이번 요청은 무효가 됩니다.',
+  },
+  empty: {
+    zh: '当前没有待处理的好友请求',
+    en: 'There are no pending friend requests.',
+    ja: '保留中の友だち申請はありません。',
+    ko: '대기 중인 친구 요청이 없습니다.',
+  },
+  friendCode: {
+    zh: '好友码',
+    en: 'Friend Code',
+    ja: 'フレンドコード',
+    ko: '친구 코드',
+  },
+  reject: {
+    zh: '拒绝',
+    en: 'Reject',
+    ja: '拒否',
+    ko: '거절',
+  },
+  accept: {
+    zh: '接受',
+    en: 'Accept',
+    ja: '承認',
+    ko: '수락',
+  },
+};
+
+const text = computed(() => resolveLocalized(textSource, language.value));
 
 function closeDialog() {
   emit('update:show', false);
@@ -36,9 +86,9 @@ function closeDialog() {
     <section class="dialog-shell">
       <div class="dialog-head">
         <div>
-          <p class="dialog-eyebrow">好友请求</p>
-          <h2 class="dialog-title">待你处理的申请</h2>
-          <p class="dialog-desc">同意后才会进入好友列表，拒绝后本次申请不会生效。</p>
+          <p class="dialog-eyebrow">{{ text.eyebrow }}</p>
+          <h2 class="dialog-title">{{ text.title }}</h2>
+          <p class="dialog-desc">{{ text.desc }}</p>
         </div>
         <Tag type="primary" plain>{{ requests.length }}</Tag>
       </div>
@@ -46,7 +96,7 @@ function closeDialog() {
       <Empty
         v-if="!requests.length"
         image="search"
-        description="当前没有待处理的好友请求"
+        :description="text.empty"
       />
 
       <div v-else class="dialog-list">
@@ -56,7 +106,7 @@ function closeDialog() {
 
             <div class="dialog-info">
               <strong class="dialog-name">{{ request.username }}</strong>
-              <span class="dialog-code">好友码：{{ request.friendCode }}</span>
+              <span class="dialog-code">{{ text.friendCode }}: {{ request.friendCode }}</span>
             </div>
           </div>
 
@@ -69,7 +119,7 @@ function closeDialog() {
               :disabled="Boolean(processingId)"
               @click="emit('reject', request)"
             >
-              拒绝
+              {{ text.reject }}
             </Button>
 
             <Button
@@ -79,7 +129,7 @@ function closeDialog() {
               :disabled="Boolean(processingId)"
               @click="emit('accept', request)"
             >
-              接受
+              {{ text.accept }}
             </Button>
           </div>
         </article>

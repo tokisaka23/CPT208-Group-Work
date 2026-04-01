@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import InkCard from '../components/InkCard.vue';
-import { chapterCards, pingjiangRhythms } from '../data/siteContent';
+import { useSiteContent } from '../data/siteContent';
 import zhuozhengyuanHeroImage from '../assets/gardens/zhuozhengyuan.jpg';
 import zhuozhengyuan1Image from '../assets/gardens/zhuozhengyuan1.jpg';
 import liuyuan1Image from '../assets/gardens/liuyuan1.jpg';
@@ -26,6 +26,8 @@ import guihuatangouImage from '../assets/seasonal/guihuatangou.jpg';
 import cangshuyangrouImage from '../assets/seasonal/cangshuyangrou.jpg';
 import chidouxiaoyuanziImage from '../assets/seasonal/chidouxiaoyuanzi.jpg';
 import shengjianTangbaoImage from '../assets/seasonal/shengjian-tangbao.jpg';
+
+const { chapterCards, pingjiangRhythms } = useSiteContent();
 
 const seasonalScenes = {
   spring: {
@@ -426,7 +428,7 @@ const activeSeason = computed(() => {
       <div class="section-header season-panel__header">
         <div>
           <p class="eyebrow">Seasonal Home</p>
-          <h2 class="section-title">当前是{{ activeSeason.label }}季主页</h2>
+          <h2 class="section-title">当前是 {{ activeSeason.english }} 季主推路线</h2>
           <p class="section-lead">{{ activeSeason.note }}</p>
         </div>
       </div>
@@ -483,11 +485,11 @@ const activeSeason = computed(() => {
           <p class="eyebrow">Four Independent Pages</p>
           <h2 class="section-title">从苏州慢游主页出发，把整座城市拆成四页，各自成章。</h2>
           <p class="section-lead">
-            首页负责打开整体气质，其余三页分别承接园林、文博与非遗市井，让浏览路线更清晰，视觉语言也更专注。
+            首页负责打开整体气质，其余三页分别承接园林、文博与非遗市井，让浏览路线更清楚，视觉语言也更聚焦。
           </p>
         </div>
         <div class="section-note serif-copy">
-          这不是信息堆叠，而是一种像翻册页一样的观看方式: 一页一景，一页一气息。
+          这不是信息堆叠，而是一种像翻册页一样的观看方式：一页一景，一页一气息。
         </div>
       </div>
 

@@ -1,71 +1,109 @@
 ﻿import { createRouter, createWebHistory } from 'vue-router';
 
+import { getDocumentTitle } from '../i18n';
+
 const routes = [
   {
     path: '/',
     name: 'pingjiang',
     component: () => import('../views/Pingjiang.vue'),
-    meta: { title: '苏州慢游' },
+    meta: { titleKey: 'pingjiang' },
   },
   {
     path: '/gardens',
     name: 'gardens',
     component: () => import('../views/Gardens.vue'),
-    meta: { title: '古典园林' },
+    meta: { titleKey: 'gardens' },
   },
   {
     path: '/zhuozheng',
     name: 'zhuozhengyuan',
     component: () => import('../views/ZhuozhengyuanView.vue'),
-    meta: { title: '拙政园' },
+    meta: { titleKey: 'zhuozhengyuan' },
+  },
+  {
+    path: '/zhuozheng/panorama',
+    name: 'zhuozheng-panorama',
+    component: () => import('../views/ZhuozhengPanoramaLandingView.vue'),
+    meta: { titleKey: 'zhuozhengyuan' },
+  },
+  {
+    path: '/zhuozheng/panorama/viewer',
+    name: 'zhuozheng-panorama-viewer',
+    component: () => import('../views/ZhuozhengPanoramaRoamView.vue'),
+    meta: { titleKey: 'zhuozhengyuan' },
   },
   {
     path: '/liu',
     name: 'liuyuan',
     component: () => import('../views/LiuyuanView.vue'),
-    meta: { title: '留园' },
+    meta: { titleKey: 'liuyuan' },
+  },
+  {
+    path: '/liu/panorama',
+    name: 'liuyuan-panorama',
+    component: () => import('../views/LiuyuanPanoramaLandingView.vue'),
+    meta: { titleKey: 'liuyuan' },
+  },
+  {
+    path: '/liu/panorama/viewer',
+    name: 'liuyuan-panorama-viewer',
+    component: () => import('../views/LiuyuanPanoramaRoamView.vue'),
+    meta: { titleKey: 'liuyuan' },
   },
   {
     path: '/wangshi',
     name: 'wangshiyuan',
     component: () => import('../views/WangshiyuanView.vue'),
-    meta: { title: '网师园' },
+    meta: { titleKey: 'wangshiyuan' },
+  },
+  {
+    path: '/wangshi/panorama',
+    name: 'wangshiyuan-panorama',
+    component: () => import('../views/WangshiyuanPanoramaLandingView.vue'),
+    meta: { titleKey: 'wangshiyuan' },
+  },
+  {
+    path: '/wangshi/panorama/viewer',
+    name: 'wangshiyuan-panorama-viewer',
+    component: () => import('../views/WangshiyuanPanoramaRoamView.vue'),
+    meta: { titleKey: 'wangshiyuan' },
   },
   {
     path: '/tianping',
     name: 'tianpingshan',
     component: () => import('../views/TianpingShanView.vue'),
-    meta: { title: '天平山' },
+    meta: { titleKey: 'gardens', title: '天平山' },
   },
   {
     path: '/pingjiang-road',
     name: 'pingjiangroad',
     component: () => import('../views/PingjiangRoadView.vue'),
-    meta: { title: '平江路' },
+    meta: { titleKey: 'pingjiang', title: '平江路' },
   },
   {
     path: '/suzhou-museum',
     name: 'suzhoumuseum',
     component: () => import('../views/SuzhouMuseumView.vue'),
-    meta: { title: '苏州博物馆' },
+    meta: { titleKey: 'museums', title: '苏州博物馆' },
   },
   {
     path: '/museums',
     name: 'museums',
     component: () => import('../views/Museums.vue'),
-    meta: { title: '文博殿堂' },
+    meta: { titleKey: 'museums' },
   },
   {
     path: '/heritage',
     name: 'heritage',
     component: () => import('../views/Heritage.vue'),
-    meta: { title: '非遗市井' },
+    meta: { titleKey: 'heritage' },
   },
   {
     path: '/favorites',
     name: 'favorites',
     component: () => import('../views/FavoritesView.vue'),
-    meta: { title: '收藏夹' },
+    meta: { titleKey: 'pingjiang', title: '收藏夹' },
   },
 ];
 
@@ -79,7 +117,7 @@ const router = createRouter({
 
 router.afterEach((to) => {
   if (typeof document !== 'undefined') {
-    document.title = `${to.meta.title || '江南慢游'} · Jiangnan`;
+    document.title = to.meta.title || getDocumentTitle(to.meta.titleKey || 'pingjiang');
   }
 });
 

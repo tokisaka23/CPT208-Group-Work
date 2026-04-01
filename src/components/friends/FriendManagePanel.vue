@@ -1,26 +1,110 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Button, Empty, Icon, Tag } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
-const text = {
-  title: '\u6211\u7684\u597d\u53cb',
-  desc: '\u70b9\u51fb\u597d\u53cb\u53ef\u67e5\u770b\u72b6\u6001\u6216\u5b9a\u4f4d\uff0c\u4e5f\u53ef\u4ee5\u76f4\u63a5\u5220\u9664\u6216\u62c9\u9ed1',
-  createLabel: '\u65b0\u5efa',
-  createGroup: '\u53d1\u8d77\u7fa4\u804a',
-  empty: '\u6682\u65f6\u8fd8\u6ca1\u6709\u597d\u53cb\uff0c\u5148\u53bb\u4ea4\u6362\u597d\u53cb\u7801\u5427',
-  online: '\u5728\u7ebf',
-  offline: '\u79bb\u7ebf',
-  sharingOn: '\u5df2\u5f00\u653e\u4f4d\u7f6e\u5171\u4eab',
-  sharingOff: '\u672a\u5f00\u653e\u4f4d\u7f6e\u5171\u4eab',
-  statusOnline: '\u5f53\u524d\u5728\u7ebf\uff0c\u53ef\u4ee5\u70b9\u51fb\u67e5\u770b\u5b9e\u65f6\u5b9a\u4f4d',
-  statusSharingOff: '\u5f53\u524d\u5728\u7ebf\uff0c\u4f46\u6682\u672a\u5f00\u653e\u4f4d\u7f6e\u5171\u4eab',
-  statusOffline: '\u5f53\u524d\u79bb\u7ebf\uff0c\u6682\u65f6\u65e0\u6cd5\u67e5\u770b\u5b9a\u4f4d',
-  viewLocation: '\u67e5\u770b\u5b9a\u4f4d',
-  viewStatus: '\u67e5\u770b\u72b6\u6001',
-  viewFavorites: '\u67e5\u770b\u6536\u85cf\u5939',
-  remove: '\u5220\u9664\u597d\u53cb',
-  block: '\u62c9\u9ed1',
+const { language } = useLanguage();
+
+const textSource = {
+  title: {
+    zh: '我的好友',
+    en: 'My Friends',
+    ja: '友だち一覧',
+    ko: '내 친구',
+  },
+  desc: {
+    zh: '点击好友可查看状态或定位，也可以直接删除或拉黑',
+    en: 'Tap a friend to view status or location, or remove and block them directly.',
+    ja: '友だちをタップすると状態や位置を確認でき、削除やブロックもできます。',
+    ko: '친구를 누르면 상태나 위치를 볼 수 있고 바로 삭제하거나 차단할 수도 있습니다.',
+  },
+  createLabel: {
+    zh: '新建',
+    en: 'Create',
+    ja: '新規作成',
+    ko: '새로 만들기',
+  },
+  createGroup: {
+    zh: '发起群聊',
+    en: 'Create Group Chat',
+    ja: 'グループチャットを作成',
+    ko: '그룹 채팅 만들기',
+  },
+  empty: {
+    zh: '暂时还没有好友，先去交换好友码吧',
+    en: 'No friends yet. Start by exchanging friend codes.',
+    ja: 'まだ友だちがいません。まずはフレンドコードを交換しましょう。',
+    ko: '아직 친구가 없습니다. 먼저 친구 코드를 교환해 보세요.',
+  },
+  online: {
+    zh: '在线',
+    en: 'Online',
+    ja: 'オンライン',
+    ko: '온라인',
+  },
+  offline: {
+    zh: '离线',
+    en: 'Offline',
+    ja: 'オフライン',
+    ko: '오프라인',
+  },
+  sharingOn: {
+    zh: '已开放位置共享',
+    en: 'Location sharing on',
+    ja: '位置共有オン',
+    ko: '위치 공유 켜짐',
+  },
+  sharingOff: {
+    zh: '未开放位置共享',
+    en: 'Location sharing off',
+    ja: '位置共有オフ',
+    ko: '위치 공유 꺼짐',
+  },
+  statusOnline: {
+    zh: '当前在线，可以点击查看实时定位',
+    en: 'Currently online. Tap to view live location.',
+    ja: '現在オンラインです。タップすると現在地を確認できます。',
+    ko: '현재 온라인입니다. 눌러서 실시간 위치를 볼 수 있습니다.',
+  },
+  statusSharingOff: {
+    zh: '当前在线，但暂未开放位置共享',
+    en: 'Currently online, but location sharing is not enabled.',
+    ja: '現在オンラインですが、位置共有はまだ有効ではありません。',
+    ko: '현재 온라인이지만 위치 공유는 아직 열려 있지 않습니다.',
+  },
+  statusOffline: {
+    zh: '当前离线，暂时无法查看定位',
+    en: 'Currently offline. Location is unavailable.',
+    ja: '現在オフラインのため、位置は確認できません。',
+    ko: '현재 오프라인이라 위치를 볼 수 없습니다.',
+  },
+  viewLocation: {
+    zh: '查看定位',
+    en: 'View Location',
+    ja: '位置を見る',
+    ko: '위치 보기',
+  },
+  viewStatus: {
+    zh: '查看状态',
+    en: 'View Status',
+    ja: '状態を見る',
+    ko: '상태 보기',
+  },
+  remove: {
+    zh: '删除好友',
+    en: 'Remove',
+    ja: '削除',
+    ko: '삭제',
+  },
+  block: {
+    zh: '拉黑',
+    en: 'Block',
+    ja: 'ブロック',
+    ko: '차단',
+  },
 };
+
+const text = computed(() => resolveLocalized(textSource, language.value));
 
 const props = defineProps({
   friends: {
@@ -37,7 +121,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['select-friend', 'remove-friend', 'block-friend', 'open-create-group', 'view-favorites']);
+const emit = defineEmits(['select-friend', 'remove-friend', 'block-friend', 'open-create-group']);
 
 const menuVisible = ref(false);
 const menuRef = ref(null);
@@ -169,15 +253,6 @@ onBeforeUnmount(() => {
           </span>
 
           <div class="action-buttons">
-            <Button
-              plain
-              size="small"
-              type="primary"
-              :disabled="Boolean(props.processingId)"
-              @click.stop="emit('view-favorites', friend)"
-            >
-              {{ text.viewFavorites }}
-            </Button>
             <Button
               plain
               size="small"

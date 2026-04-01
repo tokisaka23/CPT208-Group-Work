@@ -1,5 +1,7 @@
-<script setup>
+﻿<script setup>
+import { computed } from 'vue';
 import { Button, Empty } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 const props = defineProps({
   blockedUsers: {
@@ -17,6 +19,36 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['unblock-friend']);
+const { language } = useLanguage();
+
+const textSource = {
+  title: {
+    zh: '黑名单',
+    en: 'Blocked Users',
+    ja: 'ブロック一覧',
+    ko: '차단 목록',
+  },
+  desc: {
+    zh: '被拉黑的用户不会出现在好友列表，也无法继续发起好友关系',
+    en: 'Blocked users will not appear in your friend list and cannot continue the friendship flow.',
+    ja: 'ブロックしたユーザーは友だち一覧に表示されず、友だち関係も続きません。',
+    ko: '차단된 사용자는 친구 목록에 나타나지 않으며 친구 관계도 계속할 수 없습니다.',
+  },
+  empty: {
+    zh: '当前黑名单为空',
+    en: 'Your blocked list is empty.',
+    ja: 'ブロック中のユーザーはいません。',
+    ko: '차단 목록이 비어 있습니다.',
+  },
+  unblock: {
+    zh: '移出黑名单',
+    en: 'Unblock',
+    ja: 'ブロック解除',
+    ko: '차단 해제',
+  },
+};
+
+const text = computed(() => resolveLocalized(textSource, language.value));
 
 function isActionLoading(friendId) {
   return props.processingId === friendId && props.processingAction === 'unblock';
@@ -31,8 +63,8 @@ function isActionDisabled(friendId) {
   <section class="panel-card blocked-card">
     <div class="section-head">
       <div>
-        <h2 class="section-title">黑名单</h2>
-        <p class="section-desc">被拉黑的用户不会出现在好友列表，也无法继续发起好友关系</p>
+        <h2 class="section-title">{{ text.title }}</h2>
+        <p class="section-desc">{{ text.desc }}</p>
       </div>
       <span class="count-badge">{{ blockedUsers.length }}</span>
     </div>
@@ -40,7 +72,7 @@ function isActionDisabled(friendId) {
     <Empty
       v-if="!blockedUsers.length"
       image="search"
-      description="当前黑名单为空"
+      :description="text.empty"
     />
 
     <div v-else class="blocked-list">
@@ -68,7 +100,7 @@ function isActionDisabled(friendId) {
           :loading="isActionLoading(user.id)"
           @click="emit('unblock-friend', user)"
         >
-          移出黑名单
+          {{ text.unblock }}
         </Button>
       </article>
     </div>

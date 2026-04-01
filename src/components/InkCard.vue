@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
+import { currentLanguage, resolveLocalized } from '../i18n';
 
 const props = defineProps({
   item: {
@@ -37,11 +38,35 @@ const actionProps = computed(() => {
 
 const visibleHighlights = computed(() => props.item.highlights?.slice(0, props.compact ? 2 : 3) || []);
 
+const cardTextSource = {
+  detailLink: {
+    zh: '入园游览',
+    en: 'Open Garden Detail',
+    ja: '庭園の詳細へ',
+    ko: '정원 상세 보기',
+  },
+  actionLabel: {
+    zh: '展开此景',
+    en: 'Open This Chapter',
+    ja: 'この頁を開く',
+    ko: '이 장면 열기',
+  },
+  placeholder: {
+    zh: '图片载入中，已切换为备用画面',
+    en: 'Image unavailable. Showing fallback artwork.',
+    ja: '画像を読み込めないため、代替画像を表示しています。',
+    ko: '이미지를 불러올 수 없어 대체 화면을 표시합니다.',
+  },
+};
+
+const cardText = computed(() => resolveLocalized(cardTextSource, currentLanguage.value));
+
 const createPlaceholder = (title) => {
   const accent = props.tone === 'cinnabar' ? '%239f3f34' : props.tone === 'celadon' ? '%235f7f72' : '%231c1917';
   const label = encodeURIComponent(title);
+  const placeholderText = encodeURIComponent(cardText.value.placeholder);
 
-  return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900' viewBox='0 0 1200 900'><rect width='1200' height='900' fill='%23f5f5f4'/><rect x='48' y='48' width='1104' height='804' rx='40' fill='white' stroke='${accent}' stroke-opacity='0.28'/><path d='M140 240c120-46 212 52 350 30 140-22 246-98 430-30' fill='none' stroke='${accent}' stroke-opacity='0.22' stroke-width='6' stroke-linecap='round'/><path d='M180 606c104-34 196-10 284 36 118 62 270 64 444-12' fill='none' stroke='${accent}' stroke-opacity='0.18' stroke-width='6' stroke-linecap='round'/><text x='600' y='452' fill='${accent}' font-size='56' font-family='Noto Serif SC, serif' text-anchor='middle'>${label}</text><text x='600' y='528' fill='${accent}' fill-opacity='0.66' font-size='28' font-family='Noto Sans SC, sans-serif' text-anchor='middle'>图片载入中，已切换为备用画面</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900' viewBox='0 0 1200 900'><rect width='1200' height='900' fill='%23f5f5f4'/><rect x='48' y='48' width='1104' height='804' rx='40' fill='white' stroke='${accent}' stroke-opacity='0.28'/><path d='M140 240c120-46 212 52 350 30 140-22 246-98 430-30' fill='none' stroke='${accent}' stroke-opacity='0.22' stroke-width='6' stroke-linecap='round'/><path d='M180 606c104-34 196-10 284 36 118 62 270 64 444-12' fill='none' stroke='${accent}' stroke-opacity='0.18' stroke-width='6' stroke-linecap='round'/><text x='600' y='452' fill='${accent}' font-size='56' font-family='Noto Serif SC, serif' text-anchor='middle'>${label}</text><text x='600' y='528' fill='${accent}' fill-opacity='0.66' font-size='28' font-family='Noto Sans SC, sans-serif' text-anchor='middle'>${placeholderText}</text></svg>`;
 };
 
 const placeholderImage = computed(() => props.item.placeholderImage || createPlaceholder(props.item.title));
@@ -94,14 +119,14 @@ const isPlaceholder = computed(() => currentImage.value === placeholderImage.val
       <h3 class="ink-card__title">{{ item.title }}</h3>
       <p v-if="item.subtitle" class="ink-card__subtitle">{{ item.subtitle }}</p>
       <p class="ink-card__description">{{ item.description }}</p>
-      <RouterLink v-if="item.path" :to="item.path" class="garden-detail-link">入园游览 <span>➔</span></RouterLink>
+      <RouterLink v-if="item.path" :to="item.path" class="garden-detail-link">{{ cardText.detailLink }} <span>➔</span></RouterLink>
 
       <ul v-if="visibleHighlights.length" class="ink-card__highlights">
         <li v-for="highlight in visibleHighlights" :key="highlight">{{ highlight }}</li>
       </ul>
 
       <component :is="actionComponent" v-if="hasAction" v-bind="actionProps" class="ink-card__action">
-        {{ item.actionLabel || '展开此景' }}
+        {{ item.actionLabel || cardText.actionLabel }}
       </component>
     </div>
   </article>
