@@ -230,6 +230,10 @@ const dialogTextSource = {
   uploadHint: { zh: '上传提示', en: 'Upload Tip', ja: 'アップロード案内', ko: '업로드 안내' },
   uploadTitle: { zh: '上传园林照片', en: 'Upload a Garden Photo', ja: '庭園写真をアップロード', ko: '정원 사진 업로드' },
   uploadBody: { zh: '选择一张图片后点击上传，后端返回图片地址后会在下方回显。', en: 'Choose an image and upload it. The returned image URL will preview below.', ja: '画像を選んでアップロードすると、返却された画像 URL が下に表示されます。', ko: '이미지를 선택해 업로드하면 반환된 이미지 URL 이 아래에 미리 표시됩니다.' },
+  uploadPlaceName: { zh: '地点名称', en: 'Place Name', ja: 'スポット名', ko: '장소 이름' },
+  uploadPlaceNamePlaceholder: { zh: '例如：平江路小众茶馆', en: 'For example: A hidden teahouse on Pingjiang Road', ja: '例: 平江路の小さな茶館', ko: '예: 평강로의 작은 찻집' },
+  uploadPlaceDescription: { zh: '地点描述', en: 'Place Description', ja: 'スポット説明', ko: '장소 설명' },
+  uploadPlaceDescriptionPlaceholder: { zh: '请填写地点描述', en: 'Describe this place', ja: 'スポットの説明を入力', ko: '장소 설명을 입력하세요' },
   selectImage: { zh: '选择图片文件', en: 'Choose Image File', ja: '画像ファイルを選択', ko: '이미지 파일 선택' },
   uploading: { zh: '正在上传…', en: 'Uploading...', ja: 'アップロード中...', ko: '업로드 중...' },
   startUpload: { zh: '开始上传', en: 'Start Upload', ja: 'アップロード開始', ko: '업로드 시작' },
@@ -1611,6 +1615,8 @@ const profileStatus = computed(() => {
 
 // 上传图片相关状态
 const selectedImageFile = ref(null);
+const uploadPlaceName = ref('');
+const uploadPlaceDescription = ref('');
 const uploadedImageUrl = ref('');
 const isUploadingImage = ref(false);
 const uploadError = ref('');
@@ -1632,12 +1638,24 @@ async function submitUploadImage() {
     return;
   }
 
+  if (!uploadPlaceName.value.trim()) {
+    uploadError.value = '请输入地点名称。';
+    return;
+  }
+
+  if (!uploadPlaceDescription.value.trim()) {
+    uploadError.value = '请输入地点描述。';
+    return;
+  }
+
   isUploadingImage.value = true;
   uploadError.value = '';
 
   try {
     const formData = new FormData();
     formData.append('image', selectedImageFile.value);
+    formData.append('title', uploadPlaceName.value.trim());
+    formData.append('description', uploadPlaceDescription.value.trim());
 
     // 中文注释：这里连接后端图片上传接口 /api/ugc，使用 FormData 以 multipart/form-data 发送图片文件。
     // 注意：使用 fetch/axios 发送 FormData 时，不要手动写死 Content-Type，浏览器会自动补上 boundary。
@@ -1647,6 +1665,9 @@ async function submitUploadImage() {
     if (!uploadedImageUrl.value) {
       throw new Error('上传成功但未拿到图片地址，请检查后端返回字段 image_url/imageUrl。');
     }
+
+    uploadPlaceName.value = '';
+    uploadPlaceDescription.value = '';
   } catch (error) {
     console.error('[Upload] 上传图片失败', error);
     uploadError.value = error.message || '上传失败，请稍后再试。';
@@ -1919,6 +1940,26 @@ watch(
                   />
                 </label>
 
+                <label class="field">
+                  <span>{{ dialogText.newPassword }}</span>
+                  <input
+                    v-model="profileForm.password"
+                    type="password"
+                    :placeholder="dialogText.newPasswordPlaceholder"
+                    autocomplete="new-password"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>{{ dialogText.confirmNewPassword }}</span>
+                  <input
+                    v-model="profileForm.confirmPassword"
+                    type="password"
+                    :placeholder="dialogText.confirmNewPasswordPlaceholder"
+                    autocomplete="new-password"
+                  />
+                </label>
+
                 <p v-if="profileFeedback" :class="['auth-feedback', `is-${profileFeedbackType}`]">
                   {{ profileFeedback }}
                 </p>
@@ -2187,6 +2228,24 @@ watch(
 
             <form class="dialog__form" @submit.prevent="submitUploadImage">
               <label class="field field--full">
+                <span>{{ dialogText.uploadPlaceName }}</span>
+                <input
+                  v-model.trim="uploadPlaceName"
+                  type="text"
+                  :placeholder="dialogText.uploadPlaceNamePlaceholder"
+                />
+              </label>
+
+              <label class="field field--full">
+                <span>{{ dialogText.uploadPlaceDescription }}</span>
+                <textarea
+                  v-model.trim="uploadPlaceDescription"
+                  rows="4"
+                  :placeholder="dialogText.uploadPlaceDescriptionPlaceholder"
+                />
+              </label>
+
+              <label class="field field--full">
                 <span>{{ dialogText.selectImage }}</span>
                 <input type="file" accept="image/*" @change="handleSelectImage" />
               </label>
@@ -2266,26 +2325,66 @@ watch(
               <p>{{ currentUser.email }}</p>
             </div>
 
-            <div class="dialog__actions">
-              <button
-                v-if="hasPendingFriendRequests"
-                type="button"
-                class="dialog__ghost"
-                @click="pendingRequestPopupVisible = true"
-              >
-                {{ dialogText.friendRequests }} {{ pendingFriendRequests.length }}
-              </button>
-              <button type="button" class="dialog__primary" @click="logout">{{ dialogText.logout }}</button>
-              <button
-                type="button"
-                class="dialog__ghost"
-                :disabled="authDeletingAccount"
-                @click="deleteAccount"
-              >
-                {{ authDeletingAccount ? dialogText.deletingAccount : dialogText.deleteAccount }}
-              </button>
-              <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
-            </div>
+            <form class="dialog__form" @submit.prevent="submitProfileUpdate">
+              <label class="field">
+                <span>{{ dialogText.profileName }}</span>
+                <input
+                  v-model.trim="profileForm.displayName"
+                  type="text"
+                  :placeholder="dialogText.profileNamePlaceholder"
+                  autocomplete="nickname"
+                />
+              </label>
+
+              <label class="field">
+                <span>{{ dialogText.newPassword }}</span>
+                <input
+                  v-model="profileForm.password"
+                  type="password"
+                  :placeholder="dialogText.newPasswordPlaceholder"
+                  autocomplete="new-password"
+                />
+              </label>
+
+              <label class="field">
+                <span>{{ dialogText.confirmNewPassword }}</span>
+                <input
+                  v-model="profileForm.confirmPassword"
+                  type="password"
+                  :placeholder="dialogText.confirmNewPasswordPlaceholder"
+                  autocomplete="new-password"
+                />
+              </label>
+
+              <p v-if="profileFeedback" :class="['auth-feedback', `is-${profileFeedbackType}`]">
+                {{ profileFeedback }}
+              </p>
+
+              <div class="dialog__actions">
+                <button type="submit" class="dialog__primary" :disabled="profileSubmitting">
+                  {{ profileSubmitting ? dialogText.saving : dialogText.saveChanges }}
+                </button>
+                <button type="button" class="dialog__primary" @click="logout">{{ dialogText.logout }}</button>
+                <button
+                  v-if="hasPendingFriendRequests"
+                  type="button"
+                  class="dialog__ghost"
+                  @click="pendingRequestPopupVisible = true"
+                >
+                  {{ dialogText.friendRequests }} {{ pendingFriendRequests.length }}
+                </button>
+                <button
+                  type="button"
+                  class="dialog__ghost"
+                  :disabled="authDeletingAccount"
+                  @click="deleteAccount"
+                >
+                  {{ authDeletingAccount ? dialogText.deletingAccount : dialogText.deleteAccount }}
+                </button>
+                <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
+              </div>
+            </form>
+
           </template>
 
           <form v-else class="dialog__form" @submit.prevent="submitAuth">
