@@ -268,6 +268,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   padding-top: 28px;
   padding-bottom: 104px;
   isolation: isolate;
+  overflow-x: hidden;
 }
 
 .garden-detail-page > * {
@@ -645,9 +646,12 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   gap: 18px;
   overflow-x: auto;
   padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
   touch-action: pan-x;
 }
 
@@ -664,6 +668,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   background: rgba(var(--garden-accent-rgb), 0.08);
   box-shadow: 0 18px 42px rgba(28, 25, 23, 0.08);
   scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .gallery-card--panorama {
@@ -857,15 +862,49 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 }
 
 .garden-detail-page--zhuozheng .detail-hero {
-  min-height: min(78vh, 760px);
+  min-height: min(72vh, 680px);
 }
 
 .garden-detail-page--zhuozheng .detail-hero-card {
-  background: rgba(242, 248, 245, 0.18);
+  background: rgba(242, 248, 245, 0.34);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 24px 56px rgba(28, 25, 23, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .garden-detail-page--zhuozheng .detail-hero-note {
-  background: rgba(240, 248, 244, 0.24);
+  background: rgba(240, 248, 244, 0.34);
+}
+
+.garden-detail-page--zhuozheng .detail-copy .eyebrow,
+.garden-detail-page--zhuozheng .detail-title span,
+.garden-detail-page--zhuozheng .detail-intro,
+.garden-detail-page--zhuozheng .detail-metric span {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.garden-detail-page--zhuozheng .detail-title,
+.garden-detail-page--zhuozheng .detail-metric strong,
+.garden-detail-page--zhuozheng .detail-prelude__copy strong {
+  color: #ffffff;
+}
+
+.garden-detail-page--zhuozheng .detail-prelude {
+  background: rgba(242, 248, 245, 0.2);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.garden-detail-page--zhuozheng .detail-prelude__copy p,
+.garden-detail-page--zhuozheng .detail-prelude__chips span,
+.garden-detail-page--zhuozheng .detail-badges span {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.garden-detail-page--zhuozheng .detail-badges span,
+.garden-detail-page--zhuozheng .detail-metric {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .garden-detail-page--zhuozheng .tour-stepper::before {
@@ -983,14 +1022,14 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 
 .garden-detail-page--wangshiyuan .detail-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.8fr);
   grid-template-areas:
     'card media'
     'note media';
-  gap: 24px 30px;
-  align-items: start;
-  min-height: 760px;
-  padding: 3rem;
+  gap: 20px 24px;
+  align-items: center;
+  min-height: 660px;
+  padding: 2.4rem;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 246, 243, 0.98)),
     rgba(255, 255, 255, 0.92);
@@ -1001,7 +1040,7 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   inset: auto;
   grid-area: media;
   display: grid;
-  align-content: start;
+  align-content: center;
   min-height: 100%;
 }
 
@@ -1011,8 +1050,8 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   right: auto;
   bottom: auto;
   left: auto;
-  width: min(100%, 380px);
-  height: clamp(520px, 66vh, 620px);
+  width: min(100%, 360px);
+  height: clamp(420px, 56vh, 520px);
   margin-left: auto;
   border-radius: 32px;
   box-shadow: 0 26px 60px rgba(28, 25, 23, 0.18);
@@ -1100,8 +1139,8 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   position: relative;
   inset: auto;
   grid-area: note;
-  width: min(420px, 100%);
-  margin-top: 4px;
+  width: min(380px, 100%);
+  margin-top: 0;
   background: rgba(28, 25, 23, 0.04);
   border-color: rgba(159, 63, 52, 0.18);
   color: var(--ink-900);
@@ -1126,6 +1165,184 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   box-shadow: 0 0 0 6px rgba(159, 63, 52, 0.1);
 }
 
+/* 拙政园：雅绿色系 */
+.garden-detail-page--zhuozheng {
+  --garden-accent: #637768;
+  --garden-accent-rgb: 99, 119, 104;
+  --garden-secondary: #A4B7A5;
+  --garden-secondary-rgb: 164, 183, 165;
+}
+
+.garden-detail-page--zhuozheng .detail-hero-card {
+  background: rgba(238, 244, 239, 0.88);
+  border-color: rgba(99, 119, 104, 0.18);
+  box-shadow:
+    0 24px 56px rgba(28, 25, 23, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.garden-detail-page--zhuozheng .detail-hero-note,
+.garden-detail-page--zhuozheng .detail-badges span,
+.garden-detail-page--zhuozheng .detail-metric {
+  background: rgba(244, 248, 244, 0.76);
+  border-color: rgba(99, 119, 104, 0.14);
+}
+
+.garden-detail-page--zhuozheng .detail-prelude {
+  background: linear-gradient(135deg, rgba(164, 183, 165, 0.18), rgba(255, 255, 255, 0.55));
+  border-color: rgba(99, 119, 104, 0.16);
+}
+
+.garden-detail-page--zhuozheng .detail-copy .eyebrow,
+.garden-detail-page--zhuozheng .detail-prelude__label,
+.garden-detail-page--zhuozheng .detail-title span,
+.garden-detail-page--zhuozheng .detail-intro,
+.garden-detail-page--zhuozheng .detail-metric span,
+.garden-detail-page--zhuozheng .detail-prelude__copy p,
+.garden-detail-page--zhuozheng .detail-hero-note span {
+  color: rgba(44, 57, 48, 0.8);
+}
+
+.garden-detail-page--zhuozheng .detail-title,
+.garden-detail-page--zhuozheng .detail-metric strong,
+.garden-detail-page--zhuozheng .detail-prelude__copy strong,
+.garden-detail-page--zhuozheng .detail-hero-note strong,
+.garden-detail-page--zhuozheng .detail-badges span,
+.garden-detail-page--zhuozheng .detail-prelude__chips span {
+  color: #2f3d34;
+}
+
+.garden-detail-page--zhuozheng .detail-prelude__chips span {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(99, 119, 104, 0.14);
+}
+
+.garden-detail-page--zhuozheng .detail-floating-tags span {
+  background: rgba(244, 248, 244, 0.84);
+  border-color: rgba(99, 119, 104, 0.16);
+  color: #2f3d34;
+}
+
+/* 留园：温润高级灰 */
+.garden-detail-page--liuyuan {
+  --garden-accent: #8E9295;
+  --garden-accent-rgb: 142, 146, 149;
+  --garden-secondary: #5C5F62;
+  --garden-secondary-rgb: 92, 95, 98;
+}
+
+.garden-detail-page--liuyuan .detail-watermark {
+  color: rgba(92, 95, 98, 0.06);
+}
+
+.garden-detail-page--liuyuan .detail-hero-card {
+  background: rgba(244, 244, 242, 0.88);
+  border-color: rgba(92, 95, 98, 0.16);
+  box-shadow:
+    0 24px 56px rgba(28, 25, 23, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.garden-detail-page--liuyuan .detail-prelude {
+  background: linear-gradient(135deg, rgba(142, 146, 149, 0.16), rgba(255, 255, 255, 0.58));
+  border-color: rgba(92, 95, 98, 0.14);
+}
+
+.garden-detail-page--liuyuan .detail-copy .eyebrow,
+.garden-detail-page--liuyuan .detail-prelude__label,
+.garden-detail-page--liuyuan .detail-title span,
+.garden-detail-page--liuyuan .detail-intro,
+.garden-detail-page--liuyuan .detail-metric span,
+.garden-detail-page--liuyuan .detail-prelude__copy p,
+.garden-detail-page--liuyuan .detail-hero-note span {
+  color: rgba(74, 78, 82, 0.82);
+}
+
+.garden-detail-page--liuyuan .detail-title,
+.garden-detail-page--liuyuan .detail-metric strong,
+.garden-detail-page--liuyuan .detail-prelude__copy strong,
+.garden-detail-page--liuyuan .detail-hero-note strong,
+.garden-detail-page--liuyuan .detail-badges span,
+.garden-detail-page--liuyuan .detail-prelude__chips span {
+  color: #4d5154;
+}
+
+.garden-detail-page--liuyuan .detail-badges span,
+.garden-detail-page--liuyuan .detail-metric,
+.garden-detail-page--liuyuan .detail-hero-note,
+.garden-detail-page--liuyuan .detail-floating-tags span {
+  background: rgba(248, 248, 246, 0.8);
+  border-color: rgba(92, 95, 98, 0.14);
+}
+
+.garden-detail-page--liuyuan .detail-floating-tags span {
+  color: #5c5f62;
+}
+
+.garden-detail-page--liuyuan .detail-prelude__chips span {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: rgba(92, 95, 98, 0.14);
+}
+
+/* 网师园：黛色 + 纸纱黄 */
+.garden-detail-page--wangshiyuan {
+  --garden-accent: #3D4C53;
+  --garden-accent-rgb: 61, 76, 83;
+  --garden-secondary: #D4C4A9;
+  --garden-secondary-rgb: 212, 196, 169;
+}
+
+.garden-detail-page--wangshiyuan .detail-hero-card {
+  background: rgba(244, 241, 235, 0.9);
+  border-color: rgba(61, 76, 83, 0.16);
+  box-shadow:
+    0 24px 56px rgba(28, 25, 23, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.garden-detail-page--wangshiyuan .detail-hero-note,
+.garden-detail-page--wangshiyuan .detail-badges span,
+.garden-detail-page--wangshiyuan .detail-metric {
+  background: rgba(250, 245, 235, 0.78);
+  border-color: rgba(61, 76, 83, 0.14);
+}
+
+.garden-detail-page--wangshiyuan .detail-prelude {
+  background: linear-gradient(135deg, rgba(212, 196, 169, 0.24), rgba(255, 255, 255, 0.52));
+  border-color: rgba(61, 76, 83, 0.16);
+}
+
+.garden-detail-page--wangshiyuan .detail-copy .eyebrow,
+.garden-detail-page--wangshiyuan .detail-prelude__label,
+.garden-detail-page--wangshiyuan .detail-title span,
+.garden-detail-page--wangshiyuan .detail-intro,
+.garden-detail-page--wangshiyuan .detail-metric span,
+.garden-detail-page--wangshiyuan .detail-prelude__copy p,
+.garden-detail-page--wangshiyuan .detail-hero-note span {
+  color: rgba(61, 76, 83, 0.8);
+}
+
+.garden-detail-page--wangshiyuan .detail-title,
+.garden-detail-page--wangshiyuan .detail-metric strong,
+.garden-detail-page--wangshiyuan .detail-prelude__copy strong,
+.garden-detail-page--wangshiyuan .detail-hero-note strong,
+.garden-detail-page--wangshiyuan .detail-badges span,
+.garden-detail-page--wangshiyuan .detail-prelude__chips span {
+  color: #2f3b41;
+}
+
+.garden-detail-page--wangshiyuan .detail-prelude__chips span {
+  background: rgba(255, 249, 239, 0.82);
+  border-color: rgba(212, 196, 169, 0.36);
+}
+
+.garden-detail-page--wangshiyuan .detail-floating-tags span {
+  background: rgba(250, 245, 235, 0.84);
+  border-color: rgba(61, 76, 83, 0.14);
+  color: #2f3b41;
+}
+
+
 @media (max-width: 1180px) {
   .detail-highlight-list,
   .detail-related,
@@ -1134,9 +1351,10 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   }
 
   .garden-detail-page--wangshiyuan .detail-hero {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.78fr);
-    gap: 22px 24px;
-    padding: 2.4rem;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.74fr);
+    gap: 18px 20px;
+    min-height: 600px;
+    padding: 2rem;
   }
 
   .garden-detail-page--wangshiyuan .detail-hero-card {
@@ -1249,6 +1467,344 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   .garden-detail-page--liuyuan .gallery-card:nth-child(2n),
   .garden-detail-page--liuyuan .gallery-card:nth-child(3n) {
     transform: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .garden-detail-page {
+    width: 100%;
+    max-width: 100vw;
+    gap: 18px;
+    padding-top: 16px;
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  .garden-detail-page--zhuozheng .detail-hero-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(95, 127, 114, 0.16);
+  }
+
+  .garden-detail-page--zhuozheng .detail-copy .eyebrow,
+  .garden-detail-page--zhuozheng .detail-prelude__label,
+  .garden-detail-page--zhuozheng .detail-title span,
+  .garden-detail-page--zhuozheng .detail-intro,
+  .garden-detail-page--zhuozheng .detail-prelude__copy p,
+  .garden-detail-page--zhuozheng .detail-prelude__chips span,
+  .garden-detail-page--zhuozheng .detail-badges span,
+  .garden-detail-page--zhuozheng .detail-metric span {
+    color: rgba(28, 25, 23, 0.78);
+  }
+
+  .garden-detail-page--zhuozheng .detail-title,
+  .garden-detail-page--zhuozheng .detail-prelude__copy strong,
+  .garden-detail-page--zhuozheng .detail-metric strong {
+    color: var(--ink-900, #333333);
+  }
+
+  .garden-detail-page--zhuozheng .detail-prelude,
+  .garden-detail-page--zhuozheng .detail-badges span,
+  .garden-detail-page--zhuozheng .detail-metric {
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(95, 127, 114, 0.14);
+  }
+
+  /* 2. 留园：标签换行，避免重叠溢出 */
+  .garden-detail-page--liuyuan .detail-badges,
+  .garden-detail-page--liuyuan .detail-floating-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .garden-detail-page--liuyuan .detail-badges span,
+  .garden-detail-page--liuyuan .detail-floating-tags span {
+    position: static;
+    margin: 0;
+    max-width: 100%;
+    flex: 0 1 auto;
+  }
+
+  /* 3. 网师园：移动端强制改为上下堆叠 */
+  .garden-detail-page--wangshiyuan .detail-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-media,
+  .garden-detail-page--wangshiyuan .detail-hero-card,
+  .garden-detail-page--wangshiyuan .detail-hero-note,
+  .garden-detail-page--wangshiyuan .detail-copy,
+  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-media {
+    display: block;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
+    margin-left: 0;
+    height: auto;
+  }
+
+  .detail-hero,
+  .detail-panel,
+  .related-card,
+  .detail-hero-card,
+  .detail-hero-note,
+  .detail-highlight-item,
+  .detail-metric,
+  .detail-action-link,
+  .detail-tips-list li,
+  .gallery-card__overlay,
+  .horizontal-gallery,
+  .horizontal-gallery__track,
+  .detail-highlight-list,
+  .detail-grid,
+  .detail-related {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .detail-copy,
+  .detail-panel__header,
+  .detail-highlight-item,
+  .related-card,
+  .tour-stepper__item,
+  .tour-stepper__content,
+  .detail-action-link {
+    min-width: 0;
+  }
+
+  .detail-watermark,
+  .garden-detail-page--liuyuan .detail-watermark,
+  .garden-detail-page--wangshiyuan .detail-watermark {
+    top: 5.5rem;
+    right: -0.18em;
+    font-size: clamp(7rem, 34vw, 12rem);
+    line-height: 0.9;
+  }
+
+  .detail-hero,
+  .garden-detail-page--liuyuan .detail-hero,
+  .garden-detail-page--wangshiyuan .detail-hero {
+    gap: 14px;
+    padding: 16px;
+    border-radius: 28px;
+  }
+
+  .detail-hero-media,
+  .garden-detail-page--wangshiyuan .detail-hero-media {
+    min-height: auto;
+  }
+
+  .detail-hero-image-shell,
+  .garden-detail-page--liuyuan .detail-hero-image-shell,
+  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 5 / 4;
+    min-height: 240px;
+    border-radius: 24px;
+    box-sizing: border-box;
+  }
+
+  .detail-hero-image,
+  .gallery-card__image {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .detail-floating-tags {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .detail-floating-tags span,
+  .garden-detail-page--liuyuan .detail-floating-tags span,
+  .garden-detail-page--wangshiyuan .detail-floating-tags span {
+    padding: 0.5rem 0.78rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    box-sizing: border-box;
+  }
+
+  .detail-panel,
+  .related-card,
+  .detail-hero-card,
+  .detail-hero-note,
+  .garden-detail-page--liuyuan .detail-hero-note,
+  .garden-detail-page--wangshiyuan .detail-hero-note {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .detail-copy,
+  .detail-panel,
+  .related-card {
+    gap: 16px;
+  }
+
+  .detail-title {
+    font-size: clamp(2rem, 9vw, 2.8rem);
+    gap: 6px;
+  }
+
+  .detail-title span {
+    font-size: clamp(0.92rem, 4vw, 1.12rem);
+  }
+
+  .detail-intro,
+  .detail-panel__header p:last-child,
+  .related-card span,
+  .detail-highlight-item p,
+  .tour-stepper__content span,
+  .detail-tips-list li,
+  .gallery-card__overlay span {
+    line-height: 1.72;
+  }
+
+  .detail-badges {
+    gap: 8px;
+  }
+
+  .detail-badges span {
+    padding: 0.42rem 0.72rem;
+    font-size: 0.76rem;
+  }
+
+  .detail-metrics {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .detail-metric {
+    padding: 12px 14px;
+    border-radius: 18px;
+  }
+
+  .detail-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .detail-badges,
+  .detail-prelude__chips,
+  .detail-floating-tags {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .detail-action-link {
+    width: 100%;
+    min-height: 3rem;
+  }
+
+  .detail-panel__header {
+    gap: 10px;
+  }
+
+  .detail-highlight-list,
+  .detail-grid,
+  .detail-related {
+    gap: 14px;
+  }
+
+  .detail-highlight-item {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .horizontal-gallery {
+    overflow: hidden;
+  }
+
+  .horizontal-gallery__track {
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .gallery-card--panorama,
+  .gallery-card--landscape,
+  .gallery-card--square {
+    width: min(82vw, 360px);
+  }
+
+  .gallery-card--portrait,
+  .gallery-card--tall {
+    width: min(68vw, 280px);
+  }
+
+  .detail-hero-card,
+  .detail-hero-note,
+  .garden-detail-page--liuyuan .detail-hero-card,
+  .garden-detail-page--liuyuan .detail-hero-note,
+  .garden-detail-page--wangshiyuan .detail-hero-note {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .gallery-card__overlay {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    gap: 4px;
+    padding: 12px 13px;
+    border-radius: 16px;
+  }
+
+  .gallery-card__overlay strong {
+    font-size: 0.94rem;
+  }
+
+  .gallery-card__overlay span {
+    font-size: 0.84rem;
+  }
+
+  .tour-stepper {
+    gap: 18px;
+    padding-top: 2px;
+  }
+
+  .tour-stepper::before {
+    left: 17px;
+    width: 8px;
+  }
+
+  .tour-stepper__item {
+    gap: 12px;
+  }
+
+  .tour-stepper__count {
+    min-width: 2rem;
+    font-size: 0.94rem;
+  }
+
+  .detail-tips-list {
+    gap: 10px;
+  }
+
+  .detail-tips-list li {
+    padding: 14px 16px 14px 40px;
+    border-radius: 18px;
+  }
+
+  .detail-tips-list li::before {
+    top: 19px;
+    left: 16px;
   }
 }
 
