@@ -42,6 +42,18 @@ const appTextSource = {
     ja: 'メインナビゲーション',
     ko: '메인 내비게이션',
   },
+  moreServices: {
+    zh: '更多服务',
+    en: 'More Services',
+    ja: '追加サービス',
+    ko: '추가 서비스',
+  },
+  moreServicesAria: {
+    zh: '打开更多服务菜单',
+    en: 'Open more services menu',
+    ja: '追加サービスメニューを開く',
+    ko: '추가 서비스 메뉴 열기',
+  },
   languageLabel: {
     zh: '语言',
     en: 'Language',
@@ -484,6 +496,8 @@ const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
 const isAiFullscreen = ref(false);
 const profileMenuRef = ref(null);
+const serviceMenuRef = ref(null);
+const isServiceMenuOpen = ref(false);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
 const MAX_PERSISTED_CHAT_ROUNDS = 30;
@@ -957,6 +971,7 @@ function handleAiComposerKeydown(event) {
 }
 
 const openFeature = async (featureId) => {
+  closeServiceMenu();
   activeFeature.value = featureId;
   inviteFeedback.value = '';
 
@@ -1088,6 +1103,8 @@ const sendAiMessage = async (prefilledPrompt = '') => {
 watch(
   () => route.fullPath,
   () => {
+    closeServiceMenu();
+    closeProfileMenu();
     friendTrip.meetingPoint = currentJourney.value.meetPoint;
     inviteFeedback.value = '';
 
@@ -1159,12 +1176,36 @@ const openAuthDialog = (mode = 'login') => {
   authFeedbackType.value = 'info';
 };
 
+function openServiceMenu() {
+  closeProfileMenu();
+  isServiceMenuOpen.value = true;
+}
+
+function closeServiceMenu() {
+  isServiceMenuOpen.value = false;
+}
+
+function toggleServiceMenu() {
+  if (isServiceMenuOpen.value) {
+    closeServiceMenu();
+    return;
+  }
+
+  openServiceMenu();
+}
+
+function handleSelectFeature(featureId) {
+  closeServiceMenu();
+  openFeature(featureId);
+}
+
 function toggleProfileMenu() {
   if (!currentUser.value) {
     openAuthDialog('login');
     return;
   }
 
+  closeServiceMenu();
   isProfileMenuOpen.value = !isProfileMenuOpen.value;
 
   if (isProfileMenuOpen.value) {
@@ -1184,18 +1225,24 @@ function closeProfileMenu() {
   profileForm.confirmPassword = '';
 }
 
-function handleWindowClickForProfileMenu(event) {
-  if (!isProfileMenuOpen.value) {
-    return;
+function handleWindowClickForHeaderMenus(event) {
+  const target = event.target;
+
+  if (isProfileMenuOpen.value) {
+    const profileRoot = profileMenuRef.value;
+
+    if (profileRoot && !profileRoot.contains(target)) {
+      closeProfileMenu();
+    }
   }
 
-  const menuRoot = profileMenuRef.value;
+  if (isServiceMenuOpen.value) {
+    const serviceRoot = serviceMenuRef.value;
 
-  if (!menuRoot || menuRoot.contains(event.target)) {
-    return;
+    if (serviceRoot && !serviceRoot.contains(target)) {
+      closeServiceMenu();
+    }
   }
-
-  closeProfileMenu();
 }
 
 function setAuthMode(mode) {
@@ -1710,7 +1757,7 @@ onMounted(async () => {
   });
 
   if (typeof window !== 'undefined') {
-    window.addEventListener('click', handleWindowClickForProfileMenu);
+    window.addEventListener('click', handleWindowClickForHeaderMenus);
   }
   window.addEventListener('group-chats-updated', handleGroupChatUnreadChanged);
 });
@@ -1722,7 +1769,7 @@ onUnmounted(() => {
   authSubscription?.data?.subscription?.unsubscribe?.();
 
   if (typeof window !== 'undefined') {
-    window.removeEventListener('click', handleWindowClickForProfileMenu);
+    window.removeEventListener('click', handleWindowClickForHeaderMenus);
   }
 });
 
@@ -1765,9 +1812,9 @@ watch(
 
 <template>
   <div class="app-shell">
-    <header class="site-header">
-      <div class="header-inner">
-        <RouterLink to="/" class="brand-link">
+    <header class="site-header site-header--refined">
+      <div class="header-inner header-inner--refined">
+        <RouterLink to="/" class="brand-link brand-link--refined">
           <span class="brand-seal">平</span>
           <span class="brand-copy">
             <strong class="brand-title">{{ appText.brandTitle }}</strong>
@@ -1775,127 +1822,214 @@ watch(
           </span>
         </RouterLink>
 
-        <nav class="site-nav" :aria-label="appText.navAria">
-          <RouterLink v-for="item in navItems" :key="item.to" :to="item.to" class="nav-link">
-            <span class="nav-link__icon" aria-hidden="true">
+        <nav class="primary-nav" :aria-label="appText.navAria">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="primary-nav__item"
+          >
+            <span class="primary-nav__icon" aria-hidden="true">
               <svg v-if="item.icon === 'pingjiang'" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M4.5 10.75 12 4.5l7.5 6.25V20a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 20v-9.25Z"
-                  stroke="currentColor"
-                  stroke-linejoin="round"
-                  stroke-width="1.6"
-                />
-                <path
-                  d="M9.2 21.4v-6.2a1 1 0 0 1 1-1h3.6a1 1 0 0 1 1 1v6.2"
+                  d="M4.5 11.1 12 4.8l7.5 6.3v8.6a1.45 1.45 0 0 1-1.45 1.45H5.95A1.45 1.45 0 0 1 4.5 19.7v-8.6Z"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                  stroke-width="1.55"
+                />
+                <path
+                  d="M9.45 21.1v-5.5a1 1 0 0 1 1-1h3.1a1 1 0 0 1 1 1v5.5"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="1.55"
+                />
+                <path
+                  d="M7.75 10.2h8.5"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="1.2"
+                  opacity="0.5"
                 />
               </svg>
               <svg v-else-if="item.icon === 'gardens'" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M6.5 15.8c6.6.7 10.2-3.3 11-10.6-6.5-.3-11 3.2-11 10.6Z"
+                  d="M6.55 15.65c6.2.9 10-2.9 10.85-10.15-6.2-.45-10.65 2.75-10.85 10.15Z"
                   stroke="currentColor"
                   stroke-linejoin="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
                 <path
-                  d="M6.5 15.8c2.4-3.7 6.2-6.3 11-10.6"
+                  d="M6.55 15.65c2.25-3.5 6.05-6.05 10.85-10.15"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
                 <path
-                  d="M6.5 15.8V21"
+                  d="M6.55 15.65V20.7"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
+                />
+                <path
+                  d="M6.55 19.8c-.75.55-1.35 1.15-1.8 1.8"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="1.2"
+                  opacity="0.55"
                 />
               </svg>
               <svg v-else-if="item.icon === 'museums'" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M4.5 9.25 12 4.5l7.5 4.75"
+                  d="M4.65 9.05 12 4.7l7.35 4.35"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
                 <path
-                  d="M6.5 10.2V19.2m3.8-9V19.2m3.4-9V19.2m3.8-9V19.2"
+                  d="M6.7 10.2v8.65m3.55-8.65v8.65m3.5-8.65v8.65m3.55-8.65v8.65"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-width="1.45"
                 />
                 <path
-                  d="M5.4 21h13.2"
+                  d="M5.3 20.8h13.4"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M8.1 10.3V7.8a3.9 3.9 0 0 1 7.8 0v2.5"
+                  d="M8.15 10.15V7.9a3.85 3.85 0 0 1 7.7 0v2.25"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
                 <path
-                  d="M7.25 10.3h9.5c.65 0 1.18.53 1.18 1.18v7.25c0 1.03-.84 1.87-1.87 1.87H7.94c-1.03 0-1.87-.84-1.87-1.87v-7.25c0-.65.53-1.18 1.18-1.18Z"
+                  d="M7.35 10.15h9.3c.68 0 1.22.55 1.22 1.22v7.08c0 1.1-.89 1.99-1.99 1.99H8.12a1.99 1.99 0 0 1-1.99-1.99v-7.08c0-.67.54-1.22 1.22-1.22Z"
                   stroke="currentColor"
                   stroke-linejoin="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
                 <path
-                  d="M12 13.2v4.2"
+                  d="M12 13.2v4"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.6"
+                  stroke-width="1.55"
                 />
               </svg>
             </span>
-            <span class="nav-link__text">{{ item.label }}</span>
+            <span class="primary-nav__label">{{ item.label }}</span>
           </RouterLink>
-
-          <button
-            v-for="feature in featureButtons"
-            :key="feature.id"
-            type="button"
-            class="nav-link"
-            @click="openFeature(feature.id)"
-          >
-            <span class="nav-link__icon" aria-hidden="true">
-              <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M8.75 10.25a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5Zm6.5 1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm-10 7a4.75 4.75 0 0 1 7 0m1.5 0a4 4 0 0 1 5.75-.75"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.6"
-                />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 4.75 13.68 8.7l4.27.36-3.25 2.77.98 4.12L12 13.8l-3.68 2.15.98-4.12-3.25-2.77 4.27-.36L12 4.75Zm0 0v-1.5m0 17.5v-1.5m8-7.25h1.5m-19 0H4"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.6"
-                />
-              </svg>
-              <span
-                v-if="feature.id === 'friends' && hasFriendFeatureNotification"
-                class="nav-link__dot"
-                :aria-label="appText.friendNoticeAria"
-              />
-            </span>
-            <span class="nav-link__text">{{ feature.label }}</span>
-          </button>
         </nav>
 
-        <div class="header-actions">
-          <label class="language-switch">
-            <span>{{ appText.languageLabel }}</span>
+        <div class="header-actions header-actions--refined">
+          <div
+            ref="serviceMenuRef"
+            class="service-menu"
+            @mouseenter="openServiceMenu"
+            @mouseleave="closeServiceMenu"
+          >
+            <button
+              type="button"
+              class="service-menu__trigger"
+              :aria-expanded="isServiceMenuOpen"
+              :aria-label="appText.moreServicesAria"
+              @click.stop="toggleServiceMenu"
+            >
+              <span class="service-menu__trigger-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M5.25 8.1c1.7-.8 3.35-1.2 4.95-1.2 1.55 0 3.2.4 4.95 1.2 1.25.55 2.5 1 3.75 1.35"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-width="1.45"
+                  />
+                  <path
+                    d="M5.25 15.9c1.7.8 3.35 1.2 4.95 1.2 1.55 0 3.2-.4 4.95-1.2 1.25-.55 2.5-1 3.75-1.35"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-width="1.45"
+                  />
+                  <circle cx="8.2" cy="12" r="1.2" fill="currentColor" />
+                  <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+                  <circle cx="15.8" cy="12" r="1.2" fill="currentColor" />
+                </svg>
+              </span>
+              <span class="service-menu__trigger-label">{{ appText.moreServices }}</span>
+              <span
+                v-if="hasFriendFeatureNotification"
+                class="service-menu__trigger-dot"
+                :aria-label="appText.friendNoticeAria"
+              />
+            </button>
+
+            <transition name="service-dropdown">
+              <div v-if="isServiceMenuOpen" class="service-menu__panel" role="menu" @click.stop>
+                <button
+                  v-for="feature in featureButtons"
+                  :key="feature.id"
+                  type="button"
+                  class="service-menu__item"
+                  @click="handleSelectFeature(feature.id)"
+                >
+                  <span class="service-menu__item-icon" aria-hidden="true">
+                    <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M8.6 10.2a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Zm6.65 1.35a2.45 2.45 0 1 0 0-4.9 2.45 2.45 0 0 0 0 4.9Zm-10 6.95a4.65 4.65 0 0 1 6.95 0m1.45 0a3.95 3.95 0 0 1 5.65-.8"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="1.45"
+                      />
+                    </svg>
+                    <svg v-else-if="feature.id === 'ai'" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M12 4.9 13.6 8.5l3.95.32-3 2.58.9 3.8L12 13.2l-3.45 2.05.9-3.8-3-2.58 3.95-.32L12 4.9Z"
+                        stroke="currentColor"
+                        stroke-linejoin="round"
+                        stroke-width="1.45"
+                      />
+                      <path
+                        d="M12 3.1v1.35m0 15.1v1.35m7.2-8.9h1.35m-16.1 0H5.8"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-width="1.2"
+                        opacity="0.6"
+                      />
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M7.7 7.25h8.6a1.95 1.95 0 0 1 1.95 1.95v5.6a1.95 1.95 0 0 1-1.95 1.95h-5.2l-3.5 2.45v-2.45H7.7a1.95 1.95 0 0 1-1.95-1.95V9.2a1.95 1.95 0 0 1 1.95-1.95Z"
+                        stroke="currentColor"
+                        stroke-linejoin="round"
+                        stroke-width="1.45"
+                      />
+                      <path
+                        d="M9 10.7h6m-6 2.8h4.2"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-width="1.25"
+                      />
+                    </svg>
+                  </span>
+                  <span class="service-menu__item-copy">
+                    <strong>{{ feature.label }}</strong>
+                    <small>{{ featurePanels[feature.id]?.eyebrow }}</small>
+                  </span>
+                  <span
+                    v-if="feature.id === 'friends' && hasFriendFeatureNotification"
+                    class="service-menu__item-dot"
+                    :aria-label="appText.friendNoticeAria"
+                  />
+                </button>
+              </div>
+            </transition>
+          </div>
+
+          <label class="language-switch language-switch--refined">
             <select :value="language" @change="setLanguage($event.target.value)">
               <option v-for="item in languageOptions" :key="item.value" :value="item.value">
                 {{ item.label }}
@@ -1906,20 +2040,20 @@ watch(
           <div ref="profileMenuRef" class="profile-menu-wrap">
             <button
               type="button"
-              class="profile-button"
+              class="profile-button profile-button--refined"
               :aria-label="currentUser ? appText.profileMenuLabel : appText.profileAuthLabel"
               @click.stop="toggleProfileMenu"
             >
-                <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
-                  <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
-                  <span v-if="hasPendingFriendRequests" class="profile-request-badge">
-                    {{ pendingFriendRequests.length > 9 ? '9+' : pendingFriendRequests.length }}
-                  </span>
-                  <span>{{ avatarLabel }}</span>
+              <span class="profile-avatar" :class="{ 'profile-avatar--filled': currentUser }">
+                <span class="profile-status-dot" :class="{ 'profile-status-dot--active': currentUser }" />
+                <span v-if="hasPendingFriendRequests" class="profile-request-badge">
+                  {{ pendingFriendRequests.length > 9 ? '9+' : pendingFriendRequests.length }}
                 </span>
-                <span class="profile-copy">
-                  <span class="profile-label">{{ profileLabel }}</span>
-                  <small class="profile-note">{{ profileStatus }}</small>
+                <span>{{ avatarLabel }}</span>
+              </span>
+              <span class="profile-copy profile-copy--refined">
+                <span class="profile-label">{{ profileLabel }}</span>
+                <small class="profile-note">{{ profileStatus }}</small>
               </span>
             </button>
 
@@ -2486,6 +2620,543 @@ watch(
     />
   </div>
 </template>
+
+<style scoped>
+.site-header--refined {
+  position: sticky;
+  top: 0;
+  z-index: 48;
+  border-bottom: 1px solid rgba(111, 121, 138, 0.12);
+  background:
+    linear-gradient(180deg, rgba(248, 245, 238, 0.96), rgba(244, 239, 231, 0.92)),
+    radial-gradient(circle at top left, rgba(124, 147, 164, 0.1), transparent 32%);
+  backdrop-filter: blur(18px);
+}
+
+.site-header--refined::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(175, 148, 86, 0.08) 0, rgba(175, 148, 86, 0.08) 1px, transparent 1px, transparent 24px),
+    linear-gradient(rgba(175, 148, 86, 0.05) 0, rgba(175, 148, 86, 0.05) 1px, transparent 1px, transparent 24px),
+    radial-gradient(circle at 18% 28%, rgba(124, 147, 164, 0.08), transparent 28%),
+    radial-gradient(circle at 82% 24%, rgba(185, 155, 94, 0.08), transparent 24%);
+  background-size: 24px 24px, 24px 24px, auto, auto;
+  opacity: 0.34;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.62), transparent);
+}
+
+.header-inner--refined {
+  position: relative;
+  width: min(100%, calc(var(--max-width) + 5rem));
+  min-height: 5.25rem;
+  margin: 0 auto;
+  padding: 1rem 1.6rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 1.35rem;
+}
+
+.brand-link--refined {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 0 0 auto;
+}
+
+.site-header--refined .brand-seal {
+  width: 3rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(175, 148, 86, 0.2);
+  background:
+    linear-gradient(145deg, rgba(191, 166, 111, 0.18), rgba(124, 147, 164, 0.14)),
+    rgba(255, 252, 246, 0.88);
+  color: #5f4e31;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 10px 24px rgba(84, 71, 47, 0.08);
+}
+
+.site-header--refined .brand-copy {
+  gap: 0.1rem;
+}
+
+.site-header--refined .brand-title {
+  font-size: 1.12rem;
+  letter-spacing: 0.12em;
+  color: #42372c;
+}
+
+.site-header--refined .brand-subtitle {
+  color: rgba(85, 81, 74, 0.68);
+  letter-spacing: 0.18em;
+}
+
+.primary-nav {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 0.48rem;
+  border-radius: 2rem;
+  border: 1px solid rgba(111, 121, 138, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 244, 0.9), rgba(246, 241, 233, 0.92)),
+    radial-gradient(circle at 15% 30%, rgba(124, 147, 164, 0.08), transparent 24%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 14px 34px rgba(84, 71, 47, 0.07);
+}
+
+.primary-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0.42rem;
+  border-radius: 1.6rem;
+  border: 1px solid rgba(175, 148, 86, 0.08);
+  pointer-events: none;
+}
+
+.primary-nav__item {
+  position: relative;
+  min-height: 3.5rem;
+  padding: 0.72rem 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.68rem;
+  border-radius: 1.55rem 1.35rem 1.6rem 1.25rem;
+  border: 1px solid rgba(111, 121, 138, 0.08);
+  background:
+    linear-gradient(145deg, rgba(255, 252, 247, 0.95), rgba(243, 237, 229, 0.88));
+  color: #4c453b;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 6px 18px rgba(84, 71, 47, 0.05);
+  transition:
+    transform 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    background-color 0.28s ease,
+    color 0.28s ease;
+}
+
+.primary-nav__item:hover,
+.primary-nav__item.router-link-active,
+.primary-nav__item.router-link-exact-active {
+  color: #2f4e62;
+  border-color: rgba(124, 147, 164, 0.24);
+  background:
+    linear-gradient(145deg, rgba(235, 243, 246, 0.96), rgba(247, 241, 230, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 10px 24px rgba(84, 71, 47, 0.08);
+  transform: translateY(-1px);
+}
+
+.primary-nav__icon {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(124, 147, 164, 0.08);
+  color: inherit;
+}
+
+.primary-nav__icon svg {
+  width: 1.08rem;
+  height: 1.08rem;
+}
+
+.primary-nav__label {
+  font-family: var(--font-serif);
+  font-size: 0.96rem;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-align: center;
+  white-space: normal;
+}
+
+.header-actions--refined {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.service-menu {
+  position: relative;
+}
+
+.service-menu__trigger,
+.language-switch--refined,
+.profile-button--refined {
+  min-height: 3.3rem;
+  border-radius: 1.35rem;
+  border: 1px solid rgba(111, 121, 138, 0.12);
+  background:
+    linear-gradient(145deg, rgba(255, 252, 247, 0.94), rgba(243, 237, 229, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 10px 22px rgba(84, 71, 47, 0.06);
+}
+
+.service-menu__trigger {
+  position: relative;
+  min-width: 7.6rem;
+  padding: 0.68rem 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  color: #4c453b;
+}
+
+.service-menu__trigger-icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(124, 147, 164, 0.08);
+}
+
+.service-menu__trigger-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.service-menu__trigger-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  color: #5b5347;
+  white-space: nowrap;
+}
+
+.service-menu__trigger-dot,
+.service-menu__item-dot {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+  background: #b9634f;
+  box-shadow: 0 0 0 3px rgba(255, 250, 244, 0.88);
+}
+
+.service-menu__trigger-dot {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.72rem;
+}
+
+.service-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.8rem);
+  right: 0;
+  width: 19rem;
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.48rem;
+  border-radius: 1.55rem;
+  border: 1px solid rgba(111, 121, 138, 0.12);
+  background:
+    linear-gradient(180deg, rgba(250, 246, 239, 0.98), rgba(243, 238, 230, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 22px 48px rgba(84, 71, 47, 0.14);
+}
+
+.service-menu__item {
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.78rem;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(111, 121, 138, 0.08);
+  background: rgba(255, 252, 247, 0.82);
+  color: #4c453b;
+  text-align: left;
+  transition:
+    transform 0.24s ease,
+    border-color 0.24s ease,
+    background-color 0.24s ease;
+}
+
+.service-menu__item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(124, 147, 164, 0.2);
+  background: rgba(241, 245, 244, 0.92);
+}
+
+.service-menu__item-icon {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(124, 147, 164, 0.08);
+}
+
+.service-menu__item-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.service-menu__item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.16rem;
+}
+
+.service-menu__item-copy strong {
+  font-weight: 600;
+  color: #453d33;
+}
+
+.service-menu__item-copy small {
+  color: rgba(91, 83, 71, 0.74);
+  letter-spacing: 0.08em;
+}
+
+.language-switch--refined {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.85rem;
+}
+
+.language-switch--refined select {
+  min-width: 5.7rem;
+  min-height: 2.6rem;
+  padding: 0 1.2rem 0 0.1rem;
+  border: 0;
+  background: transparent;
+  color: #453d33;
+  font-size: 0.86rem;
+  letter-spacing: 0.05em;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.profile-button--refined {
+  padding: 0.26rem 0.36rem 0.26rem 0.34rem;
+  gap: 0.56rem;
+}
+
+.site-header--refined .profile-avatar {
+  width: 2.2rem;
+  background:
+    linear-gradient(145deg, rgba(191, 166, 111, 0.16), rgba(124, 147, 164, 0.12)),
+    rgba(255, 251, 245, 0.9);
+  color: #5f4e31;
+}
+
+.site-header--refined .profile-status-dot {
+  border-color: rgba(250, 246, 239, 0.96);
+}
+
+.profile-copy--refined {
+  gap: 0.1rem;
+}
+
+.site-header--refined .profile-label {
+  color: #453d33;
+  font-size: 0.8rem;
+}
+
+.site-header--refined .profile-note {
+  color: rgba(91, 83, 71, 0.68);
+}
+
+.site-header--refined .profile-dropdown {
+  top: calc(100% + 0.9rem);
+  border-radius: 1.5rem;
+  border-color: rgba(111, 121, 138, 0.12);
+  background:
+    linear-gradient(180deg, rgba(250, 246, 239, 0.98), rgba(243, 238, 230, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 22px 48px rgba(84, 71, 47, 0.14);
+}
+
+.service-dropdown-enter-active,
+.service-dropdown-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+}
+
+.service-dropdown-enter-from,
+.service-dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (max-width: 1180px) {
+  .header-inner--refined {
+    flex-wrap: wrap;
+    row-gap: 0.9rem;
+  }
+
+  .primary-nav {
+    order: 3;
+    width: 100%;
+  }
+
+  .header-actions--refined {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .header-inner--refined {
+    gap: 1rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .primary-nav {
+    gap: 0.58rem;
+    padding: 0.38rem;
+  }
+
+  .primary-nav__item {
+    min-height: 3.25rem;
+    padding: 0.62rem 0.72rem;
+    gap: 0.52rem;
+  }
+
+  .primary-nav__label {
+    font-size: 0.84rem;
+  }
+
+  .service-menu__trigger {
+    min-width: 3.3rem;
+    padding-left: 0.72rem;
+    padding-right: 0.72rem;
+  }
+
+  .service-menu__trigger-label,
+  .profile-copy--refined {
+    display: none;
+  }
+
+  .language-switch--refined {
+    padding-left: 0.68rem;
+    padding-right: 0.68rem;
+  }
+
+  .language-switch--refined select {
+    min-width: 4.6rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-inner--refined {
+    grid-template-columns: minmax(0, 1fr) auto;
+    display: grid;
+    align-items: center;
+  }
+
+  .primary-nav {
+    grid-column: 1 / -1;
+    margin-top: 0.16rem;
+    gap: 0.5rem;
+    padding: 0.4rem;
+    border-radius: 1.7rem;
+  }
+
+  .brand-link--refined {
+    min-width: 0;
+  }
+
+  .site-header--refined .brand-title {
+    font-size: 1rem;
+  }
+
+  .site-header--refined .brand-subtitle {
+    display: none;
+  }
+
+  .primary-nav__item {
+    min-height: 4.5rem;
+    padding: 0.62rem 0.38rem 0.72rem;
+    flex-direction: column;
+    gap: 0.42rem;
+    border-radius: 1.3rem;
+  }
+
+  .primary-nav__icon {
+    width: 1.84rem;
+    height: 1.84rem;
+    flex-basis: 1.84rem;
+  }
+
+  .primary-nav__icon svg {
+    width: 0.98rem;
+    height: 0.98rem;
+  }
+
+  .primary-nav__label {
+    font-size: 0.76rem;
+    line-height: 1.35;
+    letter-spacing: 0.02em;
+  }
+
+  .service-menu__panel {
+    width: min(18rem, calc(100vw - 1.5rem));
+    right: -0.25rem;
+  }
+
+  .language-switch--refined select {
+    min-width: 4rem;
+    font-size: 0.8rem;
+  }
+
+  .profile-button--refined {
+    padding-right: 0.32rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .primary-nav {
+    gap: 0.42rem;
+    padding: 0.34rem;
+  }
+
+  .primary-nav__item {
+    min-height: 4.3rem;
+    padding: 0.56rem 0.28rem 0.64rem;
+    gap: 0.36rem;
+  }
+
+  .primary-nav__icon {
+    width: 1.72rem;
+    height: 1.72rem;
+    flex-basis: 1.72rem;
+  }
+
+  .primary-nav__icon svg {
+    width: 0.92rem;
+    height: 0.92rem;
+  }
+
+  .primary-nav__label {
+    font-size: 0.72rem;
+    line-height: 1.3;
+  }
+}
+</style>
 
 <style>
 .profile-request-badge {
@@ -3561,6 +4232,16 @@ watch(
     padding: 1.1rem;
   }
 
+  .profile-dropdown {
+    position: fixed;
+    top: max(4.75rem, calc(env(safe-area-inset-top) + 4.2rem));
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    max-height: calc(100dvh - 6rem);
+    overflow-y: auto;
+  }
+
   .feature-stat-grid {
     grid-template-columns: 1fr;
   }
@@ -3582,6 +4263,8 @@ watch(
   .ai-sidebar {
     border-right: 0;
     border-bottom: 1px solid rgba(28, 25, 23, 0.08);
+    max-height: 34vh;
+    padding: 0.85rem;
   }
 
   .ai-main__header,
@@ -3593,6 +4276,47 @@ watch(
   .ai-main__header-actions {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .ai-main__context strong,
+  .ai-main__context p {
+    white-space: normal;
+  }
+
+  .ai-chat.ai-chat--main {
+    padding: 1rem;
+  }
+
+  .message-row {
+    gap: 0.55rem;
+    align-items: flex-start;
+  }
+
+  .message-avatar {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    font-size: 0.76rem;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .ai-composer {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.85rem 1rem calc(0.95rem + env(safe-area-inset-bottom));
+  }
+
+  .dialog__primary.ai-composer__send {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .friends-embed {
+    min-height: 0;
   }
 }
 
@@ -3609,6 +4333,59 @@ watch(
   .footer-nav {
     grid-template-columns: 1fr;
     gap: 0.75rem;
+  }
+
+  .dialog--ai {
+    width: min(100%, 1000px);
+    height: calc(100dvh - 2rem);
+    max-height: calc(100dvh - 2rem);
+  }
+}
+
+@media (max-width: 540px) {
+  .overlay {
+    padding: 0.75rem;
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 24px;
+    padding: 1rem;
+  }
+
+  .dialog--feature {
+    padding: 1rem;
+  }
+
+  .dialog--ai {
+    width: 100%;
+    height: calc(100dvh - 1.5rem);
+    max-height: calc(100dvh - 1.5rem);
+    padding: 0;
+  }
+
+  .dialog--ai-fullscreen {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .dialog__title {
+    font-size: 1.25rem;
+  }
+
+  .prompt-chips {
+    gap: 0.45rem;
+  }
+
+  .prompt-chip {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .upload-preview {
+    padding: 0.85rem;
   }
 }
 </style>
