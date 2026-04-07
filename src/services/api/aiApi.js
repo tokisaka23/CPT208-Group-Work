@@ -1,7 +1,7 @@
 import { requestAuthorizedJson } from './httpClient';
 
 export const aiApi = {
-  async askQianwen({ conversationId, conversationName, message, messages, gpsLocation }) {
+  async askQianwen({ conversationId, conversationName, message, messages, gpsLocation, userLocation }) {
     return requestAuthorizedJson('/api/chat', {
       action: 'ask',
       conversationId,
@@ -9,6 +9,7 @@ export const aiApi = {
       message,
       messages,
       gpsLocation,
+      userLocation,
     });
   },
 

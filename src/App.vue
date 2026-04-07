@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { showFailToast, showSuccessToast } from 'vant';
+import ScenicMapDialog from './components/maps/ScenicMapDialog.vue';
 import FriendRequestPopup from './components/friends/FriendRequestPopup.vue';
 import FriendsPage from './pages/friends/FriendsPage.vue';
 import { aiApi, authApi, uploadApi } from './services/api';
@@ -12,6 +13,7 @@ import {
 import { getGroupChats } from './services/friends/groupChatService';
 import { currentLanguage, getDocumentTitle, getRouteTitle, resolveLocalized, useLanguage } from './i18n';
 import { SECURITY_QUESTION_FIELDS, getSecurityQuestionPrompt } from './shared/securityQuestions';
+import { formatDistance, formatDuration } from './shared/lbsRouteAgent';
 import { isSupabaseConfigured } from './services/supabase/clientRuntime';
 import { deleteCurrentAccount } from './services/supabase/authRuntime';
 
@@ -233,6 +235,14 @@ const dialogTextSource = {
   me: { zh: '我', en: 'Me', ja: '私', ko: '나' },
   aiLabel: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
   aiLoading: { zh: '正在整理当前页面的慢游建议…', en: 'Preparing slow-travel suggestions for this page...', ja: 'このページ向けのゆったりした案内を整理しています...', ko: '이 페이지에 맞는 느린 여행 제안을 정리하는 중...' },
+  aiRoutePlanTag: { zh: '实时路线', en: 'Live Route', ja: 'リアルタイム経路', ko: '실시간 경로' },
+  aiRouteStart: { zh: '起点', en: 'Start', ja: '出発地', ko: '출발지' },
+  aiRouteEnd: { zh: '终点', en: 'End', ja: '到着地', ko: '도착지' },
+  aiRouteOpenMap: { zh: '在地图中查看', en: 'Open in Map', ja: '地図で見る', ko: '지도에서 보기' },
+  aiRouteTransitTitle: { zh: '公共交通方案', en: 'Public Transit', ja: '公共交通プラン', ko: '대중교통 안내' },
+  aiRouteTransitToggle: { zh: '查看公交方案', en: 'Show Transit Plan', ja: '公共交通を見る', ko: '대중교통 보기' },
+  aiRouteTransitPlaceholder: { zh: '暂无公共交通方案', en: 'No transit plan available', ja: '公共交通プランはありません', ko: '대중교통 안내가 없습니다' },
+  aiRouteProviderHint: { zh: '已通过高德实时路线规划，并加上苏州地理围栏校验', en: 'Planned with AMap live routing and Suzhou geofence checks', ja: '高徳のリアルタイム経路と蘇州ジオフェンスで検証済み', ko: 'AMap 실시간 경로와 쑤저우 지오펜스로 검증됨' },
   aiInputAria: { zh: '输入你的问题', en: 'Enter your question', ja: '質問を入力', ko: '질문 입력' },
   aiInputPlaceholder: { zh: '输入问题，Enter 发送，Shift + Enter 换行', en: 'Type a question. Enter to send, Shift + Enter for a new line', ja: '質問を入力。Enter で送信、Shift + Enter で改行', ko: '질문을 입력하세요. Enter 로 전송, Shift + Enter 로 줄바꿈' },
   send: { zh: '发送', en: 'Send', ja: '送信', ko: '전송' },
@@ -491,6 +501,9 @@ const aiError = ref('');
 const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
+const aiUserLocation = ref(null);
+const aiRouteDialogVisible = ref(false);
+const activeAiRoutePlan = ref(null);
 const profileMenuRef = ref(null);
 const serviceMenuRef = ref(null);
 const isServiceMenuOpen = ref(false);
@@ -538,6 +551,65 @@ function focusAiComposer() {
   });
 }
 
+async function resolveAiUserLocation({ force = false } = {}) {
+  if (aiUserLocation.value && !force) {
+    return aiUserLocation.value;
+  }
+
+  if (!navigator?.geolocation) {
+    return null;
+  }
+
+  const location = await new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lng: position.coords.longitude,
+          lat: position.coords.latitude,
+        });
+      },
+      () => resolve(null),
+      {
+        enableHighAccuracy: true,
+        timeout: 6000,
+        maximumAge: 120000,
+      },
+    );
+  });
+
+  aiUserLocation.value = location;
+  return location;
+}
+
+function summarizeAiRouteMode(mode) {
+  return mode === 'driving' ? '驾车' : '步行';
+}
+
+function summarizeAiRoutePlan(routePlan) {
+  if (!routePlan) {
+    return '';
+  }
+
+  return `${summarizeAiRouteMode(routePlan.mode)} · ${formatDistance(routePlan.distanceMeters)} · ${formatDuration(routePlan.durationSeconds)}`;
+}
+
+function summarizeAiRouteOption(routeOption, mode) {
+  if (!routeOption) {
+    return `${summarizeAiRouteMode(mode)}暂不可用`;
+  }
+
+  return `${summarizeAiRouteMode(mode)} · ${formatDistance(routeOption.distance)} · ${formatDuration(routeOption.duration)}`;
+}
+
+function openAiRoutePlan(routePlan) {
+  if (!routePlan?.end) {
+    return;
+  }
+
+  activeAiRoutePlan.value = routePlan;
+  aiRouteDialogVisible.value = true;
+}
+
 function normalizeAiText(value) {
   return String(value || '')
     .replace(/\s+/g, ' ')
@@ -561,13 +633,46 @@ function getJourneyByContextKey(contextKey) {
 const activeAiConversation = computed(
   () => aiConversations.value.find((item) => item.id === activeAiConversationId.value) || null,
 );
+const activeAiRoutePoi = computed(() => {
+  const end = activeAiRoutePlan.value?.end;
+
+  if (!end) {
+    return null;
+  }
+
+  return {
+    id: end.poiId || `ai-route-${end.lng}-${end.lat}`,
+    name: end.name,
+    lng: end.lng,
+    lat: end.lat,
+    address: end.address || '',
+  };
+});
 const aiMessages = computed(() => activeAiConversation.value?.messages || []);
 const isAiLoading = computed(() => Boolean(aiLoadingConversationId.value));
 const isActiveAiConversationLoading = computed(
   () => aiLoadingConversationId.value === activeAiConversationId.value,
 );
 const activeAiJourney = computed(() => getJourneyByContextKey(activeAiConversation.value?.contextKey || route.fullPath));
-const activeAiPrompts = computed(() => activeAiJourney.value.prompts || currentJourney.value.prompts);
+const activeAiPrompts = computed(() => {
+  const routePrompt = currentLanguage.value === 'en'
+    ? 'Plan a walking route from Pingjiang Road to Suzhou Museum.'
+    : currentLanguage.value === 'ja'
+      ? '平江路から蘇州博物館まで歩行ルートを案内して。'
+      : currentLanguage.value === 'ko'
+        ? '평강로에서 쑤저우 박물관까지 도보 경로를 안내해 줘.'
+        : '帮我规划从平江路到苏州博物馆的步行路线。';
+  const drivingPrompt = currentLanguage.value === 'en'
+    ? 'Plan a driving route from Pingjiang Road to Suzhou Museum.'
+    : currentLanguage.value === 'ja'
+      ? '平江路から蘇州博物館まで車で行くルートを案内して。'
+      : currentLanguage.value === 'ko'
+        ? '평강로에서 쑤저우 박물관까지 차로 가는 길을 안내해 줘.'
+        : '帮我规划从平江路到苏州博物馆的车行路线。';
+
+  const prompts = activeAiJourney.value.prompts || currentJourney.value.prompts || [];
+  return [routePrompt, drivingPrompt, ...prompts];
+});
 const aiShouldShowStarter = computed(() => !aiMessages.value.some((item) => item.role === 'user'));
 const hasPendingFriendRequests = computed(() => pendingFriendRequests.value.length > 0);
 const hasUnreadGroupChats = computed(() => unreadGroupChatCount.value > 0);
@@ -979,6 +1084,7 @@ const openFeature = async (featureId) => {
       ensureAiConversation(true);
     }
 
+    resolveAiUserLocation().catch(() => {});
     focusAiComposer();
   }
 
@@ -1049,6 +1155,7 @@ const sendAiMessage = async (prefilledPrompt = '') => {
   focusAiComposer();
 
   try {
+    const userLocation = await resolveAiUserLocation();
     // 中文注释：这里连接后端千问接口 /api/chat，把用户输入发给后端并拿到 AI 回复。
     const data = await aiApi.askQianwen({
       conversationId: conversation.id,
@@ -1056,9 +1163,16 @@ const sendAiMessage = async (prefilledPrompt = '') => {
       message: question,
       messages: buildConversationMessagesForApi(conversation),
       gpsLocation: conversation.pageLabel,
+      userLocation,
     });
 
-    conversation.messages.push({ id: createAiMessageId('assistant'), role: 'assistant', content: data.response });
+    conversation.messages.push({
+      id: createAiMessageId('assistant'),
+      role: 'assistant',
+      content: data.response,
+      routePlan: data.routePlan || null,
+      hint: data.routePlan ? dialogText.value.aiRouteProviderHint : '',
+    });
     trimConversationMessages(conversation);
     syncAiConversationMeta(conversation);
 
@@ -2277,12 +2391,46 @@ watch(
                           'message-bubble',
                           message.role === 'user' ? 'message-bubble--user' : 'message-bubble--assistant',
                         ]"
-                      >
-                        <span class="message-bubble__role">{{ message.role === 'user' ? dialogText.me : dialogText.aiLabel }}</span>
-                        <p>{{ message.content }}</p>
-                        <small v-if="message.hint">{{ message.hint }}</small>
-                      </div>
-                    </article>
+                        >
+                          <span class="message-bubble__role">{{ message.role === 'user' ? dialogText.me : dialogText.aiLabel }}</span>
+                          <p>{{ message.content }}</p>
+                          <div v-if="message.routePlan" class="ai-route-card">
+                            <div class="ai-route-card__head">
+                              <strong>{{ dialogText.aiRoutePlanTag }}</strong>
+                              <span>{{ summarizeAiRoutePlan(message.routePlan) }}</span>
+                            </div>
+                            <div class="ai-route-card__meta">
+                              <span>步行</span>
+                              <strong>{{ summarizeAiRouteOption(message.routePlan.routes?.walking, 'walking') }}</strong>
+                            </div>
+                            <div class="ai-route-card__meta">
+                              <span>车行</span>
+                              <strong>{{ summarizeAiRouteOption(message.routePlan.routes?.driving, 'driving') }}</strong>
+                            </div>
+                            <div class="ai-route-card__meta">
+                              <span>{{ dialogText.aiRouteStart }}</span>
+                              <strong>{{ message.routePlan.start?.name || '当前位置' }}</strong>
+                            </div>
+                            <div class="ai-route-card__meta">
+                              <span>{{ dialogText.aiRouteEnd }}</span>
+                              <strong>{{ message.routePlan.end?.name }}</strong>
+                            </div>
+                            <button type="button" class="ai-route-card__action" @click="openAiRoutePlan(message.routePlan)">
+                              {{ dialogText.aiRouteOpenMap }}
+                            </button>
+                            <details v-if="message.routePlan.transitPlan" class="ai-route-card__transit">
+                              <summary>{{ dialogText.aiRouteTransitToggle }}</summary>
+                              <p class="ai-route-card__transit-summary">{{ message.routePlan.transitPlan.summary }}</p>
+                              <textarea
+                                class="ai-route-card__transit-textarea"
+                                :value="message.routePlan.transitPlan.text || dialogText.aiRouteTransitPlaceholder"
+                                readonly
+                              />
+                            </details>
+                          </div>
+                          <small v-if="message.hint">{{ message.hint }}</small>
+                        </div>
+                      </article>
 
                     <article
                       v-if="isActiveAiConversationLoading"
@@ -2580,6 +2728,14 @@ watch(
         </section>
       </div>
     </transition>
+
+    <ScenicMapDialog
+      :show="aiRouteDialogVisible"
+      :poi="activeAiRoutePoi"
+      :route-plan="activeAiRoutePlan"
+      title="AI 路线规划"
+      @update:show="aiRouteDialogVisible = $event"
+    />
 
     <FriendRequestPopup
       v-if="currentUser"
@@ -4028,6 +4184,73 @@ watch(
 
 .message-bubble small {
   color: var(--ink-500);
+}
+
+.ai-route-card {
+  margin-top: 0.55rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 16px;
+  border: 1px solid rgba(47, 106, 77, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.ai-route-card__head,
+.ai-route-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ai-route-card__head strong,
+.ai-route-card__meta strong {
+  color: var(--ink-900);
+}
+
+.ai-route-card__head span,
+.ai-route-card__meta span {
+  color: var(--ink-600);
+  font-size: 0.82rem;
+}
+
+.ai-route-card__action {
+  min-height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(47, 106, 77, 0.2);
+  background: rgba(95, 127, 114, 0.1);
+  color: #2f6a4d;
+  font-weight: 600;
+}
+
+.ai-route-card__transit {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ai-route-card__transit summary {
+  cursor: pointer;
+  color: #2f6a4d;
+  font-weight: 600;
+}
+
+.ai-route-card__transit-summary {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 0.84rem;
+}
+
+.ai-route-card__transit-textarea {
+  width: 100%;
+  min-height: 6.5rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(47, 106, 77, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink-800);
+  resize: vertical;
+  line-height: 1.55;
 }
 
 .is-loading {

@@ -8,6 +8,7 @@ const props = defineProps({
   show: { type: Boolean, default: false },
   poi: { type: [Object, String], default: null },
   title: { type: String, default: '' },
+  routePlan: { type: Object, default: null },
 });
 
 const emit = defineEmits(['update:show']);
@@ -46,7 +47,22 @@ let searchMarkers = [];
 let placeSearch = null;
 let mapClickHandler = null;
 
-const resolvedPoi = computed(() => (typeof props.poi === 'string' ? resolveSuzhouPoi(props.poi) : resolveSuzhouPoi(props.poi?.id) || props.poi));
+const agentRoutePlan = computed(() => (
+  props.routePlan?.start && props.routePlan?.end ? props.routePlan : null
+));
+const resolvedPoi = computed(() => {
+  if (agentRoutePlan.value?.end) {
+    return {
+      id: agentRoutePlan.value.end.poiId || `ai-route-${agentRoutePlan.value.end.lng}-${agentRoutePlan.value.end.lat}`,
+      name: agentRoutePlan.value.end.name || '路线终点',
+      lng: Number(agentRoutePlan.value.end.lng),
+      lat: Number(agentRoutePlan.value.end.lat),
+      address: agentRoutePlan.value.end.address || '',
+    };
+  }
+
+  return typeof props.poi === 'string' ? resolveSuzhouPoi(props.poi) : resolveSuzhouPoi(props.poi?.id) || props.poi;
+});
 const mapTitle = computed(() => props.title || resolvedPoi.value?.name || '地图导航');
 const canUseAmap = computed(() => hasAmapCredentials());
 const amapKey = computed(() => getAmapKey());
@@ -56,6 +72,33 @@ const uiStorageKey = computed(() => `cpt208_map_dialog_ui_solo_${resolvedPoi.val
 const minimizedLabel = computed(() => mapTitle.value || '地图');
 const routeSummary = computed(() => (markerNotes.value.length ? `当前位置 -> ${markerNotes.value.map((_, i) => i + 1).join(' -> ')} -> 终点` : '当前位置 -> 终点'));
 const activeSearchOption = computed(() => SEARCH_OPTIONS.find((item) => item.id === activeSearchId.value) || SEARCH_OPTIONS[0]);
+const displayRouteSummary = computed(() => {
+  if (agentRoutePlan.value) {
+    const selectedRoute = agentSelectedRoute.value;
+    const modeLabel = routeMode.value === 'driving' ? '车行' : '步行';
+    const distanceMeters = Number(selectedRoute?.distance || agentRoutePlan.value.distanceMeters || 0);
+    const durationSeconds = Number(selectedRoute?.duration || agentRoutePlan.value.durationSeconds || 0);
+    const distanceText = distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)} km` : `${Math.round(distanceMeters)} m`;
+    const minutes = Math.max(1, Math.round(durationSeconds / 60));
+    return `${agentRoutePlan.value.start.name} -> ${agentRoutePlan.value.end.name} · ${modeLabel} · ${distanceText} · ${minutes} min`;
+  }
+
+  return routeSummary.value;
+});
+const agentRouteSteps = computed(() => (
+  Array.isArray(agentSelectedRoute.value?.steps)
+    ? agentSelectedRoute.value.steps.filter((item) => String(item?.instruction || '').trim()).slice(0, 6)
+    : []
+));
+const agentSelectedRoute = computed(() => {
+  if (!agentRoutePlan.value?.routes) {
+    return agentRoutePlan.value || null;
+  }
+
+  return routeMode.value === 'driving'
+    ? agentRoutePlan.value.routes.driving || agentRoutePlan.value.routes.walking || null
+    : agentRoutePlan.value.routes.walking || agentRoutePlan.value.routes.driving || null;
+});
 const searchSummary = computed(() => (
   searchResultCount.value ? `已显示 ${searchResultCount.value} 个${activeSearchOption.value.label}` : `搜索 ${activeSearchOption.value.label}`
 ));
@@ -322,6 +365,36 @@ async function renderRoute() {
   try {
     clearRoutePolylines();
     clearBaseMarkers();
+
+    if (agentRoutePlan.value) {
+      currentPosition.value = {
+        lng: Number(agentRoutePlan.value.start.lng),
+        lat: Number(agentRoutePlan.value.start.lat),
+      };
+      renderDestinationMarker(AMap);
+      renderCurrentMarker(AMap);
+
+      const path = Array.isArray(agentSelectedRoute.value?.path)
+        ? agentSelectedRoute.value.path.map((item) => [Number(item.lng), Number(item.lat)]).filter((item) => item.every(Number.isFinite))
+        : [];
+
+      if (path.length >= 2) {
+        const polyline = new AMap.Polyline({
+          path,
+          strokeColor: ROUTE_COLORS[0],
+          strokeOpacity: 0.94,
+          strokeWeight: routeMode.value === 'driving' ? 7 : 6,
+          lineJoin: 'round',
+          lineCap: 'round',
+        });
+        routePolylines.push(polyline);
+        mapInstance.add(polyline);
+      }
+
+      fitMapView();
+      return;
+    }
+
     renderDestinationMarker(AMap);
     renderWaypointMarkers(AMap);
 
@@ -453,6 +526,10 @@ async function searchNearbyPlaces() {
 }
 
 async function handleMapClick(event) {
+  if (agentRoutePlan.value) {
+    return;
+  }
+
   if (markerNotes.value.length >= MAX_WAYPOINTS) {
     showFailToast(`最多只能添加 ${MAX_WAYPOINTS} 个点位`);
     return;
@@ -476,6 +553,9 @@ async function initMap() {
   }
 
   restoreState();
+  if (agentRoutePlan.value?.mode) {
+    routeMode.value = agentRoutePlan.value.mode;
+  }
   mapError.value = '';
 
   if (!canUseAmap.value) {
@@ -501,10 +581,14 @@ async function initMap() {
     });
     mapInstance.addControl(new AMap.ToolBar());
     mapInstance.addControl(new AMap.Scale());
-    mapClickHandler = (event) => handleMapClick(event);
-    mapInstance.on('click', mapClickHandler);
+    if (!agentRoutePlan.value) {
+      mapClickHandler = (event) => handleMapClick(event);
+      mapInstance.on('click', mapClickHandler);
+    }
 
-    await detectCurrentPosition();
+    if (!agentRoutePlan.value) {
+      await detectCurrentPosition();
+    }
     await renderRoute();
   } catch (error) {
     console.error('[MapDialog] init failed', error);
@@ -595,6 +679,12 @@ watch(() => props.poi, async () => {
   }
 });
 
+watch(() => props.routePlan, async () => {
+  if (props.show) {
+    await initMap();
+  }
+});
+
 watch(routeMode, async () => {
   persistState();
   if (props.show && mapInstance && routeMode.value) {
@@ -666,10 +756,35 @@ onBeforeUnmount(() => {
                 <h4>导航顺序</h4>
                 <span>{{ routeMode === 'driving' ? '车行' : '步行' }}</span>
               </div>
-              <p class="scenic-map-popup__route-summary">{{ routeSummary }}</p>
+              <p class="scenic-map-popup__route-summary">{{ agentRoutePlan ? displayRouteSummary : routeSummary }}</p>
             </section>
 
-            <section class="scenic-map-popup__card">
+            <section v-if="agentRoutePlan" class="scenic-map-popup__card">
+              <div class="scenic-map-popup__card-head">
+                <h4>AI 路线步骤</h4>
+                <span>{{ agentRouteSteps.length }} 段</span>
+              </div>
+              <p class="scenic-map-popup__route-summary">{{ displayRouteSummary }}</p>
+              <div v-if="agentRouteSteps.length" class="scenic-map-popup__list">
+                <article v-for="(step, index) in agentRouteSteps" :key="`${index}-${step.instruction}`" class="scenic-map-popup__list-item">
+                  <div class="scenic-map-popup__stop-head">
+                    <strong>{{ index + 1 }}</strong>
+                  </div>
+                  <span>{{ step.instruction }}</span>
+                </article>
+              </div>
+              <details v-if="agentRoutePlan.transitPlan" class="scenic-map-popup__transit">
+                <summary>公共交通方案</summary>
+                <p class="scenic-map-popup__route-summary">{{ agentRoutePlan.transitPlan.summary }}</p>
+                <textarea
+                  class="scenic-map-popup__transit-textarea"
+                  :value="agentRoutePlan.transitPlan.text || '暂无公共交通方案'"
+                  readonly
+                />
+              </details>
+            </section>
+
+            <section v-if="!agentRoutePlan" class="scenic-map-popup__card">
               <div class="scenic-map-popup__card-head">
                 <h4>附近搜索</h4>
                 <span>{{ searchRadius }} m</span>
@@ -700,7 +815,7 @@ onBeforeUnmount(() => {
               </Button>
             </section>
 
-            <section class="scenic-map-popup__card">
+            <section v-if="!agentRoutePlan" class="scenic-map-popup__card">
               <div class="scenic-map-popup__card-head">
                 <h4>点位列表</h4>
                 <span>{{ markerNotes.length }} 个</span>
@@ -738,6 +853,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .scenic-map-popup{height:min(90vh,920px);background:#fff}.scenic-map-popup--fullscreen{height:100vh;max-height:100vh;border-radius:0}.scenic-map-popup__shell{display:grid;gap:14px;height:100%;padding:18px 16px calc(18px + env(safe-area-inset-bottom));overflow:auto}.scenic-map-popup__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.scenic-map-popup__head-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.scenic-map-popup__eyebrow,.scenic-map-popup__desc{margin:0}.scenic-map-popup__eyebrow{font-size:12px;letter-spacing:.14em;color:#738378;text-transform:uppercase}.scenic-map-popup__title{margin:4px 0 6px;color:#1f2a22;font-size:22px}.scenic-map-popup__desc{color:#5b6a61;line-height:1.6}.scenic-map-popup__key{padding:8px 12px;border-radius:999px;background:#f3f7f4;color:#2f6a4d;font-size:12px;white-space:nowrap}.scenic-map-popup__feedback,.scenic-map-popup__placeholder,.scenic-map-popup__card{padding:12px 14px;border-radius:16px;background:#f7faf8;color:#52635a;line-height:1.6}.scenic-map-popup__workspace{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:14px}.scenic-map-popup__map{position:relative;min-height:560px;border-radius:24px;overflow:hidden;border:1px solid rgba(47,106,77,.12);background:linear-gradient(180deg,#eef6f1,#f8faf8)}.scenic-map-popup__map.is-disabled{display:grid;place-items:center}.scenic-map-popup__map-mask{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(255,255,255,.68);color:#405247;font-weight:600}.scenic-map-popup__placeholder--inside{margin:16px;text-align:center}.scenic-map-popup__sidebar{display:grid;gap:12px;align-content:start}.scenic-map-popup__card--modes,.scenic-map-popup__card--actions{display:grid;gap:10px}.scenic-map-popup__mode-btn,.scenic-map-popup__search-chip{min-height:44px;border-radius:16px;border:1px solid #d9e6dd;background:#fff;color:#1f2a22;transition:transform .2s ease,background-color .2s ease,border-color .2s ease,color .2s ease}.scenic-map-popup__mode-btn.is-active,.scenic-map-popup__search-chip.is-active{border-color:#2f8a5c;background:#eef8f1;color:#236847}.scenic-map-popup__card-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}.scenic-map-popup__card-head h4{margin:0;color:#1f2a22}.scenic-map-popup__card-head span{color:#74837a;font-size:12px}.scenic-map-popup__route-summary{margin:0;color:#415147;font-weight:600}.scenic-map-popup__search-types{display:flex;flex-wrap:wrap;gap:8px}.scenic-map-popup__search-chip{min-height:36px;padding:0 12px;border-radius:999px}.scenic-map-popup__slider-wrap{display:grid;gap:10px;margin:12px 2px}.scenic-map-popup__slider-labels{display:flex;justify-content:space-between;gap:8px;color:#74837a;font-size:12px}.scenic-map-popup__slider-labels strong{color:#1f2a22}.scenic-map-popup__list{display:grid;gap:10px}.scenic-map-popup__list-item{display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:#fff}.scenic-map-popup__stop-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.scenic-map-popup__stop-head strong{display:inline-flex;width:28px;height:28px;border-radius:999px;background:#eef8f1;color:#236847;align-items:center;justify-content:center}.scenic-map-popup__list-item span{color:#74837a;font-size:12px}.scenic-map-popup__empty{margin-top:10px;color:#74837a}.scenic-map-floating{position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:2100;display:grid;gap:4px;align-items:center;justify-items:center;width:74px;padding:12px 8px;border-radius:18px;border:1px solid rgba(47,106,77,.16);background:rgba(255,255,255,.96);box-shadow:0 18px 36px rgba(28,25,23,.14)}.scenic-map-floating strong{display:inline-flex;width:36px;height:36px;border-radius:999px;align-items:center;justify-content:center;background:#eef8f1;color:#236847;font-size:12px}.scenic-map-floating span{font-size:12px;color:#4f6156;text-align:center;line-height:1.4}
+.scenic-map-popup__transit{display:grid;gap:10px;margin-top:10px}.scenic-map-popup__transit summary{cursor:pointer;color:#236847;font-weight:600}.scenic-map-popup__transit-textarea{width:100%;min-height:140px;padding:12px 14px;border-radius:14px;border:1px solid rgba(47,106,77,.12);background:#fff;color:#1f2a22;line-height:1.6;resize:vertical}
 @media (max-width:980px){.scenic-map-popup__workspace{grid-template-columns:1fr}.scenic-map-popup__map{min-height:420px}}
 @media (max-width:640px){.scenic-map-popup__head{flex-direction:column}.scenic-map-popup__head-actions{width:100%;justify-content:flex-start}.scenic-map-popup__map{min-height:360px}}
 </style>
