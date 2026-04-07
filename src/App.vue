@@ -229,9 +229,6 @@ const dialogTextSource = {
   aiRenameShort: { zh: '改', en: 'Edit', ja: '変更', ko: '수정' },
   aiDeleteShort: { zh: '删', en: 'Delete', ja: '削除', ko: '삭제' },
   aiConversationAria: { zh: 'AI 伴游对话', en: 'AI guide chat', ja: 'AI ガイド会話', ko: 'AI 가이드 대화' },
-  aiCurrentPage: { zh: '当前导览页面', en: 'Current Guide Page', ja: '現在の案内ページ', ko: '현재 안내 페이지' },
-  aiExitFullscreen: { zh: '退出全屏', en: 'Exit Fullscreen', ja: '全画面を終了', ko: '전체 화면 종료' },
-  aiEnterFullscreen: { zh: '全屏放大', en: 'Fullscreen', ja: '全画面表示', ko: '전체 화면' },
   aiStarterLabel: { zh: '你可以从这些问题开始', en: 'You can start with these questions', ja: 'これらの質問から始められます', ko: '이 질문들부터 시작할 수 있습니다' },
   me: { zh: '我', en: 'Me', ja: '私', ko: '나' },
   aiLabel: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
@@ -494,7 +491,6 @@ const aiError = ref('');
 const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
-const isAiFullscreen = ref(false);
 const profileMenuRef = ref(null);
 const serviceMenuRef = ref(null);
 const isServiceMenuOpen = ref(false);
@@ -571,7 +567,6 @@ const isActiveAiConversationLoading = computed(
   () => aiLoadingConversationId.value === activeAiConversationId.value,
 );
 const activeAiJourney = computed(() => getJourneyByContextKey(activeAiConversation.value?.contextKey || route.fullPath));
-const activeAiPageLabel = computed(() => activeAiConversation.value?.pageLabel || pageContextLabel.value);
 const activeAiPrompts = computed(() => activeAiJourney.value.prompts || currentJourney.value.prompts);
 const aiShouldShowStarter = computed(() => !aiMessages.value.some((item) => item.role === 'user'));
 const hasPendingFriendRequests = computed(() => pendingFriendRequests.value.length > 0);
@@ -951,14 +946,6 @@ async function deleteAiConversation(conversationId) {
   }
 
   focusAiComposer();
-}
-
-function toggleAiFullscreen() {
-  isAiFullscreen.value = !isAiFullscreen.value;
-  nextTick(() => {
-    scrollAiConversationToBottom('auto');
-    focusAiComposer();
-  });
 }
 
 function handleAiComposerKeydown(event) {
@@ -2171,14 +2158,13 @@ watch(
       <div
         v-if="isFeatureOpen"
         class="overlay"
-        :class="{ 'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen }"
         role="dialog"
         aria-modal="true"
         @click.self="closeFeature"
       >
         <section
           class="dialog dialog--feature"
-          :class="{ 'dialog--ai': activeFeature === 'ai', 'dialog--ai-fullscreen': activeFeature === 'ai' && isAiFullscreen }"
+          :class="{ 'dialog--ai': activeFeature === 'ai' }"
           @click.stop
         >
           <header class="dialog__header">
@@ -2258,20 +2244,6 @@ watch(
               </aside>
 
               <section class="ai-main" :aria-label="dialogText.aiConversationAria">
-                <header class="ai-main__header">
-                  <div class="ai-main__context">
-                    <span>{{ dialogText.aiCurrentPage }}</span>
-                    <strong>{{ activeAiPageLabel }}</strong>
-                    <p>{{ activeAiJourney.pace }}</p>
-                  </div>
-
-                  <div class="ai-main__header-actions">
-                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
-                      {{ isAiFullscreen ? dialogText.aiExitFullscreen : dialogText.aiEnterFullscreen }}
-                    </button>
-                  </div>
-                </header>
-
                 <div class="ai-main__body">
                   <div class="ai-starters" v-if="aiShouldShowStarter">
                     <p class="ai-starters__label">{{ dialogText.aiStarterLabel }}</p>
@@ -3415,11 +3387,6 @@ watch(
   color: rgba(74, 74, 74, 0.9);
 }
 
-.overlay--fullscreen {
-  place-items: stretch;
-  padding: 0;
-}
-
 .dialog {
   width: min(92vw, 500px);
   max-height: calc(100dvh - 3rem);
@@ -3445,15 +3412,6 @@ watch(
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable both-edges;
-}
-
-.dialog--ai-fullscreen {
-  width: 100vw;
-  height: 100dvh;
-  max-height: 100dvh;
-  border-radius: 0;
-  border: 0;
-  box-shadow: none;
 }
 
 .dialog--ai .dialog__header {
@@ -3804,60 +3762,6 @@ watch(
   background: rgba(250, 250, 249, 0.94);
 }
 
-.ai-main__header {
-  padding: 1rem 1.2rem;
-  border-bottom: 1px solid rgba(28, 25, 23, 0.06);
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  background: rgba(250, 250, 249, 0.9);
-  backdrop-filter: blur(12px);
-}
-
-.ai-main__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-
-.ai-main__context {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.ai-main__context span {
-  color: var(--ink-500);
-  font-size: 0.74rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.ai-main__context strong {
-  font-size: 1.05rem;
-  color: var(--ink-900);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-main__context p {
-  margin: 0;
-  color: var(--ink-700);
-  font-size: 0.92rem;
-}
-
-.ai-main__resize {
-  flex: 0 0 auto;
-  min-height: 2.35rem;
-  padding: 0 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(28, 25, 23, 0.14);
-  background: rgba(255, 255, 255, 0.65);
-  color: var(--ink-800);
-}
-
 .ai-main__body {
   flex: 1;
   min-height: 0;
@@ -3887,20 +3791,6 @@ watch(
   flex-direction: column;
   gap: 0.9rem;
   padding: 1.15rem 1.2rem;
-}
-
-.dialog--ai-fullscreen .ai-chat.ai-chat--main {
-  padding: 1.35rem 1.5rem;
-}
-
-.dialog--ai-fullscreen .ai-composer {
-  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
-}
-
-.dialog--ai-fullscreen .ai-main__header,
-.dialog--ai-fullscreen .dialog__header {
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
 }
 
 .message-row {
@@ -4267,20 +4157,9 @@ watch(
     padding: 0.85rem;
   }
 
-  .ai-main__header,
   .dialog__header {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .ai-main__header-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .ai-main__context strong,
-  .ai-main__context p {
-    white-space: normal;
   }
 
   .ai-chat.ai-chat--main {
@@ -4363,11 +4242,6 @@ watch(
     height: calc(100dvh - 1.5rem);
     max-height: calc(100dvh - 1.5rem);
     padding: 0;
-  }
-
-  .dialog--ai-fullscreen {
-    height: 100dvh;
-    max-height: 100dvh;
   }
 
   .dialog__title {
