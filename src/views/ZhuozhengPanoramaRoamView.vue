@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import PanoramaSphereViewer from '../components/PanoramaSphereViewer.vue';
 import { gardenDetailsSource } from '../data/gardenDetails';
@@ -8,82 +8,48 @@ import { resolveLocalized, useLanguage } from '../i18n';
 
 const { language } = useLanguage();
 const route = useRoute();
+const panoramaMusicSrc = new URL('../../music/02. エス.flac', import.meta.url).href;
+const panoramaMusicVolume = 0.25;
 
 const pageTextSource = {
-  viewerLabel: {
-    zh: '拙政园全景漫游',
-    en: 'Zhuozhengyuan Panorama',
-  },
-  backAction: {
-    zh: '返回入口',
-    en: 'Back to Entry',
-  },
-  detailAction: {
-    zh: '园林详情',
-    en: 'Garden Detail',
-  },
-  statusLabel: {
-    zh: '漫游状态',
-    en: 'Tour Status',
-  },
-  statusReady: {
-    zh: '自由浏览',
-    en: 'Free Browse',
-  },
-  statusAuto: {
-    zh: '自动巡游中',
-    en: 'Autoplay Running',
-  },
+  viewerLabel: { zh: '拙政园全景漫游', en: 'Humble Administrator\'s Garden Panorama' },
+  backAction: { zh: '返回入口', en: 'Back to Entry' },
+  detailAction: { zh: '园林详情', en: 'Garden Detail' },
+  statusLabel: { zh: '漫游状态', en: 'Tour Status' },
+  statusReady: { zh: '自由浏览', en: 'Free Browse' },
+  statusAuto: { zh: '自动巡游中', en: 'Autoplay Running' },
   dragHint: {
-    zh: '拖拽旋转全景，滚轮缩放，点击热点查看节点说明。',
-    en: 'Drag to rotate, wheel to zoom, and tap hotspots to inspect the scene.',
+    zh: '拖拽旋转全景，缩放看水院开阔，再点热点读节点说明。',
+    en: 'Drag to rotate, zoom for the open waterscape, and tap hotspots for notes.',
   },
-  previousAction: {
-    zh: '上一景',
-    en: 'Previous',
+  previousAction: { zh: '上一景', en: 'Previous' },
+  nextAction: { zh: '下一景', en: 'Next' },
+  autoplayPlay: { zh: '自动巡游', en: 'Autoplay' },
+  autoplayPause: { zh: '暂停巡游', en: 'Pause' },
+  progressLabel: { zh: '当前进度', en: 'Progress' },
+  angleLabel: { zh: '视角方向', en: 'Viewing Angle' },
+  noteLabel: { zh: '当前说明', en: 'Current Note' },
+  sceneListLabel: { zh: '场景切换', en: 'Scene Switcher' },
+  readingLabel: { zh: '阅读方式', en: 'Reading Tip' },
+  readingText: {
+    zh: '先把主水面与厅堂关系看清，再沿游线慢慢往桥、亭和花窗处切近。',
+    en: 'Read the main water court first, then move toward bridges, pavilions, and framed windows.',
   },
-  nextAction: {
-    zh: '下一景',
-    en: 'Next',
-  },
-  autoplayPlay: {
-    zh: '自动巡游',
-    en: 'Autoplay',
-  },
-  autoplayPause: {
-    zh: '暂停巡游',
-    en: 'Pause',
-  },
-  progressLabel: {
-    zh: '当前进度',
-    en: 'Progress',
-  },
-  angleLabel: {
-    zh: '视角方向',
-    en: 'Viewing Angle',
-  },
-  noteLabel: {
-    zh: '当前说明',
-    en: 'Current Note',
-  },
-  sceneListLabel: {
-    zh: '场景切换',
-    en: 'Scene Switcher',
-  },
-  sourceLabel: {
-    zh: '素材来源',
-    en: 'Source',
-  },
+  infoOpenAction: { zh: '展开说明', en: 'Show Info' },
+  infoCloseAction: { zh: '收起说明', en: 'Hide Info' },
+  railOpenAction: { zh: '展开场景', en: 'Show Scenes' },
+  railCloseAction: { zh: '收起场景', en: 'Hide Scenes' },
+  controlsOpenAction: { zh: '展开控制', en: 'Show Controls' },
+  controlsCloseAction: { zh: '收起控制', en: 'Hide Controls' },
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const pageText = computed(() => resolveLocalized(pageTextSource, language.value));
 const garden = computed(() => resolveLocalized(gardenDetailsSource.zhuozhengyuan, language.value));
-const scenes = computed(() => {
-  return zhuozhengPanoramaScenesSource.map((scene, index) => {
+const scenes = computed(() =>
+  zhuozhengPanoramaScenesSource.map((scene, index) => {
     const localizedScene = resolveLocalized(scene, language.value);
-
     return {
       ...localizedScene,
       id: localizedScene.id || `scene-${index + 1}`,
@@ -94,17 +60,18 @@ const scenes = computed(() => {
       initialTilt: localizedScene.initialTilt ?? 0,
       initialFov: localizedScene.initialFov ?? 70,
     };
-  });
-});
+  }),
+);
 
 const activeSceneIndex = ref(0);
 const activeHotspotId = ref('');
 const autoPlay = ref(false);
-const viewState = ref({
-  yaw: 0,
-  pitch: 0,
-  fov: 70,
-});
+const infoOpen = ref(false);
+const railOpen = ref(false);
+const controlsOpen = ref(false);
+const viewState = ref({ yaw: 0, pitch: 0, fov: 70 });
+const backgroundAudioRef = ref(null);
+let resumeAudioListenersBound = false;
 
 const activeScene = computed(() => scenes.value[activeSceneIndex.value] || scenes.value[0] || null);
 const activeHotspot = computed(
@@ -113,45 +80,29 @@ const activeHotspot = computed(
     || activeScene.value?.hotspots?.[0]
     || null,
 );
-
-const progressRatio = computed(() => {
-  if (!scenes.value.length) return 0;
-  return ((activeSceneIndex.value + 1) / scenes.value.length) * 100;
-});
-
-const normalizedYaw = computed(() => {
-  return Math.round((((viewState.value.yaw % 360) + 360) % 360));
-});
-
+const progressRatio = computed(() => (scenes.value.length ? ((activeSceneIndex.value + 1) / scenes.value.length) * 100 : 0));
+const normalizedYaw = computed(() => Math.round((((viewState.value.yaw % 360) + 360) % 360)));
 const progressLabel = computed(() => {
   const total = String(scenes.value.length).padStart(2, '0');
   const current = String(activeSceneIndex.value + 1).padStart(2, '0');
   return `${current} / ${total}`;
 });
-
 const activeSceneBackdropStyle = computed(() => ({
   backgroundImage: `url(${activeScene.value?.image || garden.value.heroImage})`,
 }));
-
 const angleMeterRatio = computed(() => `${clamp((normalizedYaw.value / 360) * 100, 0, 100)}%`);
+const activeNoteTitle = computed(() => activeHotspot.value?.title || activeScene.value?.title || '');
+const activeNoteDescription = computed(() => activeHotspot.value?.description || activeScene.value?.description || '');
 
 const setActiveScene = (index) => {
-  if (index < 0 || index >= scenes.value.length) {
-    return;
-  }
-
+  if (index < 0 || index >= scenes.value.length) return;
   activeSceneIndex.value = index;
 };
 
 const syncSceneFromRoute = (sceneId) => {
-  if (!sceneId || !scenes.value.length) {
-    return;
-  }
-
+  if (!sceneId || !scenes.value.length) return;
   const nextIndex = scenes.value.findIndex((scene) => scene.id === sceneId);
-  if (nextIndex >= 0) {
-    activeSceneIndex.value = nextIndex;
-  }
+  if (nextIndex >= 0) activeSceneIndex.value = nextIndex;
 };
 
 const setActiveHotspot = (hotspotId) => {
@@ -172,8 +123,50 @@ const toggleAutoPlay = () => {
   autoPlay.value = !autoPlay.value;
 };
 
+const toggleInfo = () => {
+  infoOpen.value = !infoOpen.value;
+};
+
+const toggleRail = () => {
+  railOpen.value = !railOpen.value;
+};
+
+const toggleControls = () => {
+  controlsOpen.value = !controlsOpen.value;
+};
+
 const handleViewChange = (nextViewState) => {
   viewState.value = nextViewState;
+};
+
+const removeResumeAudioListeners = () => {
+  if (typeof window === 'undefined' || !resumeAudioListenersBound) return;
+  window.removeEventListener('pointerdown', resumeBackgroundMusic);
+  window.removeEventListener('touchstart', resumeBackgroundMusic);
+  window.removeEventListener('keydown', resumeBackgroundMusic);
+  resumeAudioListenersBound = false;
+};
+
+async function resumeBackgroundMusic() {
+  const audioElement = backgroundAudioRef.value;
+  if (!audioElement) return;
+
+  audioElement.volume = panoramaMusicVolume;
+
+  try {
+    await audioElement.play();
+    removeResumeAudioListeners();
+  } catch {
+    ensureResumeAudioListeners();
+  }
+}
+
+const ensureResumeAudioListeners = () => {
+  if (typeof window === 'undefined' || resumeAudioListenersBound) return;
+  window.addEventListener('pointerdown', resumeBackgroundMusic, { passive: true });
+  window.addEventListener('touchstart', resumeBackgroundMusic, { passive: true });
+  window.addEventListener('keydown', resumeBackgroundMusic);
+  resumeAudioListenersBound = true;
 };
 
 watch(
@@ -183,8 +176,7 @@ watch(
       activeHotspotId.value = '';
       return;
     }
-
-    activeHotspotId.value = scene.hotspots?.[0]?.id || '';
+    activeHotspotId.value = scene.initialHotspotId || scene.hotspots?.[0]?.id || '';
     viewState.value = {
       yaw: ((scene.initialPan ?? 50) - 50) * 1.8,
       pitch: scene.initialTilt ?? 0,
@@ -197,22 +189,50 @@ watch(
 watch(
   [scenes, () => route.query.scene],
   ([nextScenes, nextSceneId]) => {
-    if (!nextScenes.length) {
-      return;
-    }
-
+    if (!nextScenes.length) return;
     syncSceneFromRoute(typeof nextSceneId === 'string' ? nextSceneId : '');
   },
   { immediate: true },
 );
+
+onMounted(() => {
+  if (typeof window !== 'undefined' && window.innerWidth > 640) {
+    controlsOpen.value = true;
+  }
+
+  if (backgroundAudioRef.value) {
+    backgroundAudioRef.value.volume = panoramaMusicVolume;
+  }
+
+  resumeBackgroundMusic().catch(() => {
+    ensureResumeAudioListeners();
+  });
+});
+
+onBeforeUnmount(() => {
+  removeResumeAudioListeners();
+  const audioElement = backgroundAudioRef.value;
+  if (!audioElement) return;
+
+  audioElement.pause();
+  audioElement.currentTime = 0;
+});
 </script>
 
 <template>
-  <article v-if="activeScene" class="panorama-viewer">
-    <div class="panorama-viewer__backdrop" :style="activeSceneBackdropStyle" />
-    <div class="panorama-viewer__veil" />
+  <article v-if="activeScene" class="zhuozheng-panorama-viewer">
+    <audio
+      ref="backgroundAudioRef"
+      :src="panoramaMusicSrc"
+      autoplay
+      loop
+      preload="auto"
+      playsinline
+    />
+    <div class="zhuozheng-panorama-viewer__backdrop" :style="activeSceneBackdropStyle" />
+    <div class="zhuozheng-panorama-viewer__veil" />
 
-    <div class="panorama-viewer__viewport">
+    <div class="zhuozheng-panorama-viewer__viewport">
       <PanoramaSphereViewer
         :scene="activeScene"
         :active-hotspot-id="activeHotspotId"
@@ -222,488 +242,537 @@ watch(
       />
     </div>
 
-    <header class="panorama-viewer__topbar">
-      <div class="panorama-viewer__brand glass">
+    <header class="zhuozheng-panorama-viewer__topbar">
+      <div class="zhuozheng-panorama-viewer__brand glass">
         <span>{{ pageText.viewerLabel }}</span>
         <strong>{{ garden.name }}</strong>
       </div>
-
-      <div class="panorama-viewer__top-actions">
-        <RouterLink to="/zhuozheng/panorama" class="panorama-viewer__pill glass">
-          {{ pageText.backAction }}
-        </RouterLink>
-        <RouterLink to="/zhuozheng" class="panorama-viewer__pill glass">
-          {{ pageText.detailAction }}
-        </RouterLink>
+      <div class="zhuozheng-panorama-viewer__top-actions">
+        <RouterLink to="/zhuozheng/panorama" class="zhuozheng-panorama-viewer__pill glass">{{ pageText.backAction }}</RouterLink>
+        <RouterLink to="/zhuozheng" class="zhuozheng-panorama-viewer__pill glass">{{ pageText.detailAction }}</RouterLink>
       </div>
     </header>
 
-    <section class="panorama-viewer__hero">
-      <div class="panorama-viewer__headline glass">
-        <p>{{ activeScene.order }}</p>
-        <h1>{{ activeScene.title }}</h1>
-        <span>{{ activeScene.description }}</span>
-
-        <div class="panorama-viewer__tags">
-          <strong
-            v-for="hotspot in activeScene.hotspots"
-            :key="hotspot.id || hotspot.label"
-            :class="{ 'is-active': hotspot.id === activeHotspot?.id }"
-          >
-            {{ hotspot.label }}
-          </strong>
+    <section class="zhuozheng-panorama-viewer__floating">
+      <div class="zhuozheng-panorama-viewer__scene-chip glass">
+        <div class="zhuozheng-panorama-viewer__scene-chip-main">
+          <p>{{ activeScene.order }}</p>
+          <h1>{{ activeScene.title }}</h1>
+          <strong>{{ activeHotspot?.label || pageText.noteLabel }}</strong>
+        </div>
+        <div class="zhuozheng-panorama-viewer__scene-chip-actions">
+          <button type="button" class="zhuozheng-panorama-viewer__chip-button" @click="toggleInfo">
+            {{ infoOpen ? pageText.infoCloseAction : pageText.infoOpenAction }}
+          </button>
+          <button type="button" class="zhuozheng-panorama-viewer__chip-button zhuozheng-panorama-viewer__chip-button--strong" @click="toggleRail">
+            {{ railOpen ? pageText.railCloseAction : pageText.railOpenAction }}
+          </button>
         </div>
       </div>
 
-      <aside class="panorama-viewer__dock">
-        <section class="panorama-viewer__panel glass">
-          <p>{{ pageText.statusLabel }}</p>
-          <strong>{{ autoPlay ? pageText.statusAuto : pageText.statusReady }}</strong>
-          <span>{{ pageText.dragHint }}</span>
-        </section>
-
-        <section class="panorama-viewer__panel glass">
-          <div class="panorama-viewer__controls">
-            <button type="button" class="panorama-viewer__control" @click="showPreviousScene">
-              {{ pageText.previousAction }}
-            </button>
-            <button type="button" class="panorama-viewer__control panorama-viewer__control--primary" @click="toggleAutoPlay">
-              {{ autoPlay ? pageText.autoplayPause : pageText.autoplayPlay }}
-            </button>
-            <button type="button" class="panorama-viewer__control" @click="showNextScene">
-              {{ pageText.nextAction }}
-            </button>
+      <transition name="zhuozheng-fade">
+        <section v-if="infoOpen" class="zhuozheng-panorama-viewer__info-card glass">
+          <div class="zhuozheng-panorama-viewer__info-copy">
+            <p>{{ pageText.noteLabel }}</p>
+            <strong>{{ activeNoteTitle }}</strong>
+            <span>{{ activeNoteDescription }}</span>
+          </div>
+          <div class="zhuozheng-panorama-viewer__info-copy zhuozheng-panorama-viewer__info-copy--subtle">
+            <p>{{ pageText.readingLabel }}</p>
+            <span>{{ pageText.readingText }}</span>
           </div>
         </section>
-
-        <section class="panorama-viewer__panel glass panorama-viewer__metrics">
-          <div>
-            <span>{{ pageText.progressLabel }}</span>
-            <strong>{{ progressLabel }}</strong>
-          </div>
-          <div class="panorama-viewer__meter">
-            <span :style="{ width: `${progressRatio}%` }" />
-          </div>
-          <div>
-            <span>{{ pageText.angleLabel }}</span>
-            <strong>{{ normalizedYaw }}°</strong>
-          </div>
-          <div class="panorama-viewer__meter panorama-viewer__meter--subtle">
-            <span :style="{ width: angleMeterRatio }" />
-          </div>
-        </section>
-      </aside>
+      </transition>
     </section>
 
-    <footer class="panorama-viewer__bottom">
-      <section class="panorama-viewer__scene-strip-wrap glass">
-        <div class="panorama-viewer__scene-strip-head">
-          <div class="panorama-viewer__scene-strip-meta">
-            <p>{{ pageText.noteLabel }}</p>
-            <strong>{{ activeHotspot?.title || activeScene.title }}</strong>
-            <small>{{ activeHotspot?.description || activeScene.description }}</small>
-          </div>
-
-          <div class="panorama-viewer__scene-strip-stats">
-            <p>{{ pageText.sceneListLabel }}</p>
-            <span>{{ progressLabel }}</span>
-          </div>
+    <aside class="zhuozheng-panorama-viewer__utility glass">
+      <div class="zhuozheng-panorama-viewer__utility-head">
+        <div>
+          <p>{{ pageText.statusLabel }}</p>
+          <strong>{{ autoPlay ? pageText.statusAuto : pageText.statusReady }}</strong>
         </div>
+        <span>{{ progressLabel }}</span>
+      </div>
+      <button type="button" class="zhuozheng-panorama-viewer__utility-toggle" @click="toggleControls">
+        {{ controlsOpen ? pageText.controlsCloseAction : pageText.controlsOpenAction }}
+      </button>
 
-        <div class="panorama-viewer__scene-strip">
-          <button
-            v-for="(scene, index) in scenes"
-            :key="scene.id"
-            type="button"
-            :class="['panorama-viewer__scene-card', { 'is-active': index === activeSceneIndex }]"
-            :style="{ '--scene-accent': scene.accent }"
-            @click="setActiveScene(index)"
-          >
-            <img :src="scene.thumbnail || scene.image" :alt="scene.title" class="panorama-viewer__scene-card-image" loading="lazy" />
-            <div class="panorama-viewer__scene-card-copy">
-              <span>{{ scene.order }}</span>
-              <strong>{{ scene.title }}</strong>
-              <small>{{ scene.description }}</small>
+      <transition name="zhuozheng-fade">
+        <div v-if="controlsOpen" class="zhuozheng-panorama-viewer__utility-body">
+          <div class="zhuozheng-panorama-viewer__utility-meters">
+            <div class="zhuozheng-panorama-viewer__utility-metric">
+              <small>{{ pageText.progressLabel }}</small>
+              <div class="zhuozheng-panorama-viewer__meter"><span :style="{ width: `${progressRatio}%` }" /></div>
             </div>
+            <div class="zhuozheng-panorama-viewer__utility-metric">
+              <small>{{ pageText.angleLabel }} {{ normalizedYaw }}°</small>
+              <div class="zhuozheng-panorama-viewer__meter zhuozheng-panorama-viewer__meter--subtle"><span :style="{ width: angleMeterRatio }" /></div>
+            </div>
+          </div>
+
+          <div class="zhuozheng-panorama-viewer__controls">
+            <button type="button" class="zhuozheng-panorama-viewer__control" @click="showPreviousScene">{{ pageText.previousAction }}</button>
+            <button type="button" class="zhuozheng-panorama-viewer__control zhuozheng-panorama-viewer__control--primary" @click="toggleAutoPlay">
+              {{ autoPlay ? pageText.autoplayPause : pageText.autoplayPlay }}
+            </button>
+            <button type="button" class="zhuozheng-panorama-viewer__control" @click="showNextScene">{{ pageText.nextAction }}</button>
+          </div>
+
+          <span class="zhuozheng-panorama-viewer__hint">{{ pageText.dragHint }}</span>
+        </div>
+      </transition>
+    </aside>
+
+    <footer class="zhuozheng-panorama-viewer__bottom">
+      <section class="zhuozheng-panorama-viewer__scene-strip-wrap glass">
+        <div class="zhuozheng-panorama-viewer__scene-strip-head">
+          <div class="zhuozheng-panorama-viewer__scene-strip-meta">
+            <p>{{ pageText.sceneListLabel }}</p>
+            <strong>{{ activeNoteTitle }}</strong>
+            <small>{{ activeNoteDescription }}</small>
+          </div>
+          <button type="button" class="zhuozheng-panorama-viewer__rail-toggle" @click="toggleRail">
+            {{ railOpen ? pageText.railCloseAction : pageText.railOpenAction }}
           </button>
         </div>
+
+        <transition name="zhuozheng-fade">
+          <div v-if="railOpen" class="zhuozheng-panorama-viewer__scene-strip">
+            <button
+              v-for="(scene, index) in scenes"
+              :key="scene.id"
+              type="button"
+              :class="['zhuozheng-panorama-viewer__scene-card', { 'is-active': index === activeSceneIndex }]"
+              :style="{ '--scene-accent': scene.accent }"
+              @click="setActiveScene(index)"
+            >
+              <img :src="scene.thumbnail || scene.image" :alt="scene.title" class="zhuozheng-panorama-viewer__scene-card-image" loading="lazy" />
+              <div class="zhuozheng-panorama-viewer__scene-card-copy">
+                <span>{{ scene.order }}</span>
+                <strong>{{ scene.title }}</strong>
+              </div>
+            </button>
+          </div>
+        </transition>
       </section>
     </footer>
   </article>
 </template>
 
 <style scoped>
-.panorama-viewer {
+.zhuozheng-panorama-viewer {
   position: relative;
   min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
-  color: #f7f4ed;
-  background: #081014;
+  color: #fff4ee;
+  background: #110b09;
 }
 
-.panorama-viewer__backdrop,
-.panorama-viewer__veil,
-.panorama-viewer__viewport {
+.zhuozheng-panorama-viewer__backdrop,
+.zhuozheng-panorama-viewer__veil,
+.zhuozheng-panorama-viewer__viewport {
   position: absolute;
   inset: 0;
 }
 
-.panorama-viewer__backdrop {
+.zhuozheng-panorama-viewer__backdrop {
   background-position: center;
   background-size: cover;
-  filter: blur(28px) saturate(1.05);
-  transform: scale(1.08);
+  filter: blur(18px) saturate(1.02);
+  transform: scale(1.05);
 }
 
-.panorama-viewer__veil {
+.zhuozheng-panorama-viewer__veil {
   background:
-    linear-gradient(180deg, rgba(5, 9, 11, 0.38), rgba(5, 9, 11, 0.82)),
-    linear-gradient(90deg, rgba(5, 9, 11, 0.46), transparent 22%, transparent 78%, rgba(5, 9, 11, 0.56));
+    linear-gradient(180deg, rgba(17, 11, 9, 0.08), rgba(17, 11, 9, 0.22) 20%, rgba(17, 11, 9, 0.72)),
+    linear-gradient(90deg, rgba(17, 11, 9, 0.18), transparent 18%, transparent 82%, rgba(17, 11, 9, 0.24));
 }
 
-.panorama-viewer__viewport {
+.zhuozheng-panorama-viewer__viewport {
   z-index: 0;
 }
 
-.panorama-viewer__topbar,
-.panorama-viewer__hero,
-.panorama-viewer__bottom {
+.zhuozheng-panorama-viewer__topbar,
+.zhuozheng-panorama-viewer__floating,
+.zhuozheng-panorama-viewer__utility,
+.zhuozheng-panorama-viewer__bottom {
   position: relative;
   z-index: 2;
-  pointer-events: none;
-}
-
-.panorama-viewer__topbar > *,
-.panorama-viewer__hero > *,
-.panorama-viewer__bottom > * {
-  pointer-events: auto;
 }
 
 .glass {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(8, 12, 15, 0.18);
+  border: 1px solid rgba(255, 235, 224, 0.14);
+  background:
+    linear-gradient(180deg, rgba(39, 24, 19, 0.42), rgba(17, 12, 10, 0.26)),
+    rgba(17, 12, 10, 0.24);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18);
 }
 
-.panorama-viewer__topbar {
+.zhuozheng-panorama-viewer__topbar {
+  position: absolute;
+  inset: 0 0 auto;
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1rem 0;
-}
-
-.panorama-viewer__brand {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.9rem 1rem;
-  border-radius: 24px;
-}
-
-.panorama-viewer__brand span,
-.panorama-viewer__headline p,
-.panorama-viewer__panel p,
-.panorama-viewer__metrics span,
-.panorama-viewer__note p,
-.panorama-viewer__source label,
-.panorama-viewer__scene-strip-head p,
-.panorama-viewer__scene-card span {
-  font-size: 0.72rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: rgba(247, 244, 237, 0.72);
-}
-
-.panorama-viewer__top-actions {
-  display: flex;
   gap: 0.75rem;
+  padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 0.75rem 0;
 }
 
-.panorama-viewer__pill,
-.panorama-viewer__control {
+.zhuozheng-panorama-viewer__brand,
+.zhuozheng-panorama-viewer__scene-chip,
+.zhuozheng-panorama-viewer__info-card,
+.zhuozheng-panorama-viewer__utility,
+.zhuozheng-panorama-viewer__scene-strip-wrap {
+  border-radius: 22px;
+}
+
+.zhuozheng-panorama-viewer__brand {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.62rem 0.8rem;
+}
+
+.zhuozheng-panorama-viewer__brand span,
+.zhuozheng-panorama-viewer__scene-chip p,
+.zhuozheng-panorama-viewer__info-copy p,
+.zhuozheng-panorama-viewer__utility-head p,
+.zhuozheng-panorama-viewer__utility-metric small,
+.zhuozheng-panorama-viewer__scene-strip-head p,
+.zhuozheng-panorama-viewer__scene-card span {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 235, 224, 0.72);
+}
+
+.zhuozheng-panorama-viewer__brand strong,
+.zhuozheng-panorama-viewer__utility-head strong,
+.zhuozheng-panorama-viewer__utility-head span,
+.zhuozheng-panorama-viewer__info-copy strong,
+.zhuozheng-panorama-viewer__scene-strip-meta strong,
+.zhuozheng-panorama-viewer__scene-card strong {
+  color: #fff7f1;
+}
+
+.zhuozheng-panorama-viewer__top-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: min(320px, 100%);
+}
+
+.zhuozheng-panorama-viewer__pill,
+.zhuozheng-panorama-viewer__chip-button,
+.zhuozheng-panorama-viewer__utility-toggle,
+.zhuozheng-panorama-viewer__control,
+.zhuozheng-panorama-viewer__rail-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 3rem;
-  padding: 0 1.1rem;
+  min-height: 2.35rem;
+  padding: 0 0.88rem;
   border-radius: 999px;
-  color: #fff;
+  border: 1px solid rgba(255, 235, 224, 0.12);
+  background: rgba(255, 249, 244, 0.06);
+  color: #fff7f1;
   text-decoration: none;
 }
 
-.panorama-viewer__hero {
+.zhuozheng-panorama-viewer__floating {
+  position: absolute;
+  top: calc(4.5rem + env(safe-area-inset-top, 0px));
+  left: 0.75rem;
+  width: min(320px, calc(100vw - 1.5rem));
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 1rem;
-  padding: 4.8rem 1rem 10.2rem;
+  gap: 0.55rem;
 }
 
-.panorama-viewer__headline,
-.panorama-viewer__panel,
-.panorama-viewer__note,
-.panorama-viewer__scene-strip-wrap {
-  border-radius: 28px;
-}
-
-.panorama-viewer__headline {
-  align-self: start;
-  max-width: 30rem;
+.zhuozheng-panorama-viewer__scene-chip {
   display: grid;
-  gap: 0.65rem;
-  padding: 0.95rem 1.05rem;
+  gap: 0.72rem;
+  padding: 0.82rem 0.88rem;
 }
 
-.panorama-viewer__headline h1 {
+.zhuozheng-panorama-viewer__scene-chip-main {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.zhuozheng-panorama-viewer__scene-chip h1 {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: clamp(2.2rem, 5vw, 3.8rem);
-  line-height: 0.98;
+  font-size: clamp(1.45rem, 8vw, 2rem);
+  line-height: 1.04;
+  color: #fff7f1;
 }
 
-.panorama-viewer__headline span,
-.panorama-viewer__panel span,
-.panorama-viewer__note span,
-.panorama-viewer__scene-card small {
-  line-height: 1.78;
-  color: rgba(247, 244, 237, 0.86);
-}
-
-.panorama-viewer__dock {
-  display: grid;
-  gap: 0.75rem;
-  align-content: start;
-}
-
-.panorama-viewer__panel {
-  display: grid;
-  gap: 0.55rem;
-  padding: 0.85rem 0.95rem;
-}
-
-.panorama-viewer__controls {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.panorama-viewer__control {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  cursor: pointer;
-}
-
-.panorama-viewer__control--primary {
-  background: linear-gradient(135deg, rgba(176, 61, 38, 0.96), rgba(216, 122, 92, 0.88));
-  border-color: rgba(255, 223, 215, 0.25);
-}
-
-.panorama-viewer__metrics {
-  gap: 0.9rem;
-}
-
-.panorama-viewer__meter {
-  position: relative;
-  height: 0.48rem;
-  overflow: hidden;
+.zhuozheng-panorama-viewer__scene-chip-main strong {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.34rem 0.56rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.panorama-viewer__meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(179, 68, 45, 0.96), rgba(245, 208, 197, 0.84));
-}
-
-.panorama-viewer__meter--subtle span {
-  background: linear-gradient(90deg, rgba(97, 146, 136, 0.96), rgba(207, 234, 227, 0.82));
-}
-
-.panorama-viewer__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  padding-top: 0.1rem;
-}
-
-.panorama-viewer__tags strong {
-  padding: 0.5rem 0.68rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(199, 114, 88, 0.18);
+  color: #ffece4;
   font-size: 0.76rem;
-  color: #fff;
 }
 
-.panorama-viewer__tags strong.is-active {
-  background: rgba(181, 71, 46, 0.82);
-}
-
-.panorama-viewer__bottom {
-  position: absolute;
-  left: 50%;
-  bottom: 1rem;
-  width: min(1240px, calc(100vw - 2rem));
-  transform: translateX(-50%);
-}
-
-.panorama-viewer__scene-strip-wrap {
+.zhuozheng-panorama-viewer__scene-chip-actions {
   display: grid;
-  gap: 0.65rem;
-  padding: 0.85rem 0.95rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
 }
 
-.panorama-viewer__scene-strip-head {
+.zhuozheng-panorama-viewer__chip-button--strong,
+.zhuozheng-panorama-viewer__control--primary {
+  background: linear-gradient(135deg, rgba(163, 86, 61, 0.96), rgba(210, 143, 114, 0.9));
+  border-color: rgba(255, 221, 209, 0.18);
+}
+
+.zhuozheng-panorama-viewer__info-card {
+  display: grid;
+  gap: 0.78rem;
+  padding: 0.82rem 0.88rem;
+}
+
+.zhuozheng-panorama-viewer__info-copy {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.zhuozheng-panorama-viewer__info-copy span,
+.zhuozheng-panorama-viewer__hint,
+.zhuozheng-panorama-viewer__scene-strip-meta small {
+  line-height: 1.5;
+  color: rgba(255, 243, 236, 0.82);
+}
+
+.zhuozheng-panorama-viewer__info-copy--subtle {
+  padding-top: 0.14rem;
+  border-top: 1px solid rgba(255, 235, 224, 0.08);
+}
+
+.zhuozheng-panorama-viewer__utility {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 0.62rem;
+  padding: 0.82rem 0.88rem;
+}
+
+.zhuozheng-panorama-viewer__utility-head {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: end;
+  align-items: start;
 }
 
-.panorama-viewer__scene-strip-meta {
+.zhuozheng-panorama-viewer__utility-body {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.zhuozheng-panorama-viewer__utility-meters {
+  display: grid;
+  gap: 0.52rem;
+}
+
+.zhuozheng-panorama-viewer__utility-metric {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.zhuozheng-panorama-viewer__meter {
+  position: relative;
+  height: 0.36rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 235, 224, 0.12);
+}
+
+.zhuozheng-panorama-viewer__meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(184, 102, 74, 0.98), rgba(248, 216, 203, 0.92));
+}
+
+.zhuozheng-panorama-viewer__meter--subtle span {
+  background: linear-gradient(90deg, rgba(104, 145, 128, 0.98), rgba(210, 236, 228, 0.9));
+}
+
+.zhuozheng-panorama-viewer__controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.zhuozheng-panorama-viewer__hint {
+  font-size: 0.8rem;
+}
+
+.zhuozheng-panorama-viewer__bottom {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: calc(5.4rem + env(safe-area-inset-bottom, 0px));
+}
+
+.zhuozheng-panorama-viewer__scene-strip-wrap {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.74rem 0.8rem;
+}
+
+.zhuozheng-panorama-viewer__scene-strip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.zhuozheng-panorama-viewer__scene-strip-meta {
   display: grid;
   gap: 0.18rem;
-  max-width: 34rem;
 }
 
-.panorama-viewer__scene-strip-meta strong {
-  font-size: 1rem;
-  color: #fff;
-}
-
-.panorama-viewer__scene-strip-meta small {
+.zhuozheng-panorama-viewer__scene-strip-meta small {
   display: -webkit-box;
   overflow: hidden;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  color: rgba(247, 244, 237, 0.82);
-  line-height: 1.6;
+  -webkit-line-clamp: 2;
 }
 
-.panorama-viewer__scene-strip-stats {
-  display: grid;
-  gap: 0.2rem;
-  justify-items: end;
-}
-
-.panorama-viewer__scene-strip {
+.zhuozheng-panorama-viewer__scene-strip {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(170px, 1fr);
-  gap: 0.65rem;
+  grid-auto-columns: minmax(120px, 1fr);
+  gap: 0.5rem;
   overflow-x: auto;
-  padding-bottom: 0.2rem;
+  padding-bottom: 0.08rem;
 }
 
-.panorama-viewer__scene-card {
+.zhuozheng-panorama-viewer__scene-card {
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 0;
-  min-height: 9.8rem;
+  min-height: 6.5rem;
   padding: 0;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 235, 224, 0.12);
   background:
-    linear-gradient(160deg, color-mix(in srgb, var(--scene-accent) 28%, rgba(255, 255, 255, 0.08)), rgba(8, 12, 15, 0.76)),
-    rgba(8, 12, 15, 0.4);
-  color: #fff;
+    linear-gradient(160deg, color-mix(in srgb, var(--scene-accent) 22%, rgba(255, 255, 255, 0.06)), rgba(17, 12, 10, 0.74)),
+    rgba(17, 12, 10, 0.3);
+  color: #fff7f1;
   text-align: left;
-  cursor: pointer;
 }
 
-.panorama-viewer__scene-card-image {
+.zhuozheng-panorama-viewer__scene-card-image {
   display: block;
   width: 100%;
-  height: 4.6rem;
+  height: 3.25rem;
   object-fit: cover;
 }
 
-.panorama-viewer__scene-card-copy {
+.zhuozheng-panorama-viewer__scene-card-copy {
   display: grid;
-  gap: 0.28rem;
-  padding: 0.72rem 0.82rem 0.8rem;
+  gap: 0.24rem;
+  padding: 0.48rem 0.55rem 0.58rem;
 }
 
-.panorama-viewer__scene-card strong {
-  font-size: 0.98rem;
+.zhuozheng-panorama-viewer__scene-card strong {
+  font-size: 0.8rem;
 }
 
-.panorama-viewer__scene-card small {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.55;
+.zhuozheng-panorama-viewer__scene-card.is-active {
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
 }
 
-.panorama-viewer__scene-card.is-active {
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.24);
-  border-color: rgba(255, 255, 255, 0.26);
+.zhuozheng-fade-enter-active,
+.zhuozheng-fade-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
-@media (max-width: 1180px) {
-  .panorama-viewer__hero {
+.zhuozheng-fade-enter-from,
+.zhuozheng-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (min-width: 641px) {
+  .zhuozheng-panorama-viewer__floating {
+    top: 5.2rem;
+    left: 1rem;
+    width: min(380px, calc(100vw - 2rem));
+  }
+
+  .zhuozheng-panorama-viewer__topbar {
+    padding: 0.8rem 0.8rem 0;
+  }
+
+  .zhuozheng-panorama-viewer__top-actions {
+    width: auto;
+    display: flex;
+  }
+
+  .zhuozheng-panorama-viewer__pill,
+  .zhuozheng-panorama-viewer__chip-button,
+  .zhuozheng-panorama-viewer__utility-toggle,
+  .zhuozheng-panorama-viewer__control,
+  .zhuozheng-panorama-viewer__rail-toggle {
+    min-height: 2.6rem;
+  }
+
+  .zhuozheng-panorama-viewer__scene-chip h1 {
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+  }
+
+  .zhuozheng-panorama-viewer__utility {
+    left: auto;
+    right: 1rem;
+    top: 5rem;
+    bottom: auto;
+    width: min(300px, calc(100vw - 2rem));
+  }
+
+  .zhuozheng-panorama-viewer__controls {
     grid-template-columns: 1fr;
   }
 
-  .panorama-viewer__hero {
-    padding-bottom: 11.5rem;
+  .zhuozheng-panorama-viewer__utility-toggle {
+    display: none;
   }
 
-  .panorama-viewer__scene-strip-head {
-    grid-template-columns: 1fr;
-    display: grid;
-    align-items: start;
+  .zhuozheng-panorama-viewer__utility-body {
+    display: grid !important;
   }
 
-  .panorama-viewer__scene-strip-stats {
-    justify-items: start;
-  }
-}
-
-@media (max-width: 820px) {
-  .panorama-viewer__topbar {
-    flex-direction: column;
-  }
-
-  .panorama-viewer__top-actions {
-    flex-direction: column;
-  }
-
-  .panorama-viewer__pill,
-  .panorama-viewer__control {
-    width: 100%;
-  }
-
-  .panorama-viewer__hero {
-    padding: 7.2rem 1rem 11.8rem;
-  }
-
-  .panorama-viewer__bottom {
+  .zhuozheng-panorama-viewer__bottom {
+    left: 50%;
+    right: auto;
     bottom: 1rem;
-    width: calc(100vw - 1rem);
+    width: min(1080px, calc(100vw - 2rem));
+    transform: translateX(-50%);
   }
 
-  .panorama-viewer__scene-strip {
-    grid-auto-columns: minmax(160px, 1fr);
+  .zhuozheng-panorama-viewer__scene-card {
+    min-height: 7.6rem;
+  }
+
+  .zhuozheng-panorama-viewer__scene-card-image {
+    height: 4.4rem;
+  }
+
+  .zhuozheng-panorama-viewer__scene-card strong {
+    font-size: 0.92rem;
   }
 }
 
 @media (max-width: 640px) {
-  .panorama-viewer__topbar {
-    padding: 1rem 1rem 0;
-  }
-
-  .panorama-viewer__headline h1 {
-    font-size: clamp(2.2rem, 11vw, 3.4rem);
-  }
-
-  .panorama-viewer__scene-card {
-    min-height: 9.2rem;
-  }
-
-  .panorama-viewer__scene-strip-meta small {
-    -webkit-line-clamp: 1;
+  .zhuozheng-panorama-viewer__brand {
+    display: none;
   }
 }
 </style>

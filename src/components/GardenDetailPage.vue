@@ -1976,6 +1976,18 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   right: 14%;
 }
 
+.garden-detail-page--liuyuan .detail-action-link--soft {
+  border-color: rgba(109, 67, 36, 0.28);
+  background: linear-gradient(135deg, rgba(109, 67, 36, 0.9), rgba(148, 95, 53, 0.88));
+  color: #fff8f1;
+  box-shadow: 0 16px 34px rgba(109, 67, 36, 0.2);
+}
+
+.garden-detail-page--liuyuan .detail-action-link--soft:hover {
+  background: linear-gradient(135deg, rgba(95, 57, 30, 0.96), rgba(133, 84, 47, 0.94));
+  box-shadow: 0 18px 38px rgba(109, 67, 36, 0.24);
+}
+
 .garden-detail-page--liuyuan .horizontal-gallery__track {
   align-items: flex-end;
   padding-top: 8px;
@@ -2135,6 +2147,18 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   border-color: rgba(159, 63, 52, 0.2);
 }
 
+.garden-detail-page--wangshiyuan .detail-action-link--soft {
+  border-color: rgba(159, 63, 52, 0.26);
+  background: linear-gradient(135deg, rgba(159, 63, 52, 0.92), rgba(122, 52, 44, 0.92));
+  color: #fff8f5;
+  box-shadow: 0 16px 34px rgba(122, 52, 44, 0.18);
+}
+
+.garden-detail-page--wangshiyuan .detail-action-link--soft:hover {
+  background: linear-gradient(135deg, rgba(145, 54, 45, 0.98), rgba(108, 44, 37, 0.98));
+  box-shadow: 0 18px 38px rgba(122, 52, 44, 0.22);
+}
+
 .garden-detail-page--wangshiyuan .detail-tips-list li::before {
   background: rgba(159, 63, 52, 0.84);
   box-shadow: 0 0 0 6px rgba(159, 63, 52, 0.1);
@@ -2172,17 +2196,55 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
   }
 
   .garden-detail-page--wangshiyuan .detail-hero {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.78fr);
-    gap: 22px 24px;
-    padding: 2.4rem;
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+    gap: 20px;
+    min-height: auto;
+    padding: 2rem;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-media {
+    grid-area: auto;
+    min-height: auto;
+    order: 1;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    aspect-ratio: 16 / 11;
+    margin-left: 0;
+    border-radius: 30px;
   }
 
   .garden-detail-page--wangshiyuan .detail-hero-card {
+    grid-area: auto;
     width: 100%;
+    order: 2;
   }
 
   .garden-detail-page--wangshiyuan .detail-hero-note {
     width: 100%;
+    grid-area: auto;
+    order: 3;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-floating-tags {
+    position: relative;
+    inset: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-floating-tags span {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
   }
 }
 
@@ -2271,6 +2333,73 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     order: 3;
   }
 
+  .garden-detail-page--zhuozheng .detail-hero-card {
+    background: rgba(247, 251, 248, 0.92);
+    border-color: rgba(var(--garden-accent-rgb), 0.14);
+    box-shadow: 0 22px 48px rgba(var(--garden-accent-rgb), 0.12);
+  }
+
+  .garden-detail-page--zhuozheng .detail-prelude {
+    background: linear-gradient(135deg, rgba(var(--garden-accent-rgb), 0.08), rgba(255, 255, 255, 0.88));
+    border-color: rgba(var(--garden-accent-rgb), 0.14);
+  }
+
+  .garden-detail-page--zhuozheng .detail-prelude__label,
+  .garden-detail-page--zhuozheng .detail-title span,
+  .garden-detail-page--zhuozheng .detail-intro,
+  .garden-detail-page--zhuozheng .detail-metric span,
+  .garden-detail-page--zhuozheng .detail-badges span {
+    color: rgba(28, 25, 23, 0.72);
+  }
+
+  .garden-detail-page--zhuozheng .detail-prelude__copy strong,
+  .garden-detail-page--zhuozheng .detail-title,
+  .garden-detail-page--zhuozheng .detail-metric strong {
+    color: var(--ink-900);
+  }
+
+  .garden-detail-page--zhuozheng .detail-prelude__copy p,
+  .garden-detail-page--zhuozheng .detail-hero-note span {
+    color: rgba(68, 64, 60, 0.84);
+  }
+
+  .garden-detail-page--zhuozheng .detail-prelude__chips span,
+  .garden-detail-page--zhuozheng .detail-badges span,
+  .garden-detail-page--zhuozheng .detail-floating-tags span {
+    background: rgba(255, 255, 255, 0.74);
+    border-color: rgba(var(--garden-accent-rgb), 0.14);
+    color: var(--ink-900);
+  }
+
+  .garden-detail-page--zhuozheng .detail-metric {
+    background: rgba(var(--garden-accent-rgb), 0.08);
+    border-color: rgba(var(--garden-accent-rgb), 0.14);
+  }
+
+  .garden-detail-page--zhuozheng .detail-hero-note {
+    background: rgba(247, 251, 248, 0.92);
+    border-color: rgba(var(--garden-accent-rgb), 0.16);
+    color: var(--ink-900);
+  }
+
+  .garden-detail-page--zhuozheng .detail-hero-note strong {
+    color: var(--ink-900);
+  }
+
+  .garden-detail-page--zhuozheng .detail-action-link--ghost,
+  .garden-detail-page--zhuozheng .detail-action-link--inline {
+    color: var(--garden-accent);
+    border-color: rgba(var(--garden-accent-rgb), 0.24);
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  .garden-detail-page--zhuozheng .detail-action-link--soft {
+    border-color: rgba(var(--garden-accent-rgb), 0.26);
+    background: linear-gradient(135deg, rgba(95, 127, 114, 0.92), rgba(72, 103, 92, 0.92));
+    color: #f8fbf9;
+    box-shadow: 0 16px 34px rgba(72, 103, 92, 0.18);
+  }
+
   .immersive-dialog {
     padding: 1rem;
   }
@@ -2321,6 +2450,25 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
     font-size: 2.2rem;
   }
 
+  .garden-detail-page--wangshiyuan .detail-copy {
+    gap: 12px;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-title {
+    gap: 6px;
+    font-size: 2.05rem;
+    line-height: 1.08;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-title span {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-intro {
+    line-height: 1.72;
+  }
+
   .detail-metrics {
     grid-template-columns: 1fr;
   }
@@ -2335,6 +2483,31 @@ const galleryCardClass = (item) => ['gallery-card', `gallery-card--${item?.ratio
 
   .detail-watermark {
     font-size: 52vw;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-image-shell {
+    border-radius: 24px;
+    aspect-ratio: 7 / 6;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-hero-card,
+  .garden-detail-page--wangshiyuan .detail-hero-note {
+    padding: 18px;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-badges {
+    gap: 8px;
+  }
+
+  .garden-detail-page--wangshiyuan .detail-badges span,
+  .garden-detail-page--wangshiyuan .detail-floating-tags span {
+    font-size: 0.78rem;
+    line-height: 1.4;
   }
 
   .immersive-stage__media,

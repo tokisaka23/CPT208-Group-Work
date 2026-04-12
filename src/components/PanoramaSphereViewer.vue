@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as THREE from 'three';
+import { derivePanoramaInitialView } from '../shared/panoramaView';
 
 const props = defineProps({
   scene: {
@@ -61,6 +62,8 @@ const projectionVector = new THREE.Vector3();
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
+const isMobileViewport = () => typeof window !== 'undefined' && window.innerWidth <= 640;
+const getInitialView = () => derivePanoramaInitialView(props.scene, props.activeHotspotId, isMobileViewport());
 const resetFlatView = () => {
   flatScale.value = 1;
   flatOffsetX.value = 0;
@@ -213,9 +216,10 @@ const updateTexture = async () => {
     scene3d.add(sphereMesh);
   }
 
-  viewerState.lon = ((props.scene?.initialPan ?? 50) - 50) * 1.8;
-  viewerState.lat = props.scene?.initialTilt ?? 0;
-  viewerState.fov = props.scene?.initialFov ?? 70;
+  const initialView = getInitialView();
+  viewerState.lon = (initialView.pan - 50) * 1.8;
+  viewerState.lat = initialView.tilt;
+  viewerState.fov = initialView.fov;
   applyCameraRotation();
   projectHotspots();
 }
@@ -474,10 +478,64 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .panorama-sphere-viewer__hotspot {
+    min-width: 1.9rem;
+    min-height: 1.9rem;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    border-radius: 999px;
+    background: rgba(10, 16, 22, 0.52);
+  }
+
+  .panorama-sphere-viewer__hotspot::before {
+    width: 0.52rem;
+    height: 0.52rem;
+    box-shadow: 0 0 0 0.28rem rgba(255, 255, 255, 0.12);
+  }
+
   .panorama-sphere-viewer__hotspot span {
-    max-width: 7.5rem;
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 0.45rem);
+    transform: translateX(-50%);
+    max-width: 7.8rem;
+    padding: 0.34rem 0.56rem;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 999px;
+    background: rgba(10, 16, 22, 0.74);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .panorama-sphere-viewer__hotspot.is-active span,
+  .panorama-sphere-viewer__hotspot:hover span {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 430px) {
+  .panorama-sphere-viewer__hotspot {
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .panorama-sphere-viewer__hotspot::before {
+    width: 0.46rem;
+    height: 0.46rem;
+    box-shadow: 0 0 0 0.24rem rgba(255, 255, 255, 0.12);
+  }
+
+  .panorama-sphere-viewer__hotspot span {
+    max-width: 5.9rem;
+    top: calc(100% + 0.38rem);
+    padding: 0.28rem 0.5rem;
+    font-size: 0.72rem;
   }
 }
 </style>

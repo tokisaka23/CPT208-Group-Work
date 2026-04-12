@@ -138,6 +138,7 @@ const backgroundImage = computed(() => wangshiyuanPanoramaCover || scenes.value[
 .wangshi-panorama-entry {
   position: relative;
   min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
   color: #fffaf3;
   background: #151310;
@@ -432,6 +433,85 @@ const backgroundImage = computed(() => wangshiyuanPanoramaCover || scenes.value[
 
   .wangshi-panorama-entry__footer {
     padding: 0 1rem 1rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .wangshi-panorama-entry__topbar {
+    gap: 0.75rem;
+    padding: calc(0.9rem + env(safe-area-inset-top, 0px)) 0.85rem 0.75rem;
+  }
+
+  .wangshi-panorama-entry__content {
+    gap: 0.85rem;
+    padding: 0.2rem 0.85rem 1.4rem;
+  }
+
+  .wangshi-panorama-entry__hero-panel,
+  .wangshi-panorama-entry__spotlights {
+    gap: 0.8rem;
+    padding: 1rem;
+    border-radius: 24px;
+  }
+
+  .wangshi-panorama-entry__hero-panel h1 {
+    font-size: clamp(2.1rem, 11.5vw, 3rem);
+    line-height: 1.03;
+  }
+
+  .wangshi-panorama-entry__hero-panel > span,
+  .wangshi-panorama-entry__route-card strong,
+  .wangshi-panorama-entry__spotlight-copy span {
+    line-height: 1.62;
+  }
+
+  .wangshi-panorama-entry__route-card {
+    padding: 0.9rem;
+    border-radius: 22px;
+  }
+
+  .wangshi-panorama-entry__route-card strong {
+    font-size: 0.96rem;
+  }
+
+  .wangshi-panorama-entry__stats {
+    gap: 0.65rem;
+  }
+
+  .wangshi-panorama-entry__stat {
+    padding: 0.85rem 0.9rem;
+    border-radius: 18px;
+  }
+
+  .wangshi-panorama-entry__spotlight {
+    gap: 0.7rem;
+    padding: 0.55rem;
+    border-radius: 18px;
+  }
+
+  .wangshi-panorama-entry__spotlight-image {
+    aspect-ratio: 1.5 / 1;
+    border-radius: 14px;
+  }
+
+  .wangshi-panorama-entry__spotlight-copy strong {
+    font-size: 0.96rem;
+  }
+
+  .wangshi-panorama-entry__route-list span,
+  .wangshi-panorama-entry__sequence strong {
+    padding: 0.48rem 0.68rem;
+    font-size: 0.82rem;
+  }
+
+  .wangshi-panorama-entry__footer {
+    padding: 0 0.85rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .wangshi-panorama-entry__sequence {
+    gap: 0.7rem;
+    padding: 0.9rem;
+    border-radius: 22px;
   }
 }
 </style>

@@ -2,7 +2,6 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { showFailToast, showSuccessToast } from 'vant';
-import ScenicMapDialog from './components/maps/ScenicMapDialog.vue';
 import FriendRequestPopup from './components/friends/FriendRequestPopup.vue';
 import FriendsPage from './pages/friends/FriendsPage.vue';
 import { aiApi, authApi, uploadApi } from './services/api';
@@ -13,7 +12,6 @@ import {
 import { getGroupChats } from './services/friends/groupChatService';
 import { currentLanguage, getDocumentTitle, getRouteTitle, resolveLocalized, useLanguage } from './i18n';
 import { SECURITY_QUESTION_FIELDS, getSecurityQuestionPrompt } from './shared/securityQuestions';
-import { formatDistance, formatDuration } from './shared/lbsRouteAgent';
 import { isSupabaseConfigured } from './services/supabase/clientRuntime';
 import { deleteCurrentAccount } from './services/supabase/authRuntime';
 
@@ -231,28 +229,19 @@ const dialogTextSource = {
   aiRenameShort: { zh: '改', en: 'Edit', ja: '変更', ko: '수정' },
   aiDeleteShort: { zh: '删', en: 'Delete', ja: '削除', ko: '삭제' },
   aiConversationAria: { zh: 'AI 伴游对话', en: 'AI guide chat', ja: 'AI ガイド会話', ko: 'AI 가이드 대화' },
+  aiCurrentPage: { zh: '当前导览页面', en: 'Current Guide Page', ja: '現在の案内ページ', ko: '현재 안내 페이지' },
+  aiExitFullscreen: { zh: '退出全屏', en: 'Exit Fullscreen', ja: '全画面を終了', ko: '전체 화면 종료' },
+  aiEnterFullscreen: { zh: '全屏放大', en: 'Fullscreen', ja: '全画面表示', ko: '전체 화면' },
   aiStarterLabel: { zh: '你可以从这些问题开始', en: 'You can start with these questions', ja: 'これらの質問から始められます', ko: '이 질문들부터 시작할 수 있습니다' },
   me: { zh: '我', en: 'Me', ja: '私', ko: '나' },
   aiLabel: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
   aiLoading: { zh: '正在整理当前页面的慢游建议…', en: 'Preparing slow-travel suggestions for this page...', ja: 'このページ向けのゆったりした案内を整理しています...', ko: '이 페이지에 맞는 느린 여행 제안을 정리하는 중...' },
-  aiRoutePlanTag: { zh: '实时路线', en: 'Live Route', ja: 'リアルタイム経路', ko: '실시간 경로' },
-  aiRouteStart: { zh: '起点', en: 'Start', ja: '出発地', ko: '출발지' },
-  aiRouteEnd: { zh: '终点', en: 'End', ja: '到着地', ko: '도착지' },
-  aiRouteOpenMap: { zh: '在地图中查看', en: 'Open in Map', ja: '地図で見る', ko: '지도에서 보기' },
-  aiRouteTransitTitle: { zh: '公共交通方案', en: 'Public Transit', ja: '公共交通プラン', ko: '대중교통 안내' },
-  aiRouteTransitToggle: { zh: '查看公交方案', en: 'Show Transit Plan', ja: '公共交通を見る', ko: '대중교통 보기' },
-  aiRouteTransitPlaceholder: { zh: '暂无公共交通方案', en: 'No transit plan available', ja: '公共交通プランはありません', ko: '대중교통 안내가 없습니다' },
-  aiRouteProviderHint: { zh: '已通过高德实时路线规划，并加上苏州地理围栏校验', en: 'Planned with AMap live routing and Suzhou geofence checks', ja: '高徳のリアルタイム経路と蘇州ジオフェンスで検証済み', ko: 'AMap 실시간 경로와 쑤저우 지오펜스로 검증됨' },
   aiInputAria: { zh: '输入你的问题', en: 'Enter your question', ja: '質問を入力', ko: '질문 입력' },
   aiInputPlaceholder: { zh: '输入问题，Enter 发送，Shift + Enter 换行', en: 'Type a question. Enter to send, Shift + Enter for a new line', ja: '質問を入力。Enter で送信、Shift + Enter で改行', ko: '질문을 입력하세요. Enter 로 전송, Shift + Enter 로 줄바꿈' },
   send: { zh: '发送', en: 'Send', ja: '送信', ko: '전송' },
   uploadHint: { zh: '上传提示', en: 'Upload Tip', ja: 'アップロード案内', ko: '업로드 안내' },
   uploadTitle: { zh: '上传园林照片', en: 'Upload a Garden Photo', ja: '庭園写真をアップロード', ko: '정원 사진 업로드' },
   uploadBody: { zh: '选择一张图片后点击上传，后端返回图片地址后会在下方回显。', en: 'Choose an image and upload it. The returned image URL will preview below.', ja: '画像を選んでアップロードすると、返却された画像 URL が下に表示されます。', ko: '이미지를 선택해 업로드하면 반환된 이미지 URL 이 아래에 미리 표시됩니다.' },
-  uploadPlaceName: { zh: '地点名称', en: 'Place Name', ja: 'スポット名', ko: '장소 이름' },
-  uploadPlaceNamePlaceholder: { zh: '例如：平江路小众茶馆', en: 'For example: A hidden teahouse on Pingjiang Road', ja: '例: 平江路の小さな茶館', ko: '예: 평강로의 작은 찻집' },
-  uploadPlaceDescription: { zh: '地点描述', en: 'Place Description', ja: 'スポット説明', ko: '장소 설명' },
-  uploadPlaceDescriptionPlaceholder: { zh: '请填写地点描述', en: 'Describe this place', ja: 'スポットの説明を入力', ko: '장소 설명을 입력하세요' },
   selectImage: { zh: '选择图片文件', en: 'Choose Image File', ja: '画像ファイルを選択', ko: '이미지 파일 선택' },
   uploading: { zh: '正在上传…', en: 'Uploading...', ja: 'アップロード中...', ko: '업로드 중...' },
   startUpload: { zh: '开始上传', en: 'Start Upload', ja: 'アップロード開始', ko: '업로드 시작' },
@@ -470,6 +459,7 @@ const featurePanels = computed(() => appText.value.featurePanels);
 const routeJourneys = computed(() => resolveLocalized(routeJourneysSource, currentLanguage.value));
 const pageContextLabel = computed(() => getRouteTitle(route.meta.titleKey || route.path));
 const currentJourney = computed(() => routeJourneys.value[route.path] || routeJourneys.value['/']);
+const isImmersivePanoramaRoute = computed(() => route.path.includes('/panorama'));
 
 const activeFeature = ref('');
 const activeFeatureInfo = computed(() => featurePanels.value[activeFeature.value] || null);
@@ -501,9 +491,7 @@ const aiError = ref('');
 const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
-const aiUserLocation = ref(null);
-const aiRouteDialogVisible = ref(false);
-const activeAiRoutePlan = ref(null);
+const isAiFullscreen = ref(false);
 const profileMenuRef = ref(null);
 const serviceMenuRef = ref(null);
 const isServiceMenuOpen = ref(false);
@@ -551,65 +539,6 @@ function focusAiComposer() {
   });
 }
 
-async function resolveAiUserLocation({ force = false } = {}) {
-  if (aiUserLocation.value && !force) {
-    return aiUserLocation.value;
-  }
-
-  if (!navigator?.geolocation) {
-    return null;
-  }
-
-  const location = await new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lng: position.coords.longitude,
-          lat: position.coords.latitude,
-        });
-      },
-      () => resolve(null),
-      {
-        enableHighAccuracy: true,
-        timeout: 6000,
-        maximumAge: 120000,
-      },
-    );
-  });
-
-  aiUserLocation.value = location;
-  return location;
-}
-
-function summarizeAiRouteMode(mode) {
-  return mode === 'driving' ? '驾车' : '步行';
-}
-
-function summarizeAiRoutePlan(routePlan) {
-  if (!routePlan) {
-    return '';
-  }
-
-  return `${summarizeAiRouteMode(routePlan.mode)} · ${formatDistance(routePlan.distanceMeters)} · ${formatDuration(routePlan.durationSeconds)}`;
-}
-
-function summarizeAiRouteOption(routeOption, mode) {
-  if (!routeOption) {
-    return `${summarizeAiRouteMode(mode)}暂不可用`;
-  }
-
-  return `${summarizeAiRouteMode(mode)} · ${formatDistance(routeOption.distance)} · ${formatDuration(routeOption.duration)}`;
-}
-
-function openAiRoutePlan(routePlan) {
-  if (!routePlan?.end) {
-    return;
-  }
-
-  activeAiRoutePlan.value = routePlan;
-  aiRouteDialogVisible.value = true;
-}
-
 function normalizeAiText(value) {
   return String(value || '')
     .replace(/\s+/g, ' ')
@@ -633,46 +562,14 @@ function getJourneyByContextKey(contextKey) {
 const activeAiConversation = computed(
   () => aiConversations.value.find((item) => item.id === activeAiConversationId.value) || null,
 );
-const activeAiRoutePoi = computed(() => {
-  const end = activeAiRoutePlan.value?.end;
-
-  if (!end) {
-    return null;
-  }
-
-  return {
-    id: end.poiId || `ai-route-${end.lng}-${end.lat}`,
-    name: end.name,
-    lng: end.lng,
-    lat: end.lat,
-    address: end.address || '',
-  };
-});
 const aiMessages = computed(() => activeAiConversation.value?.messages || []);
 const isAiLoading = computed(() => Boolean(aiLoadingConversationId.value));
 const isActiveAiConversationLoading = computed(
   () => aiLoadingConversationId.value === activeAiConversationId.value,
 );
 const activeAiJourney = computed(() => getJourneyByContextKey(activeAiConversation.value?.contextKey || route.fullPath));
-const activeAiPrompts = computed(() => {
-  const routePrompt = currentLanguage.value === 'en'
-    ? 'Plan a walking route from Pingjiang Road to Suzhou Museum.'
-    : currentLanguage.value === 'ja'
-      ? '平江路から蘇州博物館まで歩行ルートを案内して。'
-      : currentLanguage.value === 'ko'
-        ? '평강로에서 쑤저우 박물관까지 도보 경로를 안내해 줘.'
-        : '帮我规划从平江路到苏州博物馆的步行路线。';
-  const drivingPrompt = currentLanguage.value === 'en'
-    ? 'Plan a driving route from Pingjiang Road to Suzhou Museum.'
-    : currentLanguage.value === 'ja'
-      ? '平江路から蘇州博物館まで車で行くルートを案内して。'
-      : currentLanguage.value === 'ko'
-        ? '평강로에서 쑤저우 박물관까지 차로 가는 길을 안내해 줘.'
-        : '帮我规划从平江路到苏州博物馆的车行路线。';
-
-  const prompts = activeAiJourney.value.prompts || currentJourney.value.prompts || [];
-  return [routePrompt, drivingPrompt, ...prompts];
-});
+const activeAiPageLabel = computed(() => activeAiConversation.value?.pageLabel || pageContextLabel.value);
+const activeAiPrompts = computed(() => activeAiJourney.value.prompts || currentJourney.value.prompts);
 const aiShouldShowStarter = computed(() => !aiMessages.value.some((item) => item.role === 'user'));
 const hasPendingFriendRequests = computed(() => pendingFriendRequests.value.length > 0);
 const hasUnreadGroupChats = computed(() => unreadGroupChatCount.value > 0);
@@ -1053,6 +950,14 @@ async function deleteAiConversation(conversationId) {
   focusAiComposer();
 }
 
+function toggleAiFullscreen() {
+  isAiFullscreen.value = !isAiFullscreen.value;
+  nextTick(() => {
+    scrollAiConversationToBottom('auto');
+    focusAiComposer();
+  });
+}
+
 function handleAiComposerKeydown(event) {
   if (event?.key !== 'Enter' || event?.shiftKey || event?.isComposing || isAiComposing.value) {
     return;
@@ -1084,7 +989,6 @@ const openFeature = async (featureId) => {
       ensureAiConversation(true);
     }
 
-    resolveAiUserLocation().catch(() => {});
     focusAiComposer();
   }
 
@@ -1155,7 +1059,6 @@ const sendAiMessage = async (prefilledPrompt = '') => {
   focusAiComposer();
 
   try {
-    const userLocation = await resolveAiUserLocation();
     // 中文注释：这里连接后端千问接口 /api/chat，把用户输入发给后端并拿到 AI 回复。
     const data = await aiApi.askQianwen({
       conversationId: conversation.id,
@@ -1163,16 +1066,9 @@ const sendAiMessage = async (prefilledPrompt = '') => {
       message: question,
       messages: buildConversationMessagesForApi(conversation),
       gpsLocation: conversation.pageLabel,
-      userLocation,
     });
 
-    conversation.messages.push({
-      id: createAiMessageId('assistant'),
-      role: 'assistant',
-      content: data.response,
-      routePlan: data.routePlan || null,
-      hint: data.routePlan ? dialogText.value.aiRouteProviderHint : '',
-    });
+    conversation.messages.push({ id: createAiMessageId('assistant'), role: 'assistant', content: data.response });
     trimConversationMessages(conversation);
     syncAiConversationMeta(conversation);
 
@@ -1204,8 +1100,6 @@ const sendAiMessage = async (prefilledPrompt = '') => {
 watch(
   () => route.fullPath,
   () => {
-    closeServiceMenu();
-    closeProfileMenu();
     friendTrip.meetingPoint = currentJourney.value.meetPoint;
     inviteFeedback.value = '';
 
@@ -1763,8 +1657,6 @@ const profileStatus = computed(() => {
 
 // 上传图片相关状态
 const selectedImageFile = ref(null);
-const uploadPlaceName = ref('');
-const uploadPlaceDescription = ref('');
 const uploadedImageUrl = ref('');
 const isUploadingImage = ref(false);
 const uploadError = ref('');
@@ -1786,24 +1678,12 @@ async function submitUploadImage() {
     return;
   }
 
-  if (!uploadPlaceName.value.trim()) {
-    uploadError.value = '请输入地点名称。';
-    return;
-  }
-
-  if (!uploadPlaceDescription.value.trim()) {
-    uploadError.value = '请输入地点描述。';
-    return;
-  }
-
   isUploadingImage.value = true;
   uploadError.value = '';
 
   try {
     const formData = new FormData();
     formData.append('image', selectedImageFile.value);
-    formData.append('title', uploadPlaceName.value.trim());
-    formData.append('description', uploadPlaceDescription.value.trim());
 
     // 中文注释：这里连接后端图片上传接口 /api/ugc，使用 FormData 以 multipart/form-data 发送图片文件。
     // 注意：使用 fetch/axios 发送 FormData 时，不要手动写死 Content-Type，浏览器会自动补上 boundary。
@@ -1813,9 +1693,6 @@ async function submitUploadImage() {
     if (!uploadedImageUrl.value) {
       throw new Error('上传成功但未拿到图片地址，请检查后端返回字段 image_url/imageUrl。');
     }
-
-    uploadPlaceName.value = '';
-    uploadPlaceDescription.value = '';
   } catch (error) {
     console.error('[Upload] 上传图片失败', error);
     uploadError.value = error.message || '上传失败，请稍后再试。';
@@ -1913,7 +1790,7 @@ watch(
 
 <template>
   <div class="app-shell">
-    <header class="site-header site-header--refined">
+    <header v-if="!isImmersivePanoramaRoute" class="site-header site-header--refined">
       <div class="header-inner header-inner--refined">
         <RouterLink to="/" class="brand-link brand-link--refined">
           <span class="brand-seal">平</span>
@@ -1949,53 +1826,45 @@ watch(
                   d="M7.75 10.2h8.5"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.2"
-                  opacity="0.5"
+                  stroke-width="1.55"
                 />
               </svg>
               <svg v-else-if="item.icon === 'gardens'" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M6.55 15.65c6.2.9 10-2.9 10.85-10.15-6.2-.45-10.65 2.75-10.85 10.15Z"
+                  d="M6.5 15.7c6.65.6 10.2-3.35 11-10.6-6.45-.28-11.05 3.2-11 10.6Z"
                   stroke="currentColor"
                   stroke-linejoin="round"
                   stroke-width="1.55"
                 />
                 <path
-                  d="M6.55 15.65c2.25-3.5 6.05-6.05 10.85-10.15"
+                  d="M6.5 15.7c2.4-3.65 6.15-6.25 11-10.6"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-width="1.55"
                 />
                 <path
-                  d="M6.55 15.65V20.7"
+                  d="M6.5 15.7V21"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-width="1.55"
-                />
-                <path
-                  d="M6.55 19.8c-.75.55-1.35 1.15-1.8 1.8"
-                  stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-width="1.2"
-                  opacity="0.55"
                 />
               </svg>
               <svg v-else-if="item.icon === 'museums'" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M4.65 9.05 12 4.7l7.35 4.35"
+                  d="M4.65 9.1 12 4.55l7.35 4.55"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                   stroke-width="1.55"
                 />
                 <path
-                  d="M6.7 10.2v8.65m3.55-8.65v8.65m3.5-8.65v8.65m3.55-8.65v8.65"
+                  d="M6.55 10.2V19m3.75-8.8V19m3.4-8.8V19m3.75-8.8V19"
                   stroke="currentColor"
                   stroke-linecap="round"
-                  stroke-width="1.45"
+                  stroke-width="1.5"
                 />
                 <path
-                  d="M5.3 20.8h13.4"
+                  d="M5.3 21h13.4"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-width="1.55"
@@ -2003,19 +1872,19 @@ watch(
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M8.15 10.15V7.9a3.85 3.85 0 0 1 7.7 0v2.25"
+                  d="M8.15 10.35V7.9a3.85 3.85 0 1 1 7.7 0v2.45"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-width="1.55"
                 />
                 <path
-                  d="M7.35 10.15h9.3c.68 0 1.22.55 1.22 1.22v7.08c0 1.1-.89 1.99-1.99 1.99H8.12a1.99 1.99 0 0 1-1.99-1.99v-7.08c0-.67.54-1.22 1.22-1.22Z"
+                  d="M7.2 10.35h9.6c.67 0 1.2.54 1.2 1.2v7.2c0 1.05-.85 1.9-1.9 1.9H7.9A1.9 1.9 0 0 1 6 18.75v-7.2c0-.66.54-1.2 1.2-1.2Z"
                   stroke="currentColor"
                   stroke-linejoin="round"
                   stroke-width="1.55"
                 />
                 <path
-                  d="M12 13.2v4"
+                  d="M12 13.15v4.25"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-width="1.55"
@@ -2076,11 +1945,11 @@ watch(
                   class="service-menu__item"
                   @click="handleSelectFeature(feature.id)"
                 >
-                  <span class="service-menu__item-icon" aria-hidden="true">
-                    <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M8.6 10.2a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Zm6.65 1.35a2.45 2.45 0 1 0 0-4.9 2.45 2.45 0 0 0 0 4.9Zm-10 6.95a4.65 4.65 0 0 1 6.95 0m1.45 0a3.95 3.95 0 0 1 5.65-.8"
-                        stroke="currentColor"
+                    <span class="service-menu__item-icon" aria-hidden="true">
+                      <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M8.6 10.2a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Zm6.65 1.35a2.45 2.45 0 1 0 0-4.9 2.45 2.45 0 0 0 0 4.9Zm-10 6.95a4.65 4.65 0 0 1 6.95 0m1.45 0a3.95 3.95 0 0 1 5.65-.8"
+                          stroke="currentColor"
                         stroke-linecap="round"
                         stroke-linejoin="round"
                         stroke-width="1.45"
@@ -2232,7 +2101,7 @@ watch(
       </RouterView>
     </main>
 
-    <footer class="global-footer">
+    <footer v-if="!isImmersivePanoramaRoute" class="global-footer">
       <div class="footer-content">
         <section class="footer-signature" :aria-label="appText.footerSignatureAria">
           <div class="footer-signature__headline">
@@ -2272,13 +2141,14 @@ watch(
       <div
         v-if="isFeatureOpen"
         class="overlay"
+        :class="{ 'overlay--fullscreen': activeFeature === 'ai' && isAiFullscreen }"
         role="dialog"
         aria-modal="true"
         @click.self="closeFeature"
       >
         <section
           class="dialog dialog--feature"
-          :class="{ 'dialog--ai': activeFeature === 'ai' }"
+          :class="{ 'dialog--ai': activeFeature === 'ai', 'dialog--ai-fullscreen': activeFeature === 'ai' && isAiFullscreen }"
           @click.stop
         >
           <header class="dialog__header">
@@ -2358,6 +2228,20 @@ watch(
               </aside>
 
               <section class="ai-main" :aria-label="dialogText.aiConversationAria">
+                <header class="ai-main__header">
+                  <div class="ai-main__context">
+                    <span>{{ dialogText.aiCurrentPage }}</span>
+                    <strong>{{ activeAiPageLabel }}</strong>
+                    <p>{{ activeAiJourney.pace }}</p>
+                  </div>
+
+                  <div class="ai-main__header-actions">
+                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
+                      {{ isAiFullscreen ? dialogText.aiExitFullscreen : dialogText.aiEnterFullscreen }}
+                    </button>
+                  </div>
+                </header>
+
                 <div class="ai-main__body">
                   <div class="ai-starters" v-if="aiShouldShowStarter">
                     <p class="ai-starters__label">{{ dialogText.aiStarterLabel }}</p>
@@ -2391,46 +2275,12 @@ watch(
                           'message-bubble',
                           message.role === 'user' ? 'message-bubble--user' : 'message-bubble--assistant',
                         ]"
-                        >
-                          <span class="message-bubble__role">{{ message.role === 'user' ? dialogText.me : dialogText.aiLabel }}</span>
-                          <p>{{ message.content }}</p>
-                          <div v-if="message.routePlan" class="ai-route-card">
-                            <div class="ai-route-card__head">
-                              <strong>{{ dialogText.aiRoutePlanTag }}</strong>
-                              <span>{{ summarizeAiRoutePlan(message.routePlan) }}</span>
-                            </div>
-                            <div class="ai-route-card__meta">
-                              <span>步行</span>
-                              <strong>{{ summarizeAiRouteOption(message.routePlan.routes?.walking, 'walking') }}</strong>
-                            </div>
-                            <div class="ai-route-card__meta">
-                              <span>车行</span>
-                              <strong>{{ summarizeAiRouteOption(message.routePlan.routes?.driving, 'driving') }}</strong>
-                            </div>
-                            <div class="ai-route-card__meta">
-                              <span>{{ dialogText.aiRouteStart }}</span>
-                              <strong>{{ message.routePlan.start?.name || '当前位置' }}</strong>
-                            </div>
-                            <div class="ai-route-card__meta">
-                              <span>{{ dialogText.aiRouteEnd }}</span>
-                              <strong>{{ message.routePlan.end?.name }}</strong>
-                            </div>
-                            <button type="button" class="ai-route-card__action" @click="openAiRoutePlan(message.routePlan)">
-                              {{ dialogText.aiRouteOpenMap }}
-                            </button>
-                            <details v-if="message.routePlan.transitPlan" class="ai-route-card__transit">
-                              <summary>{{ dialogText.aiRouteTransitToggle }}</summary>
-                              <p class="ai-route-card__transit-summary">{{ message.routePlan.transitPlan.summary }}</p>
-                              <textarea
-                                class="ai-route-card__transit-textarea"
-                                :value="message.routePlan.transitPlan.text || dialogText.aiRouteTransitPlaceholder"
-                                readonly
-                              />
-                            </details>
-                          </div>
-                          <small v-if="message.hint">{{ message.hint }}</small>
-                        </div>
-                      </article>
+                      >
+                        <span class="message-bubble__role">{{ message.role === 'user' ? dialogText.me : dialogText.aiLabel }}</span>
+                        <p>{{ message.content }}</p>
+                        <small v-if="message.hint">{{ message.hint }}</small>
+                      </div>
+                    </article>
 
                     <article
                       v-if="isActiveAiConversationLoading"
@@ -2481,24 +2331,6 @@ watch(
             </div>
 
             <form class="dialog__form" @submit.prevent="submitUploadImage">
-              <label class="field field--full">
-                <span>{{ dialogText.uploadPlaceName }}</span>
-                <input
-                  v-model.trim="uploadPlaceName"
-                  type="text"
-                  :placeholder="dialogText.uploadPlaceNamePlaceholder"
-                />
-              </label>
-
-              <label class="field field--full">
-                <span>{{ dialogText.uploadPlaceDescription }}</span>
-                <textarea
-                  v-model.trim="uploadPlaceDescription"
-                  rows="4"
-                  :placeholder="dialogText.uploadPlaceDescriptionPlaceholder"
-                />
-              </label>
-
               <label class="field field--full">
                 <span>{{ dialogText.selectImage }}</span>
                 <input type="file" accept="image/*" @change="handleSelectImage" />
@@ -2579,66 +2411,26 @@ watch(
               <p>{{ currentUser.email }}</p>
             </div>
 
-            <form class="dialog__form" @submit.prevent="submitProfileUpdate">
-              <label class="field">
-                <span>{{ dialogText.profileName }}</span>
-                <input
-                  v-model.trim="profileForm.displayName"
-                  type="text"
-                  :placeholder="dialogText.profileNamePlaceholder"
-                  autocomplete="nickname"
-                />
-              </label>
-
-              <label class="field">
-                <span>{{ dialogText.newPassword }}</span>
-                <input
-                  v-model="profileForm.password"
-                  type="password"
-                  :placeholder="dialogText.newPasswordPlaceholder"
-                  autocomplete="new-password"
-                />
-              </label>
-
-              <label class="field">
-                <span>{{ dialogText.confirmNewPassword }}</span>
-                <input
-                  v-model="profileForm.confirmPassword"
-                  type="password"
-                  :placeholder="dialogText.confirmNewPasswordPlaceholder"
-                  autocomplete="new-password"
-                />
-              </label>
-
-              <p v-if="profileFeedback" :class="['auth-feedback', `is-${profileFeedbackType}`]">
-                {{ profileFeedback }}
-              </p>
-
-              <div class="dialog__actions">
-                <button type="submit" class="dialog__primary" :disabled="profileSubmitting">
-                  {{ profileSubmitting ? dialogText.saving : dialogText.saveChanges }}
-                </button>
-                <button type="button" class="dialog__primary" @click="logout">{{ dialogText.logout }}</button>
-                <button
-                  v-if="hasPendingFriendRequests"
-                  type="button"
-                  class="dialog__ghost"
-                  @click="pendingRequestPopupVisible = true"
-                >
-                  {{ dialogText.friendRequests }} {{ pendingFriendRequests.length }}
-                </button>
-                <button
-                  type="button"
-                  class="dialog__ghost"
-                  :disabled="authDeletingAccount"
-                  @click="deleteAccount"
-                >
-                  {{ authDeletingAccount ? dialogText.deletingAccount : dialogText.deleteAccount }}
-                </button>
-                <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
-              </div>
-            </form>
-
+            <div class="dialog__actions">
+              <button
+                v-if="hasPendingFriendRequests"
+                type="button"
+                class="dialog__ghost"
+                @click="pendingRequestPopupVisible = true"
+              >
+                {{ dialogText.friendRequests }} {{ pendingFriendRequests.length }}
+              </button>
+              <button type="button" class="dialog__primary" @click="logout">{{ dialogText.logout }}</button>
+              <button
+                type="button"
+                class="dialog__ghost"
+                :disabled="authDeletingAccount"
+                @click="deleteAccount"
+              >
+                {{ authDeletingAccount ? dialogText.deletingAccount : dialogText.deleteAccount }}
+              </button>
+              <button type="button" class="dialog__ghost" @click="closeAuthDialog">关闭</button>
+            </div>
           </template>
 
           <form v-else class="dialog__form" @submit.prevent="submitAuth">
@@ -2729,14 +2521,6 @@ watch(
       </div>
     </transition>
 
-    <ScenicMapDialog
-      :show="aiRouteDialogVisible"
-      :poi="activeAiRoutePoi"
-      :route-plan="activeAiRoutePlan"
-      title="AI 路线规划"
-      @update:show="aiRouteDialogVisible = $event"
-    />
-
     <FriendRequestPopup
       v-if="currentUser"
       :show="pendingRequestPopupVisible"
@@ -2749,7 +2533,7 @@ watch(
   </div>
 </template>
 
-<style scoped>
+<style>
 .site-header--refined {
   position: sticky;
   top: 0;
@@ -2999,6 +2783,7 @@ watch(
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.86),
     0 22px 48px rgba(84, 71, 47, 0.14);
+  z-index: 10;
 }
 
 .service-menu__item {
@@ -3036,23 +2821,22 @@ watch(
 }
 
 .service-menu__item-icon svg {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1rem;
+  height: 1rem;
 }
 
 .service-menu__item-copy {
-  min-width: 0;
   display: grid;
-  gap: 0.16rem;
+  gap: 0.14rem;
 }
 
 .service-menu__item-copy strong {
+  font-size: 0.9rem;
   font-weight: 600;
-  color: #453d33;
 }
 
 .service-menu__item-copy small {
-  color: rgba(91, 83, 71, 0.74);
+  color: rgba(91, 83, 71, 0.72);
   letter-spacing: 0.08em;
 }
 
@@ -3063,29 +2847,21 @@ watch(
 }
 
 .language-switch--refined select {
-  min-width: 5.7rem;
-  min-height: 2.6rem;
-  padding: 0 1.2rem 0 0.1rem;
-  border: 0;
+  min-width: 6.2rem;
+  border: none;
   background: transparent;
   color: #453d33;
-  font-size: 0.86rem;
-  letter-spacing: 0.05em;
-  outline: none;
-  appearance: none;
-  cursor: pointer;
 }
 
 .profile-button--refined {
-  padding: 0.26rem 0.36rem 0.26rem 0.34rem;
-  gap: 0.56rem;
+  padding-right: 0.8rem;
 }
 
 .site-header--refined .profile-avatar {
-  width: 2.2rem;
+  border-color: rgba(175, 148, 86, 0.18);
   background:
-    linear-gradient(145deg, rgba(191, 166, 111, 0.16), rgba(124, 147, 164, 0.12)),
-    rgba(255, 251, 245, 0.9);
+    linear-gradient(145deg, rgba(191, 166, 111, 0.15), rgba(124, 147, 164, 0.12)),
+    rgba(255, 252, 246, 0.88);
   color: #5f4e31;
 }
 
@@ -3284,9 +3060,7 @@ watch(
     line-height: 1.3;
   }
 }
-</style>
 
-<style>
 .profile-request-badge {
   position: absolute;
   top: -0.4rem;
@@ -3485,6 +3259,11 @@ watch(
   z-index: 80;
 }
 
+.overlay--fullscreen {
+  place-items: stretch;
+  padding: 0;
+}
+
 .favorites-fab {
   position: fixed;
   right: 1.4rem;
@@ -3568,6 +3347,15 @@ watch(
   display: flex;
   flex-direction: column;
   scrollbar-gutter: stable both-edges;
+}
+
+.dialog--ai-fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
 }
 
 .dialog--ai .dialog__header {
@@ -3918,6 +3706,60 @@ watch(
   background: rgba(250, 250, 249, 0.94);
 }
 
+.ai-main__header {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid rgba(28, 25, 23, 0.06);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(250, 250, 249, 0.9);
+  backdrop-filter: blur(12px);
+}
+
+.ai-main__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.ai-main__context {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ai-main__context span {
+  color: var(--ink-500);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ai-main__context strong {
+  font-size: 1.05rem;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-main__context p {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 0.92rem;
+}
+
+.ai-main__resize {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.14);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink-800);
+}
+
 .ai-main__body {
   flex: 1;
   min-height: 0;
@@ -3947,6 +3789,20 @@ watch(
   flex-direction: column;
   gap: 0.9rem;
   padding: 1.15rem 1.2rem;
+}
+
+.dialog--ai-fullscreen .ai-chat.ai-chat--main {
+  padding: 1.35rem 1.5rem;
+}
+
+.dialog--ai-fullscreen .ai-composer {
+  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.dialog--ai-fullscreen .ai-main__header,
+.dialog--ai-fullscreen .dialog__header {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .message-row {
@@ -4186,73 +4042,6 @@ watch(
   color: var(--ink-500);
 }
 
-.ai-route-card {
-  margin-top: 0.55rem;
-  padding: 0.8rem 0.85rem;
-  border-radius: 16px;
-  border: 1px solid rgba(47, 106, 77, 0.14);
-  background: rgba(255, 255, 255, 0.72);
-  display: grid;
-  gap: 0.55rem;
-}
-
-.ai-route-card__head,
-.ai-route-card__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.ai-route-card__head strong,
-.ai-route-card__meta strong {
-  color: var(--ink-900);
-}
-
-.ai-route-card__head span,
-.ai-route-card__meta span {
-  color: var(--ink-600);
-  font-size: 0.82rem;
-}
-
-.ai-route-card__action {
-  min-height: 2.5rem;
-  border-radius: 999px;
-  border: 1px solid rgba(47, 106, 77, 0.2);
-  background: rgba(95, 127, 114, 0.1);
-  color: #2f6a4d;
-  font-weight: 600;
-}
-
-.ai-route-card__transit {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.ai-route-card__transit summary {
-  cursor: pointer;
-  color: #2f6a4d;
-  font-weight: 600;
-}
-
-.ai-route-card__transit-summary {
-  margin: 0;
-  color: var(--ink-700);
-  font-size: 0.84rem;
-}
-
-.ai-route-card__transit-textarea {
-  width: 100%;
-  min-height: 6.5rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: 14px;
-  border: 1px solid rgba(47, 106, 77, 0.12);
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--ink-800);
-  resize: vertical;
-  line-height: 1.55;
-}
-
 .is-loading {
   opacity: 0.88;
 }
@@ -4331,6 +4120,21 @@ watch(
     height: 3.95rem;
   }
 
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: none;
+    will-change: auto;
+  }
+
+  .fade-enter-from,
+  .fade-leave-to,
+  .fade-enter-to,
+  .fade-leave-from {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
   .overlay {
     place-items: start center;
     padding: 1rem 0.8rem;
@@ -4343,16 +4147,6 @@ watch(
 
   .dialog--feature {
     padding: 1.1rem;
-  }
-
-  .profile-dropdown {
-    position: fixed;
-    top: max(4.75rem, calc(env(safe-area-inset-top) + 4.2rem));
-    left: 1rem;
-    right: 1rem;
-    width: auto;
-    max-height: calc(100dvh - 6rem);
-    overflow-y: auto;
   }
 
   .feature-stat-grid {
@@ -4376,49 +4170,17 @@ watch(
   .ai-sidebar {
     border-right: 0;
     border-bottom: 1px solid rgba(28, 25, 23, 0.08);
-    max-height: 34vh;
-    padding: 0.85rem;
   }
 
+  .ai-main__header,
   .dialog__header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .ai-chat.ai-chat--main {
-    padding: 1rem;
-  }
-
-  .message-row {
-    gap: 0.55rem;
-    align-items: flex-start;
-  }
-
-  .message-avatar {
-    width: 30px;
-    height: 30px;
-    flex-basis: 30px;
-    font-size: 0.76rem;
-  }
-
-  .message-bubble {
-    max-width: 100%;
-    padding: 0.85rem 0.9rem;
-  }
-
-  .ai-composer {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 0.85rem 1rem calc(0.95rem + env(safe-area-inset-bottom));
-  }
-
-  .dialog__primary.ai-composer__send {
+  .ai-main__header-actions {
     width: 100%;
-    min-width: 0;
-  }
-
-  .friends-embed {
-    min-height: 0;
+    justify-content: space-between;
   }
 }
 
@@ -4435,54 +4197,6 @@ watch(
   .footer-nav {
     grid-template-columns: 1fr;
     gap: 0.75rem;
-  }
-
-  .dialog--ai {
-    width: min(100%, 1000px);
-    height: calc(100dvh - 2rem);
-    max-height: calc(100dvh - 2rem);
-  }
-}
-
-@media (max-width: 540px) {
-  .overlay {
-    padding: 0.75rem;
-  }
-
-  .dialog {
-    width: 100%;
-    max-height: calc(100dvh - 1.5rem);
-    border-radius: 24px;
-    padding: 1rem;
-  }
-
-  .dialog--feature {
-    padding: 1rem;
-  }
-
-  .dialog--ai {
-    width: 100%;
-    height: calc(100dvh - 1.5rem);
-    max-height: calc(100dvh - 1.5rem);
-    padding: 0;
-  }
-
-  .dialog__title {
-    font-size: 1.25rem;
-  }
-
-  .prompt-chips {
-    gap: 0.45rem;
-  }
-
-  .prompt-chip {
-    width: 100%;
-    justify-content: flex-start;
-    text-align: left;
-  }
-
-  .upload-preview {
-    padding: 0.85rem;
   }
 }
 </style>

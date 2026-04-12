@@ -177,6 +177,7 @@ const backgroundImage = computed(() => liuyuanPanoramaCover || scenes.value[0]?.
 .liuyuan-panorama-entry {
   position: relative;
   min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
   color: #fff6ee;
   background: #120d09;
@@ -474,6 +475,85 @@ const backgroundImage = computed(() => liuyuanPanoramaCover || scenes.value[0]?.
 
   .liuyuan-panorama-entry__footer {
     padding: 0 1rem 1rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .liuyuan-panorama-entry__topbar {
+    gap: 0.75rem;
+    padding: calc(0.9rem + env(safe-area-inset-top, 0px)) 0.85rem 0.75rem;
+  }
+
+  .liuyuan-panorama-entry__content {
+    gap: 0.85rem;
+    padding: 0.2rem 0.85rem 1.4rem;
+  }
+
+  .liuyuan-panorama-entry__hero-panel,
+  .liuyuan-panorama-entry__spotlights {
+    gap: 0.8rem;
+    padding: 1rem;
+    border-radius: 24px;
+  }
+
+  .liuyuan-panorama-entry__hero-panel h1 {
+    font-size: clamp(2.2rem, 12vw, 3.2rem);
+    line-height: 1.02;
+  }
+
+  .liuyuan-panorama-entry__hero-panel > span,
+  .liuyuan-panorama-entry__route-card strong,
+  .liuyuan-panorama-entry__spotlight-copy span {
+    line-height: 1.62;
+  }
+
+  .liuyuan-panorama-entry__route-card {
+    padding: 0.9rem;
+    border-radius: 22px;
+  }
+
+  .liuyuan-panorama-entry__route-card strong {
+    font-size: 0.96rem;
+  }
+
+  .liuyuan-panorama-entry__stats {
+    gap: 0.65rem;
+  }
+
+  .liuyuan-panorama-entry__stat {
+    padding: 0.85rem 0.9rem;
+    border-radius: 18px;
+  }
+
+  .liuyuan-panorama-entry__spotlight {
+    gap: 0.7rem;
+    padding: 0.55rem;
+    border-radius: 18px;
+  }
+
+  .liuyuan-panorama-entry__spotlight-image {
+    aspect-ratio: 1.5 / 1;
+    border-radius: 14px;
+  }
+
+  .liuyuan-panorama-entry__spotlight-copy strong {
+    font-size: 0.96rem;
+  }
+
+  .liuyuan-panorama-entry__route-list span,
+  .liuyuan-panorama-entry__sequence strong {
+    padding: 0.48rem 0.68rem;
+    font-size: 0.82rem;
+  }
+
+  .liuyuan-panorama-entry__footer {
+    padding: 0 0.85rem calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .liuyuan-panorama-entry__sequence {
+    gap: 0.7rem;
+    padding: 0.9rem;
+    border-radius: 22px;
   }
 }
 </style>

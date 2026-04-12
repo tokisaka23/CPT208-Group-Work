@@ -13,7 +13,7 @@ const hotspot = (id, zhLabel, enLabel, zhTitle, enTitle, zhDescription, enDescri
   pitch: Math.round((50 - y) * 1.5),
 });
 
-const scene = (id, order, fileName, titleZh, titleEn, descZh, descEn, accent, initialPan, hotspots) => ({
+const scene = (id, order, fileName, titleZh, titleEn, descZh, descEn, accent, initialPan, hotspots, options = {}) => ({
   id,
   order,
   isPanorama: true,
@@ -25,6 +25,12 @@ const scene = (id, order, fileName, titleZh, titleEn, descZh, descEn, accent, in
   sourceName: text('项目本地全景素材', 'Local panorama asset set'),
   sourceLabel: text('当前画面使用 image 文件夹中的网师园实景全景图。', 'This scene uses the local panorama images stored in the project image folder.'),
   initialPan,
+  initialTilt: options.initialTilt,
+  initialFov: options.initialFov,
+  initialMobilePan: options.initialMobilePan,
+  initialMobileTilt: options.initialMobileTilt,
+  initialMobileFov: options.initialMobileFov,
+  initialHotspotId: options.initialHotspotId,
   hotspots,
 });
 
