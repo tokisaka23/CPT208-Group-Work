@@ -1,18 +1,35 @@
 ﻿import { createRouter, createWebHistory } from 'vue-router';
 
-import { getDocumentTitle } from '../i18n';
+import { currentLanguage, resolveLocalized } from '../i18n';
+
+const routeTitleSource = {
+  pingjiang: { zh: '平江古街', en: 'Pingjiang', ja: '平江古街', ko: '평강고가' },
+  gardens: { zh: '古典园林', en: 'Classical Gardens', ja: '古典庭園', ko: '고전 정원' },
+  zhuozhengyuan: { zh: '拙政园', en: 'Humble Administrator\'s Garden', ja: '拙政園', ko: '졸정원' },
+  liuyuan: { zh: '留园', en: 'Lingering Garden', ja: '留園', ko: '유원' },
+  wangshiyuan: { zh: '网师园', en: 'Master of Nets Garden', ja: '網師園', ko: '망사원' },
+  museums: { zh: '文博殿堂', en: 'Museums', ja: '博物館', ko: '박물관' },
+  heritage: { zh: '非遗市井', en: 'Living Heritage', ja: '暮らしの遺産', ko: '생활 유산' },
+};
+
+const appTitleSource = {
+  zh: '平江慢游',
+  en: 'Pingjiang Slow Travel',
+  ja: '平江スロートラベル',
+  ko: '평강 슬로우 트래블',
+};
 
 const routes = [
   {
     path: '/',
     name: 'pingjiang',
-    component: () => import('../views/Pingjiang.vue'),
+    component: () => import('../views/PingjiangI18n.vue'),
     meta: { titleKey: 'pingjiang' },
   },
   {
     path: '/gardens',
     name: 'gardens',
-    component: () => import('../views/Gardens.vue'),
+    component: () => import('../views/GardensI18n.vue'),
     meta: { titleKey: 'gardens' },
   },
   {
@@ -72,38 +89,70 @@ const routes = [
   {
     path: '/tianping',
     name: 'tianpingshan',
-    component: () => import('../views/TianpingShanView.vue'),
-    meta: { titleKey: 'gardens', title: '天平山' },
+    component: () => import('../views/TianpingShanViewI18n.vue'),
+    meta: {
+      titleKey: 'gardens',
+      localizedTitle: {
+        zh: '天平山',
+        en: 'Tianping Mountain',
+        ja: '天平山',
+        ko: '천평산',
+      },
+    },
   },
   {
     path: '/pingjiang-road',
     name: 'pingjiangroad',
-    component: () => import('../views/PingjiangRoadView.vue'),
-    meta: { titleKey: 'pingjiang', title: '平江路' },
+    component: () => import('../views/PingjiangRoadViewI18n.vue'),
+    meta: {
+      titleKey: 'pingjiang',
+      localizedTitle: {
+        zh: '平江路',
+        en: 'Pingjiang Road',
+        ja: '平江路',
+        ko: '평강로',
+      },
+    },
   },
   {
     path: '/suzhou-museum',
     name: 'suzhoumuseum',
-    component: () => import('../views/SuzhouMuseumView.vue'),
-    meta: { titleKey: 'museums', title: '苏州博物馆' },
+    component: () => import('../views/SuzhouMuseumViewI18n.vue'),
+    meta: {
+      titleKey: 'museums',
+      localizedTitle: {
+        zh: '苏州博物馆',
+        en: 'Suzhou Museum',
+        ja: '蘇州博物館',
+        ko: '쑤저우 박물관',
+      },
+    },
   },
   {
     path: '/museums',
     name: 'museums',
-    component: () => import('../views/Museums.vue'),
+    component: () => import('../views/MuseumsI18n.vue'),
     meta: { titleKey: 'museums' },
   },
   {
     path: '/heritage',
     name: 'heritage',
-    component: () => import('../views/Heritage.vue'),
+    component: () => import('../views/HeritageI18n.vue'),
     meta: { titleKey: 'heritage' },
   },
   {
     path: '/favorites',
     name: 'favorites',
-    component: () => import('../views/FavoritesView.vue'),
-    meta: { titleKey: 'pingjiang', title: '收藏夹' },
+    component: () => import('../views/FavoritesViewI18n.vue'),
+    meta: {
+      titleKey: 'pingjiang',
+      localizedTitle: {
+        zh: '收藏夹',
+        en: 'Favorites',
+        ja: 'お気に入り',
+        ko: '즐겨찾기',
+      },
+    },
   },
 ];
 
@@ -117,7 +166,16 @@ const router = createRouter({
 
 router.afterEach((to) => {
   if (typeof document !== 'undefined') {
-    document.title = to.meta.title || getDocumentTitle(to.meta.titleKey || 'pingjiang');
+    const localizedTitle = to.meta.localizedTitle
+      ? resolveLocalized(to.meta.localizedTitle, currentLanguage.value)
+      : '';
+    const routeTitle = to.meta.titleKey
+      ? resolveLocalized(routeTitleSource[to.meta.titleKey] || routeTitleSource.pingjiang, currentLanguage.value)
+      : resolveLocalized(routeTitleSource.pingjiang, currentLanguage.value);
+    const appName = resolveLocalized(appTitleSource, currentLanguage.value);
+    document.title = localizedTitle
+      ? `${localizedTitle} · ${appName}`
+      : `${routeTitle} · ${appName}`;
   }
 });
 

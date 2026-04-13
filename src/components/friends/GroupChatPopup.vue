@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Button, Checkbox, CheckboxGroup, Empty, Field, Icon, Loading, Popup, Tag } from 'vant';
+import { resolveLocalized, useLanguage } from '../../i18n';
 
 /* const text = {
   close: '关闭',
@@ -29,39 +30,46 @@ import { Button, Checkbox, CheckboxGroup, Empty, Field, Icon, Loading, Popup, Ta
   renameReadonly: '仅群主可修改群名',
 }; */
 
-const text = {
-  close: '\u5173\u95ed',
-  back: '\u8fd4\u56de',
-  details: '\u804a\u5929\u4fe1\u606f',
-  placeholder: '\u8f93\u5165\u7fa4\u6d88\u606f',
-  send: '\u53d1\u9001',
-  loading: '\u6b63\u5728\u52a0\u8f7d\u6d88\u606f...',
-  empty: '\u8fd8\u6ca1\u6709\u7fa4\u6d88\u606f\uff0c\u5148\u53d1\u4e00\u6761\u5427',
-  me: '\u6211',
-  owner: '\u7fa4\u4e3b',
-  members: '\u7fa4\u6210\u5458',
-  inviteTitle: '\u9009\u62e9\u8981\u62c9\u5165\u7fa4\u7684\u597d\u53cb',
-  inviteConfirm: '\u786e\u8ba4\u62c9\u5165',
-  inviteEmpty: '\u6682\u65f6\u6ca1\u6709\u53ef\u4ee5\u518d\u9080\u8bf7\u7684\u597d\u53cb',
-  removeMode: '\u70b9\u51fb\u6210\u5458\u53ef\u79fb\u51fa\u7fa4\u804a',
-  groupName: '\u7fa4\u804a\u540d\u79f0',
-  ownerLabel: '\u7fa4\u4e3b',
-  countLabel: '\u7fa4\u4eba\u6570',
-  exit: '\u9000\u51fa\u7fa4\u804a',
-  addAction: '\u6dfb\u52a0',
-  removeAction: '\u79fb\u9664',
-  noCode: '\u672a\u8bbe\u7f6e\u597d\u53cb\u7801',
-  saveGroupName: '\u4fdd\u5b58\u7fa4\u540d',
-  renamePlaceholder: '\u8bf7\u8f93\u5165\u7fa4\u804a\u540d\u79f0',
-  renameReadonly: '\u4ec5\u7fa4\u4e3b\u53ef\u4fee\u6539\u7fa4\u540d',
-  memberProfile: '\u6210\u5458\u8d44\u6599',
-  memberEmail: '\u90ae\u7bb1',
-  addFriend: '\u52a0\u597d\u53cb',
-  alreadyFriend: '\u5df2\u662f\u597d\u53cb',
-  myself: '\u8fd9\u662f\u4f60',
-  noEmail: '\u6682\u672a\u516c\u5f00',
-  noFriendCode: '\u65e0\u6cd5\u53d1\u8d77\u597d\u53cb\u7533\u8bf7',
+const { language } = useLanguage();
+
+const textSource = {
+  close: { zh: '关闭', en: 'Close', ja: '閉じる', ko: '닫기' },
+  back: { zh: '返回', en: 'Back', ja: '戻る', ko: '뒤로' },
+  details: { zh: '聊天信息', en: 'Chat Details', ja: 'チャット情報', ko: '채팅 정보' },
+  placeholder: { zh: '输入群消息', en: 'Type a group message', ja: 'グループメッセージを入力', ko: '그룹 메시지 입력' },
+  send: { zh: '发送', en: 'Send', ja: '送信', ko: '보내기' },
+  loading: { zh: '正在加载消息...', en: 'Loading messages...', ja: 'メッセージを読み込み中...', ko: '메시지를 불러오는 중...' },
+  empty: { zh: '还没有群消息，先发一条吧', en: 'No group messages yet. Send the first one.', ja: 'まだグループメッセージがありません。最初の1件を送ってみましょう。', ko: '아직 그룹 메시지가 없습니다. 첫 메시지를 보내보세요.' },
+  me: { zh: '我', en: 'Me', ja: '自分', ko: '나' },
+  owner: { zh: '群主', en: 'Owner', ja: 'オーナー', ko: '방장' },
+  members: { zh: '群成员', en: 'Members', ja: 'メンバー', ko: '멤버' },
+  inviteTitle: { zh: '选择要拉入群的好友', en: 'Select friends to invite', ja: '招待する友だちを選択', ko: '초대할 친구 선택' },
+  inviteConfirm: { zh: '确认拉入', en: 'Confirm Invite', ja: '招待する', ko: '초대 확인' },
+  inviteEmpty: { zh: '暂时没有可以再邀请的好友', en: 'There are no more friends available to invite.', ja: 'これ以上招待できる友だちはいません。', ko: '더 초대할 수 있는 친구가 없습니다.' },
+  removeMode: { zh: '点击成员可移出群聊', en: 'Tap a member to remove them from the group.', ja: 'メンバーをタップするとグループから外せます。', ko: '멤버를 탭하면 그룹에서 제거할 수 있습니다.' },
+  groupName: { zh: '群聊名称', en: 'Group Name', ja: 'グループ名', ko: '그룹 이름' },
+  ownerLabel: { zh: '群主', en: 'Owner', ja: 'オーナー', ko: '방장' },
+  countLabel: { zh: '群人数', en: 'Member Count', ja: '人数', ko: '인원 수' },
+  exit: { zh: '退出群聊', en: 'Leave Group', ja: 'グループを退出', ko: '그룹 나가기' },
+  addAction: { zh: '添加', en: 'Add', ja: '追加', ko: '추가' },
+  removeAction: { zh: '移除', en: 'Remove', ja: '削除', ko: '제거' },
+  noCode: { zh: '未设置好友码', en: 'No friend code', ja: 'フレンドコード未設定', ko: '친구 코드 없음' },
+  saveGroupName: { zh: '保存群名', en: 'Save Group Name', ja: 'グループ名を保存', ko: '그룹 이름 저장' },
+  renamePlaceholder: { zh: '请输入群聊名称', en: 'Enter a group name', ja: 'グループ名を入力', ko: '그룹 이름 입력' },
+  renameReadonly: { zh: '仅群主可修改群名', en: 'Only the owner can rename the group.', ja: 'グループ名を変更できるのはオーナーのみです。', ko: '그룹 이름은 방장만 변경할 수 있습니다.' },
+  memberProfile: { zh: '成员资料', en: 'Member Profile', ja: 'メンバープロフィール', ko: '멤버 프로필' },
+  memberEmail: { zh: '邮箱', en: 'Email', ja: 'メール', ko: '이메일' },
+  addFriend: { zh: '加好友', en: 'Add Friend', ja: '友だち追加', ko: '친구 추가' },
+  alreadyFriend: { zh: '已是好友', en: 'Already Friends', ja: 'すでに友だちです', ko: '이미 친구입니다' },
+  myself: { zh: '这是你', en: 'This is you', ja: 'あなた自身です', ko: '본인입니다' },
+  noEmail: { zh: '暂未公开', en: 'Hidden', ja: '非公開', ko: '비공개' },
+  noFriendCode: { zh: '无法发起好友申请', en: 'Cannot send a friend request', ja: '友だち申請を送れません', ko: '친구 요청을 보낼 수 없습니다' },
+  peopleSuffix: { zh: '人', en: 'people', ja: '人', ko: '명' },
+  maxWords: { zh: '最多 50 个字', en: 'Up to 50 characters', ja: '最大 50 文字', ko: '최대 50자' },
 };
+
+const text = computed(() => resolveLocalized(textSource, language.value));
+const locale = computed(() => (language.value === 'zh' ? 'zh-CN' : language.value === 'ja' ? 'ja-JP' : language.value === 'ko' ? 'ko-KR' : 'en-US'));
 
 const props = defineProps({
   show: {
@@ -221,7 +229,7 @@ function formatTime(value) {
     return '';
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale.value, {
     hour: '2-digit',
     minute: '2-digit',
     month: 'short',
@@ -327,7 +335,7 @@ function addSelectedMemberAsFriend() {
 
         <div class="wechat-head__title">
           <h3>{{ detailsVisible ? text.details : group?.name }}</h3>
-          <span>{{ detailsVisible ? buildMetaRowValue(group?.name) : `${groupMembers.length} \u4eba` }}</span>
+          <span>{{ detailsVisible ? buildMetaRowValue(group?.name) : `${groupMembers.length} ${text.peopleSuffix}` }}</span>
         </div>
 
         <button
@@ -417,7 +425,7 @@ function addSelectedMemberAsFriend() {
           <section class="wechat-card rename-card">
             <div class="section-head">
               <strong>{{ text.groupName }}</strong>
-              <span>{{ isOwner ? '\u6700\u591a 50 \u4e2a\u5b57' : text.renameReadonly }}</span>
+              <span>{{ isOwner ? text.maxWords : text.renameReadonly }}</span>
             </div>
 
             <Field
@@ -445,7 +453,7 @@ function addSelectedMemberAsFriend() {
           <section class="wechat-card">
             <div class="section-head">
               <strong>{{ text.members }}</strong>
-              <Tag plain type="success">{{ `${groupMembers.length} \u4eba` }}</Tag>
+              <Tag plain type="success">{{ `${groupMembers.length} ${text.peopleSuffix}` }}</Tag>
             </div>
 
             <div class="member-grid">

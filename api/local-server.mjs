@@ -29,6 +29,9 @@ if (fs.existsSync(envPath)) {
 import chatHandler from './chat.js';
 import { authHandlers } from './auth.js';
 import { friendHandlers } from './friends.js';
+import friendLocationHandler from './friends/location.js';
+import locationSharingHandler from './friends/location-sharing.js';
+import updateFriendLocationHandler from './friends/update-location.js';
 import { groupHandlers } from './groups.js';
 import ugcHandler from './ugc.js';
 
@@ -36,6 +39,9 @@ const routeHandlers = {
   '/api/chat': chatHandler,
   ...authHandlers,
   ...friendHandlers,
+  '/api/friends/location': friendLocationHandler,
+  '/api/friends/location-sharing': locationSharingHandler,
+  '/api/friends/update-location': updateFriendLocationHandler,
   ...groupHandlers,
   '/api/ugc': ugcHandler,
 };

@@ -78,6 +78,12 @@ const textSource = {
     ja: '現在オフラインのため、位置は確認できません。',
     ko: '현재 오프라인이라 위치를 볼 수 없습니다.',
   },
+  statusOfflineLastShared: {
+    zh: '当前离线，但仍可查看最近一次共享位置',
+    en: 'Currently offline. You can still view the last shared location.',
+    ja: '現在オフラインですが、最後に共有した位置は確認できます。',
+    ko: '현재 오프라인이지만 마지막으로 공유한 위치는 확인할 수 있습니다.',
+  },
   viewLocation: {
     zh: '查看定位',
     en: 'View Location',
@@ -127,15 +133,15 @@ const menuVisible = ref(false);
 const menuRef = ref(null);
 
 function getStatusText(friend) {
-  if (!friend.isOnline) {
-    return text.statusOffline;
-  }
-
   if (!friend.isLocationSharingEnabled) {
-    return text.statusSharingOff;
+    return text.value.statusSharingOff;
   }
 
-  return text.statusOnline;
+  if (!friend.isOnline) {
+    return text.value.statusOfflineLastShared;
+  }
+
+  return text.value.statusOnline;
 }
 
 function isActionLoading(friendId, action) {
@@ -249,7 +255,7 @@ onBeforeUnmount(() => {
 
         <div class="friend-actions">
           <span class="action-text">
-            {{ friend.isOnline && friend.isLocationSharingEnabled ? text.viewLocation : text.viewStatus }}
+            {{ friend.isLocationSharingEnabled ? text.viewLocation : text.viewStatus }}
           </span>
 
           <div class="action-buttons">

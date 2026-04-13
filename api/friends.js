@@ -14,6 +14,69 @@ function sortFriends(list) {
   });
 }
 
+const LOCATION_STALE_MS = 5 * 60 * 1000;
+
+function isMissingRelationError(error) {
+  return Boolean(
+    error?.code === '42P01'
+    || error?.code === 'PGRST205'
+    || error?.message?.includes('relation')
+    || error?.message?.includes('does not exist')
+    || error?.message?.includes('schema cache')
+    || error?.message?.includes('Could not find the table')
+  );
+}
+
+function isFiniteCoordinate(value) {
+  return Number.isFinite(Number(value));
+}
+
+function isRecentLocationUpdate(updatedAt, now = new Date()) {
+  const updatedTime = new Date(updatedAt);
+
+  if (Number.isNaN(updatedTime.getTime())) {
+    return false;
+  }
+
+  return now.getTime() - updatedTime.getTime() <= LOCATION_STALE_MS;
+}
+
+function normalizeLiveLocationRow(locationRow) {
+  if (!locationRow) {
+    return null;
+  }
+
+  const latitude = Number(locationRow.latitude);
+  const longitude = Number(locationRow.longitude);
+  const accuracyMeters = Number(locationRow.accuracy_meters);
+  const updatedAt = locationRow.updated_at || null;
+
+  return {
+    userId: locationRow.user_id,
+    latitude: isFiniteCoordinate(latitude) ? latitude : null,
+    longitude: isFiniteCoordinate(longitude) ? longitude : null,
+    accuracyMeters: Number.isFinite(accuracyMeters) ? accuracyMeters : null,
+    updatedAt,
+    isOnline: Boolean(locationRow.is_online) && isRecentLocationUpdate(updatedAt),
+  };
+}
+
+function buildFriendSummary(profile, permission, location, fallbackUpdatedAt) {
+  const normalizedLocation = permission?.is_active ? normalizeLiveLocationRow(location) : null;
+
+  return {
+    id: profile.id,
+    username: profile.display_name || profile.username || '未命名用户',
+    friendCode: profile.friend_code,
+    isOnline: Boolean(normalizedLocation?.isOnline),
+    isLocationSharingEnabled: Boolean(permission?.is_active),
+    latitude: normalizedLocation?.latitude ?? null,
+    longitude: normalizedLocation?.longitude ?? null,
+    accuracyMeters: normalizedLocation?.accuracyMeters ?? null,
+    updatedAt: normalizedLocation?.updatedAt || permission?.granted_at || fallbackUpdatedAt || null,
+  };
+}
+
 async function findProfileById(adminClient, userId) {
   const { data, error } = await adminClient
     .from('user_profiles')
@@ -73,18 +136,32 @@ async function loadLocationPermissions(adminClient, currentUserId, friendIds) {
     .in('owner_user_id', friendIds);
 
   if (error) {
-    if (
-      error.code === '42P01' ||
-      error.code === 'PGRST205' ||
-      error.message?.includes('relation') ||
-      error.message?.includes('does not exist') ||
-      error.message?.includes('schema cache') ||
-      error.message?.includes('Could not find the table')
-    ) {
+    if (isMissingRelationError(error)) {
       return [];
     }
 
     throw new Error(`读取位置共享状态失败：${error.message}`);
+  }
+
+  return data || [];
+}
+
+async function loadLiveLocations(adminClient, userIds) {
+  if (!userIds.length) {
+    return [];
+  }
+
+  const { data, error } = await adminClient
+    .from('user_live_locations')
+    .select('user_id, latitude, longitude, accuracy_meters, is_online, updated_at')
+    .in('user_id', userIds);
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      return [];
+    }
+
+    throw new Error(`读取好友定位数据失败：${error.message}`);
   }
 
   return data || [];
@@ -99,14 +176,7 @@ async function clearLocationPermissionsBetweenUsers(adminClient, leftUserId, rig
     );
 
   if (error) {
-    if (
-      error.code === '42P01' ||
-      error.code === 'PGRST205' ||
-      error.message?.includes('relation') ||
-      error.message?.includes('does not exist') ||
-      error.message?.includes('schema cache') ||
-      error.message?.includes('Could not find the table')
-    ) {
+    if (isMissingRelationError(error)) {
       return;
     }
 
@@ -280,8 +350,12 @@ async function handleFriendList(req, res) {
       throw new Error(`读取好友资料失败：${profileError.message}`);
     }
 
-    const permissions = await loadLocationPermissions(adminClient, user.id, friendIds);
+    const [permissions, liveLocations] = await Promise.all([
+      loadLocationPermissions(adminClient, user.id, friendIds),
+      loadLiveLocations(adminClient, friendIds),
+    ]);
     const permissionMap = new Map((permissions || []).map((item) => [item.owner_user_id, item]));
+    const liveLocationMap = new Map((liveLocations || []).map((item) => [item.user_id, item]));
     const profileMap = new Map((profiles || []).map((item) => [item.id, item]));
 
     const friends = relationshipRows
@@ -307,9 +381,26 @@ async function handleFriendList(req, res) {
       })
       .filter(Boolean);
 
+    const resolvedFriends = relationshipRows
+      .map((item) => {
+        const profile = profileMap.get(item.friendId);
+
+        if (!profile) {
+          return null;
+        }
+
+        return buildFriendSummary(
+          profile,
+          permissionMap.get(item.friendId),
+          liveLocationMap.get(item.friendId),
+          item.updatedAt,
+        );
+      })
+      .filter(Boolean);
+
     buildJsonResponse(res, 200, {
       success: true,
-      friends: sortFriends(friends),
+      friends: sortFriends(resolvedFriends.length ? resolvedFriends : friends),
     });
   } catch (error) {
     buildJsonResponse(res, error.statusCode || 500, {

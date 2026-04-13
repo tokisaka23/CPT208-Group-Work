@@ -10,14 +10,21 @@ import {
   respondToFriendRequest,
 } from './services/friends/friendServiceRuntime';
 import { getGroupChats } from './services/friends/groupChatService';
-import { currentLanguage, getDocumentTitle, getRouteTitle, resolveLocalized, useLanguage } from './i18n';
+import { currentLanguage, resolveLocalized, useLanguage } from './i18n';
 import { SECURITY_QUESTION_FIELDS, getSecurityQuestionPrompt } from './shared/securityQuestions';
 import { isSupabaseConfigured } from './services/supabase/clientRuntime';
 import { deleteCurrentAccount } from './services/supabase/authRuntime';
 
 const route = useRoute();
 const router = useRouter();
-const { language, languageOptions, setLanguage } = useLanguage();
+const { language, setLanguage } = useLanguage();
+
+const languageOptions = [
+  { value: 'zh', label: '简体中文' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+];
 
 const openFavorites = () => {
   router.push('/favorites');
@@ -89,6 +96,18 @@ const appTextSource = {
     en: 'Footer navigation',
     ja: 'フッターナビゲーション',
     ko: '푸터 내비게이션',
+  },
+  favoritesLabel: {
+    zh: '收藏夹',
+    en: 'Favorites',
+    ja: 'お気に入り',
+    ko: '즐겨찾기',
+  },
+  openFavoritesAria: {
+    zh: '打开收藏夹',
+    en: 'Open favorites',
+    ja: 'お気に入りを開く',
+    ko: '즐겨찾기 열기',
   },
   close: {
     zh: '关闭',
@@ -208,6 +227,34 @@ const appTextSource = {
   },
 };
 
+const routeTitleSource = {
+  pingjiang: { zh: '平江古街', en: 'Pingjiang', ja: '平江古街', ko: '평강고가' },
+  gardens: { zh: '古典园林', en: 'Classical Gardens', ja: '古典庭園', ko: '고전 정원' },
+  zhuozhengyuan: { zh: '拙政园', en: 'Humble Administrator\'s Garden', ja: '拙政園', ko: '졸정원' },
+  liuyuan: { zh: '留园', en: 'Lingering Garden', ja: '留園', ko: '유원' },
+  wangshiyuan: { zh: '网师园', en: 'Master of Nets Garden', ja: '網師園', ko: '망사원' },
+  museums: { zh: '文博殿堂', en: 'Museums', ja: '博物館', ko: '박물관' },
+  heritage: { zh: '非遗市井', en: 'Living Heritage', ja: '暮らしの遺産', ko: '생활 유산' },
+  tianpingshan: { zh: '天平山', en: 'Tianping Mountain', ja: '天平山', ko: '천평산' },
+  pingjiangroad: { zh: '平江路', en: 'Pingjiang Road', ja: '平江路', ko: '평강로' },
+  suzhoumuseum: { zh: '苏州博物馆', en: 'Suzhou Museum', ja: '蘇州博物館', ko: '쑤저우 박물관' },
+  favorites: { zh: '收藏夹', en: 'Favorites', ja: 'お気に入り', ko: '즐겨찾기' },
+};
+
+const routePathTitleKeyMap = {
+  '/': 'pingjiang',
+  '/gardens': 'gardens',
+  '/zhuozheng': 'zhuozhengyuan',
+  '/liu': 'liuyuan',
+  '/wangshi': 'wangshiyuan',
+  '/museums': 'museums',
+  '/heritage': 'heritage',
+  '/tianping': 'tianpingshan',
+  '/pingjiang-road': 'pingjiangroad',
+  '/suzhou-museum': 'suzhoumuseum',
+  '/favorites': 'favorites',
+};
+
 const dialogTextSource = {
   profileName: { zh: '昵称', en: 'Nickname', ja: '表示名', ko: '닉네임' },
   profileNamePlaceholder: { zh: '输入新的昵称', en: 'Enter a new nickname', ja: '新しい表示名を入力', ko: '새 닉네임 입력' },
@@ -274,6 +321,9 @@ const dialogTextSource = {
   submitting: { zh: '提交中…', en: 'Submitting...', ja: '送信中...', ko: '제출 중...' },
   signInNow: { zh: '立即登录', en: 'Sign In Now', ja: '今すぐログイン', ko: '지금 로그인' },
   verifyAndReset: { zh: '验证并重置', en: 'Verify and Reset', ja: '認証して再設定', ko: '확인 후 재설정' },
+  loadFriendRequestsFailed: { zh: '读取好友请求失败，请稍后再试', en: 'Failed to load friend requests. Please try again later.', ja: '友だち申請の読み込みに失敗しました。しばらくしてから再試行してください。', ko: '친구 요청을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' },
+  loadGroupUnreadFailed: { zh: '读取群聊未读状态失败，请稍后再试', en: 'Failed to load unread group chat status. Please try again later.', ja: 'グループチャットの未読状態の読み込みに失敗しました。しばらくしてから再試行してください。', ko: '그룹 채팅 읽지 않음 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' },
+  handleFriendRequestFailed: { zh: '处理好友请求失败，请稍后再试', en: 'Failed to process the friend request. Please try again later.', ja: '友だち申請の処理に失敗しました。しばらくしてから再試行してください。', ko: '친구 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.' },
   cancel: { zh: '取消', en: 'Cancel', ja: 'キャンセル', ko: '취소' },
 };
 
@@ -453,11 +503,23 @@ const routeJourneysSource = {
 
 const appText = computed(() => resolveLocalized(appTextSource, currentLanguage.value));
 const dialogText = computed(() => resolveLocalized(dialogTextSource, currentLanguage.value));
+function resolveRouteTitle(routeKeyOrPath, fallback = 'pingjiang') {
+  const titleKey = routeTitleSource[routeKeyOrPath]
+    ? routeKeyOrPath
+    : routePathTitleKeyMap[routeKeyOrPath] || fallback;
+  return resolveLocalized(routeTitleSource[titleKey] || routeTitleSource[fallback], currentLanguage.value);
+}
 const navItems = computed(() => appText.value.navItems);
 const featureButtons = computed(() => appText.value.featureButtons);
 const featurePanels = computed(() => appText.value.featurePanels);
 const routeJourneys = computed(() => resolveLocalized(routeJourneysSource, currentLanguage.value));
-const pageContextLabel = computed(() => getRouteTitle(route.meta.titleKey || route.path));
+const pageContextLabel = computed(() => {
+  if (route.meta.localizedTitle) {
+    return resolveLocalized(route.meta.localizedTitle, currentLanguage.value);
+  }
+
+  return resolveRouteTitle(route.meta.titleKey || route.path);
+});
 const currentJourney = computed(() => routeJourneys.value[route.path] || routeJourneys.value['/']);
 const isImmersivePanoramaRoute = computed(() => route.path.includes('/panorama'));
 
@@ -1334,7 +1396,7 @@ async function loadPendingRequests({ silent = false, forceOpen = false } = {}) {
     applyPendingRequests(requests, { forceOpen });
   } catch (error) {
     if (!silent) {
-      showFailToast(error.message || '读取好友请求失败，请稍后再试');
+      showFailToast(error.message || dialogText.value.loadFriendRequestsFailed);
     }
   }
 }
@@ -1353,7 +1415,7 @@ async function loadGroupChatUnreadState({ silent = false } = {}) {
     unreadGroupChatCount.value = groups.filter((group) => group?.hasUnread).length;
   } catch (error) {
     if (!silent) {
-      showFailToast(error.message || '读取群聊未读状态失败，请稍后再试');
+      showFailToast(error.message || dialogText.value.loadGroupUnreadFailed);
     }
   }
 }
@@ -1376,7 +1438,7 @@ async function handleFriendRequestDecision(request, decision) {
     pendingRequestPopupVisible.value = pendingFriendRequests.value.length > 0;
     showSuccessToast(result.message);
   } catch (error) {
-    showFailToast(error.message || '处理好友请求失败，请稍后再试');
+    showFailToast(error.message || dialogText.value.handleFriendRequestFailed);
   } finally {
     processingRequestId.value = '';
   }
@@ -1752,10 +1814,15 @@ onUnmounted(() => {
 });
 
 watch(
-  [() => route.meta.titleKey, () => language.value],
-  ([titleKey]) => {
+  [() => route.meta.titleKey, () => route.meta.localizedTitle, () => language.value],
+  ([titleKey, localizedTitle]) => {
     if (typeof document !== 'undefined') {
-      document.title = getDocumentTitle(titleKey || 'pingjiang');
+      const resolvedTitle = localizedTitle
+        ? resolveLocalized(localizedTitle, language.value)
+        : '';
+      document.title = resolvedTitle
+        ? `${resolvedTitle} · ${appText.value.brandTitle}`
+        : `${resolveRouteTitle(titleKey || route.path)} · ${appText.value.brandTitle}`;
     }
   },
   { immediate: true },
@@ -2123,7 +2190,7 @@ watch(
       </div>
     </footer>
 
-    <button type="button" class="favorites-fab" aria-label="打开收藏夹" @click="openFavorites">
+    <button type="button" class="favorites-fab" :aria-label="appText.openFavoritesAria" @click="openFavorites">
       <span class="favorites-fab__icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none">
           <path
@@ -2134,7 +2201,7 @@ watch(
           />
         </svg>
       </span>
-      <span class="favorites-fab__label">收藏夹</span>
+      <span class="favorites-fab__label">{{ appText.favoritesLabel }}</span>
     </button>
 
     <transition name="veil" appear>

@@ -12,3 +12,12 @@ test('App mobile header keeps the main-branch compact navigation layout', async 
     /@media \(max-width: 640px\)\s*\{[\s\S]*?\.header-actions--refined\s*\{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/,
   );
 });
+
+test('App favorites floating button uses localized label sources', async () => {
+  const source = await readFile(new URL('./App.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /favoritesLabel/);
+  assert.match(source, /openFavoritesAria/);
+  assert.match(source, /:aria-label="appText\.openFavoritesAria"/);
+  assert.match(source, /\{\{ appText\.favoritesLabel \}\}/);
+});
