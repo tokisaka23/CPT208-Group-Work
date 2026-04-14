@@ -27,8 +27,27 @@ function isMissingRelationError(error) {
   );
 }
 
+function normalizeCoordinate(value) {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
 function isFiniteCoordinate(value) {
   return Number.isFinite(Number(value));
+}
+
+function requirePostMethod(req, res) {
+  if (req.method === 'OPTIONS') {
+    buildJsonResponse(res, 200, { success: true });
+    return false;
+  }
+
+  if (req.method !== 'POST') {
+    buildJsonResponse(res, 405, { error: 'Method Not Allowed' });
+    return false;
+  }
+
+  return true;
 }
 
 function isRecentLocationUpdate(updatedAt, now = new Date()) {
@@ -146,6 +165,28 @@ async function loadLocationPermissions(adminClient, currentUserId, friendIds) {
   return data || [];
 }
 
+async function loadOwnerLocationPermissions(adminClient, ownerUserId, viewerIds) {
+  if (!viewerIds.length) {
+    return [];
+  }
+
+  const { data, error } = await adminClient
+    .from('location_share_permissions')
+    .select('viewer_user_id, is_active, granted_at, revoked_at')
+    .eq('owner_user_id', ownerUserId)
+    .in('viewer_user_id', viewerIds);
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      return [];
+    }
+
+    throw new Error(`读取我的位置共享设置失败：${error.message}`);
+  }
+
+  return data || [];
+}
+
 async function loadLiveLocations(adminClient, userIds) {
   if (!userIds.length) {
     return [];
@@ -165,6 +206,53 @@ async function loadLiveLocations(adminClient, userIds) {
   }
 
   return data || [];
+}
+
+async function loadAcceptedFriendIds(adminClient, userId) {
+  const [requestedResult, targetedResult] = await Promise.all([
+    adminClient
+      .from('user_relationships')
+      .select('target_user_id')
+      .eq('requester_user_id', userId)
+      .eq('status', 'accepted'),
+    adminClient
+      .from('user_relationships')
+      .select('requester_user_id')
+      .eq('target_user_id', userId)
+      .eq('status', 'accepted'),
+  ]);
+
+  if (requestedResult.error) {
+    throw new Error(`读取好友关系失败：${requestedResult.error.message}`);
+  }
+
+  if (targetedResult.error) {
+    throw new Error(`读取好友关系失败：${targetedResult.error.message}`);
+  }
+
+  return [
+    ...(requestedResult.data || []).map((item) => item.target_user_id),
+    ...(targetedResult.data || []).map((item) => item.requester_user_id),
+  ].filter(Boolean);
+}
+
+async function loadSingleLiveLocation(adminClient, userId) {
+  const { data, error } = await adminClient
+    .from('user_live_locations')
+    .select('user_id, latitude, longitude, accuracy_meters, is_online, updated_at')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      return null;
+    }
+
+    throw new Error(`读取当前位置失败：${error.message}`);
+  }
+
+  return data || null;
 }
 
 async function clearLocationPermissionsBetweenUsers(adminClient, leftUserId, rightUserId) {
@@ -809,6 +897,227 @@ async function handleRespondFriendRequest(req, res) {
   }
 }
 
+function buildSharingOverview(friendIds, permissions, liveLocation) {
+  const activePermissions = (permissions || []).filter((item) => item.is_active);
+  const normalizedLiveLocation = normalizeLiveLocationRow(liveLocation);
+
+  return {
+    totalFriends: friendIds.length,
+    activeFriendCount: activePermissions.length,
+    sharingMode:
+      activePermissions.length === 0
+        ? 'off'
+        : activePermissions.length === friendIds.length
+          ? 'all'
+          : 'partial',
+    lastLocationUpdatedAt: normalizedLiveLocation?.updatedAt || null,
+    isOnline: Boolean(normalizedLiveLocation?.isOnline),
+  };
+}
+
+async function handleFriendLocation(req, res) {
+  if (!requirePostMethod(req, res)) {
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { friendUserId = '' } = readJsonBody(req);
+    const normalizedFriendUserId = String(friendUserId).trim();
+
+    if (!normalizedFriendUserId) {
+      buildJsonResponse(res, 400, { error: '缺少好友用户 ID' });
+      return;
+    }
+
+    const relationship = await findExistingRelationship(adminClient, user.id, normalizedFriendUserId);
+
+    if (!relationship || relationship.status !== 'accepted') {
+      buildJsonResponse(res, 404, { error: '没有找到可查看定位的好友关系' });
+      return;
+    }
+
+    const [profile, permissions, locations] = await Promise.all([
+      findProfileById(adminClient, normalizedFriendUserId),
+      loadLocationPermissions(adminClient, user.id, [normalizedFriendUserId]),
+      loadLiveLocations(adminClient, [normalizedFriendUserId]),
+    ]);
+
+    if (!profile) {
+      buildJsonResponse(res, 404, { error: '没有找到该好友' });
+      return;
+    }
+
+    const friend = buildFriendSummary(
+      profile,
+      (permissions || [])[0] || null,
+      (locations || [])[0] || null,
+      relationship.updated_at || null,
+    );
+
+    if (!friend.isLocationSharingEnabled) {
+      buildJsonResponse(res, 403, { error: '对方暂未开放位置共享' });
+      return;
+    }
+
+    if (!isFiniteCoordinate(friend.latitude) || !isFiniteCoordinate(friend.longitude)) {
+      buildJsonResponse(res, 404, { error: '暂时没有可展示的定位数据' });
+      return;
+    }
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      friend,
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '读取好友定位失败，请稍后再试。',
+    });
+  }
+}
+
+async function handleLocationSharing(req, res) {
+  if (!requirePostMethod(req, res)) {
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const { isActive } = readJsonBody(req);
+    const friendIds = [...new Set(await loadAcceptedFriendIds(adminClient, user.id))];
+
+    if (typeof isActive === 'boolean') {
+      if (isActive) {
+        if (friendIds.length) {
+          const now = new Date().toISOString();
+          const rows = friendIds.map((viewerUserId) => ({
+            owner_user_id: user.id,
+            viewer_user_id: viewerUserId,
+            is_active: true,
+            granted_at: now,
+            revoked_at: null,
+          }));
+
+          const { error } = await adminClient
+            .from('location_share_permissions')
+            .upsert(rows, {
+              onConflict: 'owner_user_id,viewer_user_id',
+            });
+
+          if (error) {
+            if (isMissingRelationError(error)) {
+              throw new Error('缺少 location_share_permissions 表，请先检查数据库初始化。');
+            }
+
+            throw new Error(`开启位置共享失败：${error.message}`);
+          }
+        }
+      } else if (friendIds.length) {
+        const { error } = await adminClient
+          .from('location_share_permissions')
+          .update({
+            is_active: false,
+            revoked_at: new Date().toISOString(),
+          })
+          .eq('owner_user_id', user.id)
+          .in('viewer_user_id', friendIds);
+
+        if (error) {
+          if (isMissingRelationError(error)) {
+            throw new Error('缺少 location_share_permissions 表，请先检查数据库初始化。');
+          }
+
+          throw new Error(`关闭位置共享失败：${error.message}`);
+        }
+      }
+    }
+
+    const [permissions, liveLocation] = await Promise.all([
+      loadOwnerLocationPermissions(adminClient, user.id, friendIds),
+      loadSingleLiveLocation(adminClient, user.id),
+    ]);
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      overview: buildSharingOverview(friendIds, permissions, liveLocation),
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '读取位置共享状态失败，请稍后再试。',
+    });
+  }
+}
+
+async function handleUpdateFriendLocation(req, res) {
+  if (!requirePostMethod(req, res)) {
+    return;
+  }
+
+  try {
+    const { user, adminClient } = await getAuthenticatedUser(req);
+    const {
+      latitude = null,
+      longitude = null,
+      accuracyMeters = null,
+    } = readJsonBody(req);
+
+    const normalizedLatitude = normalizeCoordinate(latitude);
+    const normalizedLongitude = normalizeCoordinate(longitude);
+    const normalizedAccuracy = accuracyMeters === null ? null : normalizeCoordinate(accuracyMeters);
+
+    if (normalizedLatitude === null || normalizedLongitude === null) {
+      buildJsonResponse(res, 400, { error: '缺少有效的定位坐标' });
+      return;
+    }
+
+    if (normalizedLatitude < -90 || normalizedLatitude > 90) {
+      buildJsonResponse(res, 400, { error: '纬度超出有效范围' });
+      return;
+    }
+
+    if (normalizedLongitude < -180 || normalizedLongitude > 180) {
+      buildJsonResponse(res, 400, { error: '经度超出有效范围' });
+      return;
+    }
+
+    if (accuracyMeters !== null && (normalizedAccuracy === null || normalizedAccuracy < 0)) {
+      buildJsonResponse(res, 400, { error: '定位精度无效' });
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    const { error } = await adminClient
+      .from('user_live_locations')
+      .upsert({
+        user_id: user.id,
+        latitude: normalizedLatitude,
+        longitude: normalizedLongitude,
+        accuracy_meters: normalizedAccuracy,
+        is_online: true,
+        updated_at: updatedAt,
+      }, {
+        onConflict: 'user_id',
+      });
+
+    if (error) {
+      if (isMissingRelationError(error)) {
+        throw new Error('缺少 user_live_locations 表，请先执行 `database/003_user_live_location.sql`。');
+      }
+
+      throw new Error(`更新当前位置失败：${error.message}`);
+    }
+
+    buildJsonResponse(res, 200, {
+      success: true,
+      updatedAt,
+    });
+  } catch (error) {
+    buildJsonResponse(res, error.statusCode || 500, {
+      error: error.message || '更新当前位置失败，请稍后再试。',
+    });
+  }
+}
+
 function resolveFriendAction(req) {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
   const queryAction = requestUrl.searchParams.get('action');
@@ -826,10 +1135,13 @@ const friendActionHandlers = {
   block: handleBlockFriend,
   'blocked-list': handleBlockedFriendList,
   list: handleFriendList,
+  location: handleFriendLocation,
+  'location-sharing': handleLocationSharing,
   'pending-list': handlePendingFriendList,
   remove: handleRemoveFriend,
   respond: handleRespondFriendRequest,
   unblock: handleUnblockFriend,
+  'update-location': handleUpdateFriendLocation,
 };
 
 export default async function friendHandler(req, res) {
@@ -849,8 +1161,11 @@ export const friendHandlers = {
   '/api/friends/block': handleBlockFriend,
   '/api/friends/blocked-list': handleBlockedFriendList,
   '/api/friends/list': handleFriendList,
+  '/api/friends/location': handleFriendLocation,
+  '/api/friends/location-sharing': handleLocationSharing,
   '/api/friends/pending-list': handlePendingFriendList,
   '/api/friends/remove': handleRemoveFriend,
   '/api/friends/respond': handleRespondFriendRequest,
   '/api/friends/unblock': handleUnblockFriend,
+  '/api/friends/update-location': handleUpdateFriendLocation,
 };
