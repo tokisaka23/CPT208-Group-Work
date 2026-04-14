@@ -3,8 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { showFailToast, showSuccessToast } from 'vant';
 import FriendRequestPopup from './components/friends/FriendRequestPopup.vue';
+import UgcSubmit from './components/UgcSubmit.vue';
 import FriendsPage from './pages/friends/FriendsPage.vue';
-import { aiApi, authApi, uploadApi } from './services/api';
+import { aiApi, authApi } from './services/api';
 import {
   getPendingFriendRequests,
   respondToFriendRequest,
@@ -1717,50 +1718,12 @@ const profileStatus = computed(() => {
   return isSupabaseConfigured() ? appText.value.loggedOut : appText.value.authNotReady;
 });
 
-// 上传图片相关状态
-const selectedImageFile = ref(null);
 const uploadedImageUrl = ref('');
-const isUploadingImage = ref(false);
 const uploadError = ref('');
 
-function handleSelectImage(event) {
-  const file = event?.target?.files?.[0];
-
-  if (!file) {
-    selectedImageFile.value = null;
-    return;
-  }
-
-  selectedImageFile.value = file;
+function handleUgcSubmitted(record) {
   uploadError.value = '';
-}
-
-async function submitUploadImage() {
-  if (!selectedImageFile.value || isUploadingImage.value) {
-    return;
-  }
-
-  isUploadingImage.value = true;
-  uploadError.value = '';
-
-  try {
-    const formData = new FormData();
-    formData.append('image', selectedImageFile.value);
-
-    // 中文注释：这里连接后端图片上传接口 /api/ugc，使用 FormData 以 multipart/form-data 发送图片文件。
-    // 注意：使用 fetch/axios 发送 FormData 时，不要手动写死 Content-Type，浏览器会自动补上 boundary。
-    const result = await uploadApi.uploadGardenImage(formData);
-    uploadedImageUrl.value = result?.image_url || result?.imageUrl || '';
-
-    if (!uploadedImageUrl.value) {
-      throw new Error('上传成功但未拿到图片地址，请检查后端返回字段 image_url/imageUrl。');
-    }
-  } catch (error) {
-    console.error('[Upload] 上传图片失败', error);
-    uploadError.value = error.message || '上传失败，请稍后再试。';
-  } finally {
-    isUploadingImage.value = false;
-  }
+  uploadedImageUrl.value = record?.image_url || record?.imageUrl || '';
 }
 
 let authSubscription = null;
@@ -2397,19 +2360,10 @@ watch(
               <p>{{ dialogText.uploadBody }}</p>
             </div>
 
-            <form class="dialog__form" @submit.prevent="submitUploadImage">
-              <label class="field field--full">
-                <span>{{ dialogText.selectImage }}</span>
-                <input type="file" accept="image/*" @change="handleSelectImage" />
-              </label>
-
-              <div class="dialog__actions dialog__actions--compact">
-                <button type="submit" class="dialog__primary" :disabled="!selectedImageFile || isUploadingImage">
-                  {{ isUploadingImage ? dialogText.uploading : dialogText.startUpload }}
-                </button>
-                <button type="button" class="dialog__ghost" @click="uploadedImageUrl = ''">{{ dialogText.clearPreview }}</button>
-              </div>
-            </form>
+            <UgcSubmit
+              :uploader-id="currentUser?.id || ''"
+              @submitted="handleUgcSubmitted"
+            />
 
             <p v-if="uploadError" class="feature-feedback">{{ uploadError }}</p>
 
