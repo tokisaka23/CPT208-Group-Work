@@ -18,10 +18,38 @@ const { language } = useLanguage();
 const activeSeasonKey = ref('autumn');
 
 const seasonImageMap = {
-  spring: { poster: zhuozhengyuanHeroImage, route: zhuozhengyuanHeroImage, street: pingjiangroadHeroImage, food: suxianrouyuebingImage },
-  summer: { poster: wangshiyuan1Image, route: wangshiyuan1Image, street: pingjiangroadHeroImage, food: sushilvdoutangImage },
-  autumn: { poster: tianpingshanHeroImage, route: tianpingshanHeroImage, street: pingjiangroadHeroImage, food: xiefenxiaolongImage },
-  winter: { poster: suzhoumuseumHeroImage, route: liuyuan1Image, street: suzhoumuseumHeroImage, food: cangshuyangrouImage },
+  spring: {
+    poster: zhuozhengyuanHeroImage,
+    route: zhuozhengyuanHeroImage,
+    street: pingjiangroadHeroImage,
+    food: suxianrouyuebingImage,
+    heroPosition: 'center center',
+    heroSize: 'cover',
+  },
+  summer: {
+    poster: wangshiyuan1Image,
+    route: wangshiyuan1Image,
+    street: pingjiangroadHeroImage,
+    food: sushilvdoutangImage,
+    heroPosition: 'center center',
+    heroSize: 'cover',
+  },
+  autumn: {
+    poster: tianpingshanHeroImage,
+    route: tianpingshanHeroImage,
+    street: pingjiangroadHeroImage,
+    food: xiefenxiaolongImage,
+    heroPosition: 'center center',
+    heroSize: 'cover',
+  },
+  winter: {
+    poster: suzhoumuseumHeroImage,
+    route: liuyuan1Image,
+    street: suzhoumuseumHeroImage,
+    food: cangshuyangrouImage,
+    heroPosition: 'center 44%',
+    heroSize: 'cover',
+  },
 };
 
 const pageSource = {
@@ -61,6 +89,8 @@ const activeSeason = computed(() => {
     routeImage: seasonImageMap[season.key].route,
     streetImage: seasonImageMap[season.key].street,
     foodImage: seasonImageMap[season.key].food,
+    heroPosition: seasonImageMap[season.key].heroPosition,
+    heroSize: seasonImageMap[season.key].heroSize,
   };
 });
 const chapterCards = computed(() => pageText.value.chapterCards);
@@ -68,7 +98,14 @@ const chapterCards = computed(() => pageText.value.chapterCards);
 
 <template>
   <div class="page-shell pingjiang-page">
-    <section class="pingjiang-hero" :style="{ '--hero-image': `url(${activeSeason.posterImage})` }">
+    <section
+      class="pingjiang-hero"
+      :style="{
+        '--hero-image': `url(${activeSeason.posterImage})`,
+        '--hero-position': activeSeason.heroPosition,
+        '--hero-size': activeSeason.heroSize,
+      }"
+    >
       <div class="pingjiang-hero__content">
         <div class="pingjiang-hero__main">
           <p class="eyebrow">{{ activeSeason.label }}</p>
@@ -158,7 +195,7 @@ const chapterCards = computed(() => pageText.value.chapterCards);
   background:
     linear-gradient(120deg, rgba(20, 18, 16, 0.7), rgba(20, 18, 16, 0.22)),
     linear-gradient(135deg, rgba(158, 102, 73, 0.36), rgba(88, 116, 104, 0.38)),
-    var(--hero-image) center/cover no-repeat;
+    var(--hero-image) var(--hero-position, center center) / var(--hero-size, cover) no-repeat;
 }
 
 .pingjiang-hero__content {
