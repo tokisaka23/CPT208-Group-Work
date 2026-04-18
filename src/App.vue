@@ -11,6 +11,7 @@ import {
 } from './services/friends/friendServiceRuntime';
 import { getGroupChats } from './services/friends/groupChatService';
 import { currentLanguage, resolveLocalized, useLanguage } from './i18n';
+import { inferChatLanguage } from './shared/chatLanguage.js';
 import { SECURITY_QUESTION_FIELDS, getSecurityQuestionPrompt } from './shared/securityQuestions';
 import { isSupabaseConfigured } from './services/supabase/clientRuntime';
 import { deleteCurrentAccount } from './services/supabase/authRuntime';
@@ -273,6 +274,8 @@ const dialogTextSource = {
   goRegister: { zh: '去注册', en: 'Go to Sign Up', ja: '登録へ', ko: '회원가입하기' },
   aiHistoryAria: { zh: '历史会话', en: 'Conversation history', ja: '会話履歴', ko: '대화 기록' },
   aiNewConversation: { zh: '新建对话', en: 'New Chat', ja: '新しい会話', ko: '새 대화' },
+  aiShowHistory: { zh: '查看列表', en: 'Show History', ja: '履歴を表示', ko: '목록 보기' },
+  aiHideHistory: { zh: '收起列表', en: 'Hide History', ja: '履歴を閉じる', ko: '목록 닫기' },
   aiRenameShort: { zh: '改', en: 'Edit', ja: '変更', ko: '수정' },
   aiDeleteShort: { zh: '删', en: 'Delete', ja: '削除', ko: '삭제' },
   aiConversationAria: { zh: 'AI 伴游对话', en: 'AI guide chat', ja: 'AI ガイド会話', ko: 'AI 가이드 대화' },
@@ -554,12 +557,15 @@ const aiChatScroller = ref(null);
 const aiComposerInput = ref(null);
 const isAiComposing = ref(false);
 const isAiFullscreen = ref(false);
+const isAiHistoryCollapsed = ref(false);
+const isMobileViewport = ref(false);
 const profileMenuRef = ref(null);
 const serviceMenuRef = ref(null);
 const isServiceMenuOpen = ref(false);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
 const MAX_PERSISTED_CHAT_ROUNDS = 30;
+const AI_MOBILE_BREAKPOINT = 720;
 const AI_GREETING_HINT_SOURCE = {
   zh: '当前页智能导览',
   en: 'Guide for this page',
@@ -599,6 +605,18 @@ function focusAiComposer() {
   nextTick(() => {
     aiComposerInput.value?.focus?.();
   });
+}
+
+function syncViewportFlags() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const nextIsMobile = window.innerWidth <= AI_MOBILE_BREAKPOINT;
+  if (nextIsMobile !== isMobileViewport.value) {
+    isAiHistoryCollapsed.value = nextIsMobile;
+  }
+  isMobileViewport.value = nextIsMobile;
 }
 
 function normalizeAiText(value) {
@@ -660,7 +678,11 @@ function buildAiGreeting(pageLabel = pageContextLabel.value) {
 function buildOfflineAiReply(prompt, conversation = activeAiConversation.value) {
   const pageLabel = conversation?.pageLabel || pageContextLabel.value;
   const journey = getJourneyByContextKey(conversation?.contextKey || route.fullPath);
-  const language = currentLanguage.value;
+  const language = inferChatLanguage({
+    message: prompt,
+    messages: conversation?.messages || [],
+    fallbackLanguage: currentLanguage.value,
+  });
   const promptText = String(prompt || '').toLowerCase();
   const focusSummary = journey.focus.slice(0, 2).join(language === 'en' ? ', ' : '、');
   const focusAll = journey.focus.join(language === 'en' ? ', ' : '、');
@@ -932,6 +954,11 @@ function selectAiConversation(conversationId) {
   moveAiConversationToTop(conversationId);
   aiError.value = '';
   scrollAiConversationToBottom('auto');
+
+  if (isMobileViewport.value) {
+    isAiHistoryCollapsed.value = true;
+  }
+
   focusAiComposer();
 }
 
@@ -947,6 +974,11 @@ async function startNewAiConversation() {
   }
 
   scrollAiConversationToBottom('auto');
+
+  if (isMobileViewport.value) {
+    isAiHistoryCollapsed.value = true;
+  }
+
   focusAiComposer();
 }
 
@@ -1020,6 +1052,14 @@ function toggleAiFullscreen() {
   });
 }
 
+function toggleAiHistory() {
+  if (!isMobileViewport.value) {
+    return;
+  }
+
+  isAiHistoryCollapsed.value = !isAiHistoryCollapsed.value;
+}
+
 function handleAiComposerKeydown(event) {
   if (event?.key !== 'Enter' || event?.shiftKey || event?.isComposing || isAiComposing.value) {
     return;
@@ -1027,6 +1067,16 @@ function handleAiComposerKeydown(event) {
 
   event.preventDefault();
   sendAiMessage();
+}
+
+function handleAiComposerFocus() {
+  scrollAiConversationToBottom('auto');
+
+  if (typeof window !== 'undefined') {
+    window.setTimeout(() => {
+      scrollAiConversationToBottom('auto');
+    }, 160);
+  }
 }
 
 const openFeature = async (featureId) => {
@@ -1039,6 +1089,8 @@ const openFeature = async (featureId) => {
   }
 
   if (featureId === 'ai') {
+    isAiHistoryCollapsed.value = isMobileViewport.value;
+
     try {
       if (currentUser.value?.id) {
         await loadAiConversations();
@@ -1797,7 +1849,9 @@ onMounted(async () => {
   });
 
   if (typeof window !== 'undefined') {
+    syncViewportFlags();
     window.addEventListener('click', handleWindowClickForHeaderMenus);
+    window.addEventListener('resize', syncViewportFlags);
   }
   window.addEventListener('group-chats-updated', handleGroupChatUnreadChanged);
 });
@@ -1810,6 +1864,7 @@ onUnmounted(() => {
 
   if (typeof window !== 'undefined') {
     window.removeEventListener('click', handleWindowClickForHeaderMenus);
+    window.removeEventListener('resize', syncViewportFlags);
   }
 });
 
@@ -2248,13 +2303,23 @@ watch(
 
           <template v-else-if="activeFeature === 'ai'">
             <div class="ai-shell">
-              <aside class="ai-sidebar" :aria-label="dialogText.aiHistoryAria">
-                <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">
-                  <span aria-hidden="true">+</span>
-                  {{ dialogText.aiNewConversation }}
-                </button>
+              <aside class="ai-sidebar" :class="{ 'is-collapsed': isMobileViewport && isAiHistoryCollapsed }" :aria-label="dialogText.aiHistoryAria">
+                <div class="ai-sidebar__toolbar">
+                  <button type="button" class="ai-sidebar__new" @click="startNewAiConversation">
+                    <span aria-hidden="true">+</span>
+                    {{ dialogText.aiNewConversation }}
+                  </button>
+                  <button
+                    v-if="isMobileViewport"
+                    type="button"
+                    class="ai-sidebar__toggle"
+                    @click="toggleAiHistory"
+                  >
+                    {{ isAiHistoryCollapsed ? dialogText.aiShowHistory : dialogText.aiHideHistory }}
+                  </button>
+                </div>
 
-                <div class="ai-sidebar__list" role="list">
+                <div v-if="!isMobileViewport || !isAiHistoryCollapsed" class="ai-sidebar__list" role="list">
                   <div
                     v-for="conversation in aiConversations"
                     :key="conversation.id"
@@ -2303,7 +2368,7 @@ watch(
                   </div>
 
                   <div class="ai-main__header-actions">
-                    <button type="button" class="ai-main__resize" @click="toggleAiFullscreen">
+                    <button v-if="!isMobileViewport" type="button" class="ai-main__resize" @click="toggleAiFullscreen">
                       {{ isAiFullscreen ? dialogText.aiExitFullscreen : dialogText.aiEnterFullscreen }}
                     </button>
                   </div>
@@ -2372,8 +2437,10 @@ watch(
                       rows="1"
                       :aria-label="dialogText.aiInputAria"
                       :placeholder="dialogText.aiInputPlaceholder"
+                      enterkeyhint="send"
                       @compositionstart="isAiComposing = true"
                       @compositionend="isAiComposing = false"
+                      @focus="handleAiComposerFocus"
                       @keydown="handleAiComposerKeydown"
                     />
                   </label>
@@ -3642,8 +3709,14 @@ watch(
   min-height: 0;
 }
 
+.ai-sidebar__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .ai-sidebar__new {
-  width: 100%;
+  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3660,7 +3733,21 @@ watch(
     border-color 0.25s ease;
 }
 
+.ai-sidebar__toggle {
+  flex: 0 0 auto;
+  min-height: 2.85rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 25, 23, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink-700);
+}
+
 .ai-sidebar__new:hover {
+  transform: translateY(-1px);
+}
+
+.ai-sidebar__toggle:hover {
   transform: translateY(-1px);
 }
 
@@ -4212,8 +4299,18 @@ watch(
     max-height: calc(100dvh - 2rem);
   }
 
+  .dialog--ai {
+    width: 100%;
+    height: calc(100dvh - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
   .dialog--feature {
     padding: 1.1rem;
+  }
+
+  .dialog--ai.dialog--feature {
+    padding: 0;
   }
 
   .feature-stat-grid {
@@ -4237,6 +4334,8 @@ watch(
   .ai-sidebar {
     border-right: 0;
     border-bottom: 1px solid rgba(28, 25, 23, 0.08);
+    padding: 0.8rem 0.9rem;
+    gap: 0.65rem;
   }
 
   .ai-main__header,
@@ -4248,6 +4347,126 @@ watch(
   .ai-main__header-actions {
     width: 100%;
     justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .ai-sidebar__toolbar {
+    width: 100%;
+  }
+
+  .ai-sidebar.is-collapsed {
+    gap: 0;
+    border-bottom: 0;
+  }
+
+  .ai-sidebar__toggle {
+    min-height: 2.65rem;
+    padding: 0 0.9rem;
+    white-space: nowrap;
+  }
+
+  .ai-sidebar__list {
+    display: flex;
+    gap: 0.55rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-right: 0;
+    padding-bottom: 0.1rem;
+  }
+
+  .ai-sidebar__row {
+    flex: 0 0 min(78vw, 18rem);
+    min-width: min(78vw, 18rem);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-sidebar__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .ai-sidebar__rename,
+  .ai-sidebar__delete {
+    width: 100%;
+    min-height: 2.25rem;
+  }
+
+  .ai-main__header {
+    padding: 0.9rem 1rem;
+    gap: 0.7rem;
+  }
+
+  .ai-main__context strong {
+    font-size: 1rem;
+  }
+
+  .ai-main__context p {
+    font-size: 0.86rem;
+  }
+
+  .ai-starters {
+    padding: 0.75rem 1rem 0;
+  }
+
+  .prompt-chips {
+    margin-top: 0.75rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+  }
+
+  .prompt-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    min-height: 2.3rem;
+    padding: 0.45rem 0.85rem;
+  }
+
+  .ai-chat.ai-chat--main {
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+  }
+
+  .message-avatar {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    font-size: 0.78rem;
+  }
+
+  .message-bubble {
+    max-width: calc(100% - 2.75rem);
+    padding: 0.82rem 0.9rem;
+    border-radius: 18px;
+  }
+
+  .feature-feedback--ai {
+    margin: 0.3rem 1rem 0;
+  }
+
+  .ai-composer {
+    position: sticky;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom));
+  }
+
+  .ai-composer__field textarea {
+    min-height: 2.75rem;
+    max-height: 7.5rem;
+    padding: 0.72rem 0.88rem;
+    font-size: 16px;
+  }
+
+  .dialog__primary.ai-composer__send {
+    width: auto;
+    min-width: 4.75rem;
+    min-height: 2.75rem;
+    padding: 0 1rem;
   }
 }
 

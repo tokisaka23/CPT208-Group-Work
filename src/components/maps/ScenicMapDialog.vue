@@ -1,8 +1,28 @@
 <script setup>
 import { Button, Field, Popup, Slider, showFailToast, showSuccessToast } from 'vant';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { resolveSuzhouPoi } from '../../data/poiMapData';
+import { useLanguage } from '../../i18n';
+import { getPoiDisplayAddress, getPoiDisplayName, resolveSuzhouPoi } from '../../data/poiMapData';
 import { getAmapKey, getAmapSecurityCode, hasAmapCredentials, loadAmapSdk } from '../../services/maps/amapLoader';
+import { formatDistance } from '../../shared/lbsRouteAgent.js';
+import {
+  buildScenicAgentRouteSummary,
+  buildScenicCountLabel,
+  buildScenicCredentialDetails,
+  buildScenicCurrentMarkerLabel,
+  buildScenicDestinationMarkerLabel,
+  buildScenicManualRouteSummary,
+  buildScenicMaxWaypointsMessage,
+  buildScenicNearbySuccessMessage,
+  buildScenicSearchCapabilityFailedMessage,
+  buildScenicSearchFailedMessage,
+  buildScenicSearchSummary,
+  buildScenicSegmentFallbackMessage,
+  buildScenicWaypointMarkerLabel,
+  buildScenicWaypointName,
+  getScenicMapDialogText,
+  getScenicSearchOptions,
+} from './scenicMapDialogI18n.js';
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -12,14 +32,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:show']);
-
-const SEARCH_OPTIONS = [
-  { id: 'food', label: '美食', keyword: '美食', tone: '#cf6a32' },
-  { id: 'cinema', label: '影院', keyword: '影院', tone: '#7a4fc7' },
-  { id: 'mall', label: '购物中心', keyword: '购物中心', tone: '#2f7c68' },
-  { id: 'boardgame', label: '棋牌/桌游', keyword: '棋牌 桌游', tone: '#8a5a2f' },
-  { id: 'scenic', label: '景区', keyword: '景区', tone: '#2f8a5c' },
-];
+const { language } = useLanguage();
 
 const MAX_WAYPOINTS = 5;
 const ROUTE_COLORS = ['#2f8a5c', '#cf6a32', '#4274d6', '#8b52cc', '#b14d6f', '#2f7c68'];
@@ -47,40 +60,57 @@ let searchMarkers = [];
 let placeSearch = null;
 let mapClickHandler = null;
 
+const text = computed(() => getScenicMapDialogText(language.value));
+const searchOptions = computed(() => getScenicSearchOptions(language.value));
 const agentRoutePlan = computed(() => (
   props.routePlan?.start && props.routePlan?.end ? props.routePlan : null
 ));
 const resolvedPoi = computed(() => {
   if (agentRoutePlan.value?.end) {
+    const matchedPoi = resolveSuzhouPoi(agentRoutePlan.value.end.poiId || agentRoutePlan.value.end.name || '');
     return {
+      ...(matchedPoi || {}),
       id: agentRoutePlan.value.end.poiId || `ai-route-${agentRoutePlan.value.end.lng}-${agentRoutePlan.value.end.lat}`,
-      name: agentRoutePlan.value.end.name || '路线终点',
+      name: agentRoutePlan.value.end.name || matchedPoi?.name || text.value.routeDestinationName,
       lng: Number(agentRoutePlan.value.end.lng),
       lat: Number(agentRoutePlan.value.end.lat),
-      address: agentRoutePlan.value.end.address || '',
+      address: agentRoutePlan.value.end.address || matchedPoi?.address || '',
+      localizedName: matchedPoi?.localizedName,
+      localizedAddress: matchedPoi?.localizedAddress,
     };
   }
 
   return typeof props.poi === 'string' ? resolveSuzhouPoi(props.poi) : resolveSuzhouPoi(props.poi?.id) || props.poi;
 });
-const mapTitle = computed(() => props.title || resolvedPoi.value?.name || '地图导航');
+const resolvedPoiName = computed(() => getPoiDisplayName(resolvedPoi.value, language.value) || resolvedPoi.value?.name || text.value.routeDestinationName);
+const resolvedPoiAddress = computed(() => getPoiDisplayAddress(resolvedPoi.value, language.value) || resolvedPoi.value?.address || '');
+const mapTitle = computed(() => props.title || resolvedPoiName.value || text.value.defaultTitle);
 const canUseAmap = computed(() => hasAmapCredentials());
 const amapKey = computed(() => getAmapKey());
 const amapSecurityCode = computed(() => getAmapSecurityCode());
 const mapStorageKey = computed(() => `cpt208_map_dialog_state_${resolvedPoi.value?.id || 'unknown'}`);
 const uiStorageKey = computed(() => `cpt208_map_dialog_ui_solo_${resolvedPoi.value?.id || 'unknown'}`);
-const minimizedLabel = computed(() => mapTitle.value || '地图');
-const routeSummary = computed(() => (markerNotes.value.length ? `当前位置 -> ${markerNotes.value.map((_, i) => i + 1).join(' -> ')} -> 终点` : '当前位置 -> 终点'));
-const activeSearchOption = computed(() => SEARCH_OPTIONS.find((item) => item.id === activeSearchId.value) || SEARCH_OPTIONS[0]);
+const minimizedLabel = computed(() => mapTitle.value || text.value.mapLabel);
+const routeSummary = computed(() => buildScenicManualRouteSummary(markerNotes.value, language.value));
+const activeSearchOption = computed(() => searchOptions.value.find((item) => item.id === activeSearchId.value) || searchOptions.value[0]);
+const routeModeLabel = computed(() => (routeMode.value === 'driving' ? text.value.drivingShort : text.value.walkingShort));
+const resolvedAgentStartName = computed(() => {
+  const startName = String(agentRoutePlan.value?.start?.name || '').trim();
+  return startName === '当前位置' ? text.value.currentLocationLabel : startName;
+});
 const displayRouteSummary = computed(() => {
   if (agentRoutePlan.value) {
     const selectedRoute = agentSelectedRoute.value;
-    const modeLabel = routeMode.value === 'driving' ? '车行' : '步行';
     const distanceMeters = Number(selectedRoute?.distance || agentRoutePlan.value.distanceMeters || 0);
     const durationSeconds = Number(selectedRoute?.duration || agentRoutePlan.value.durationSeconds || 0);
-    const distanceText = distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)} km` : `${Math.round(distanceMeters)} m`;
-    const minutes = Math.max(1, Math.round(durationSeconds / 60));
-    return `${agentRoutePlan.value.start.name} -> ${agentRoutePlan.value.end.name} · ${modeLabel} · ${distanceText} · ${minutes} min`;
+    return buildScenicAgentRouteSummary({
+      startName: resolvedAgentStartName.value,
+      endName: resolvedPoiName.value,
+      routeMode: routeMode.value,
+      distanceMeters,
+      durationSeconds,
+      language: language.value,
+    });
   }
 
   return routeSummary.value;
@@ -99,9 +129,11 @@ const agentSelectedRoute = computed(() => {
     ? agentRoutePlan.value.routes.driving || agentRoutePlan.value.routes.walking || null
     : agentRoutePlan.value.routes.walking || agentRoutePlan.value.routes.driving || null;
 });
-const searchSummary = computed(() => (
-  searchResultCount.value ? `已显示 ${searchResultCount.value} 个${activeSearchOption.value.label}` : `搜索 ${activeSearchOption.value.label}`
-));
+const searchSummary = computed(() => buildScenicSearchSummary({
+  count: searchResultCount.value,
+  searchLabel: activeSearchOption.value?.label || '',
+  language: language.value,
+}));
 
 function readJsonStorage(key) {
   if (typeof window === 'undefined') {
@@ -134,7 +166,7 @@ function normalizeMarkerNotes(value) {
     .map((item, index) => ({
       lng: Number(item?.lng),
       lat: Number(item?.lat),
-      note: String(item?.note || '').trim() || `标注点 ${index + 1}`,
+      note: String(item?.note || '').trim() || buildScenicWaypointName(index, language.value),
     }))
     .filter((item) => Number.isFinite(item.lng) && Number.isFinite(item.lat));
 }
@@ -152,7 +184,7 @@ function restoreState() {
 
   routeMode.value = localState.routeMode === 'driving' ? 'driving' : 'walking';
   markerNotes.value = normalizeMarkerNotes(localState.markerNotes);
-  activeSearchId.value = SEARCH_OPTIONS.some((item) => item.id === localState.activeSearchId) ? localState.activeSearchId : 'food';
+  activeSearchId.value = searchOptions.value.some((item) => item.id === localState.activeSearchId) ? localState.activeSearchId : 'food';
   searchRadius.value = Number.isFinite(Number(localState.searchRadius)) ? Number(localState.searchRadius) : 1500;
   isFullscreen.value = Boolean(uiState.isFullscreen ?? localState.isFullscreen);
   isMinimized.value = Boolean(uiState.isMinimized ?? localState.isMinimized);
@@ -297,8 +329,8 @@ function renderDestinationMarker(AMap) {
   }
   destinationMarker = new AMap.Marker({
     position: [resolvedPoi.value.lng, resolvedPoi.value.lat],
-    title: resolvedPoi.value.name,
-    label: { content: buildMarkerLabel(`终点 · ${resolvedPoi.value.name}`, 'amap-note-label--dest'), direction: 'top' },
+    title: resolvedPoiName.value,
+    label: { content: buildMarkerLabel(buildScenicDestinationMarkerLabel(resolvedPoiName.value, language.value), 'amap-note-label--dest'), direction: 'top' },
   });
   mapInstance.add(destinationMarker);
 }
@@ -309,9 +341,9 @@ function renderCurrentMarker(AMap) {
   }
   currentMarker = new AMap.Marker({
     position: buildLngLat(AMap, currentPosition.value),
-    title: '我的位置',
+    title: text.value.currentLocationLabel,
     offset: new AMap.Pixel(-10, -24),
-    label: { content: buildMarkerLabel('起点 · 我的位置', 'amap-note-label--self'), direction: 'top' },
+    label: { content: buildMarkerLabel(buildScenicCurrentMarkerLabel(language.value), 'amap-note-label--self'), direction: 'top' },
   });
   mapInstance.add(currentMarker);
 }
@@ -322,9 +354,9 @@ function renderWaypointMarkers(AMap) {
   }
   waypointMarkers = markerNotes.value.map((item, index) => new AMap.Marker({
     position: buildLngLat(AMap, item),
-    title: item.note || `标注点 ${index + 1}`,
+    title: item.note || buildScenicWaypointName(index, language.value),
     offset: new AMap.Pixel(-10, -24),
-    label: { content: buildMarkerLabel(`${index + 1}. ${item.note || `标注点 ${index + 1}`}`, 'amap-note-label--waypoint'), direction: 'top' },
+    label: { content: buildMarkerLabel(buildScenicWaypointMarkerLabel(index, item.note, language.value), 'amap-note-label--waypoint'), direction: 'top' },
   }));
   mapInstance.add(waypointMarkers);
 }
@@ -345,7 +377,7 @@ async function planSegment(AMap, startPoint, endPoint) {
     planner.search(buildLngLat(AMap, startPoint), buildLngLat(AMap, endPoint), (status, result) => {
       planner.clear?.();
       if (status !== 'complete') {
-        reject(new Error('路线规划失败'));
+        reject(new Error(text.value.routePlanningFailed));
         return;
       }
       resolve(extractRoutePath(result, startPoint, endPoint));
@@ -435,16 +467,16 @@ async function renderRoute() {
         }
       }
       if (failedSegments.length) {
-        mapError.value = `第 ${failedSegments.join('、')} 段路线未能完成精确规划，已使用连线保留顺序。`;
+        mapError.value = buildScenicSegmentFallbackMessage(failedSegments, language.value);
       }
     } else {
-      mapError.value = '未能获取当前位置，当前先展示终点和标注点。';
+      mapError.value = text.value.locationUnavailable;
     }
 
     fitMapView();
   } catch (error) {
     console.error('[MapDialog] route render failed', error);
-    mapError.value = error.message || '路线规划失败，请稍后重试。';
+    mapError.value = error.message || text.value.routePlanningFailedLater;
   } finally {
     routeLoading.value = false;
   }
@@ -479,7 +511,10 @@ async function searchNearbyPlaces() {
       searchRadius.value,
       (status, result) => {
         if (status !== 'complete') {
-          reject(new Error(`附近${activeSearchOption.value.label}搜索失败，请确认当前 Key 已开通对应能力。`));
+          reject(new Error(buildScenicSearchCapabilityFailedMessage({
+            searchLabel: activeSearchOption.value.label,
+            language: language.value,
+          })));
           return;
         }
         resolve(result);
@@ -517,9 +552,16 @@ async function searchNearbyPlaces() {
     searchResultCount.value = aggregatedPois.length;
     mapInstance.add(searchMarkers);
     fitMapView();
-    showSuccessToast(`找到 ${aggregatedPois.length} 个附近${activeSearchOption.value.label}`);
+    showSuccessToast(buildScenicNearbySuccessMessage({
+      count: aggregatedPois.length,
+      searchLabel: activeSearchOption.value.label,
+      language: language.value,
+    }));
   } catch (error) {
-    mapError.value = error.message || `附近${activeSearchOption.value.label}搜索失败，请稍后重试。`;
+    mapError.value = error.message || buildScenicSearchFailedMessage({
+      searchLabel: activeSearchOption.value.label,
+      language: language.value,
+    });
   } finally {
     searchingPlaces.value = false;
   }
@@ -531,7 +573,7 @@ async function handleMapClick(event) {
   }
 
   if (markerNotes.value.length >= MAX_WAYPOINTS) {
-    showFailToast(`最多只能添加 ${MAX_WAYPOINTS} 个点位`);
+    showFailToast(buildScenicMaxWaypointsMessage(MAX_WAYPOINTS, language.value));
     return;
   }
 
@@ -540,7 +582,7 @@ async function handleMapClick(event) {
     {
       lng: event.lnglat.getLng(),
       lat: event.lnglat.getLat(),
-      note: `标注点 ${markerNotes.value.length + 1}`,
+      note: buildScenicWaypointName(markerNotes.value.length, language.value),
     },
   ];
   persistState();
@@ -559,7 +601,7 @@ async function initMap() {
   mapError.value = '';
 
   if (!canUseAmap.value) {
-    mapError.value = '当前尚未完整配置高德凭证，请同时填写 VITE_AMAP_KEY 和 VITE_AMAP_SECURITY_CODE。';
+    mapError.value = text.value.credentialsMissingDetail;
     return;
   }
 
@@ -592,7 +634,7 @@ async function initMap() {
     await renderRoute();
   } catch (error) {
     console.error('[MapDialog] init failed', error);
-    mapError.value = error.message || '高德地图初始化失败。';
+    mapError.value = error.message || text.value.mapInitFailed;
   } finally {
     loading.value = false;
   }
@@ -604,7 +646,7 @@ async function handleRefreshRoute() {
     await detectCurrentPosition();
     await renderRoute();
   } catch (error) {
-    mapError.value = error.message || '刷新路线失败。';
+    mapError.value = error.message || text.value.refreshRouteFailed;
   }
 }
 
@@ -654,7 +696,7 @@ async function handleDeleteStop(index) {
 async function handleRenameStop(index, value) {
   markerNotes.value = markerNotes.value.map((item, itemIndex) => (
     itemIndex === index
-      ? { ...item, note: String(value || '').trim() || `标注点 ${index + 1}` }
+      ? { ...item, note: String(value || '').trim() || buildScenicWaypointName(index, language.value) }
       : item
   ));
   persistState();
@@ -696,6 +738,12 @@ watch([activeSearchId, searchRadius], () => {
   persistState();
 });
 
+watch(() => language.value, async () => {
+  if (props.show) {
+    await initMap();
+  }
+});
+
 onBeforeUnmount(() => {
   destroyMap();
 });
@@ -713,56 +761,56 @@ onBeforeUnmount(() => {
     <div class="scenic-map-popup__shell">
       <div class="scenic-map-popup__head">
         <div>
-          <p class="scenic-map-popup__eyebrow">Amap Navigation</p>
+          <p class="scenic-map-popup__eyebrow">{{ text.eyebrow }}</p>
           <h3 class="scenic-map-popup__title">{{ mapTitle }}</h3>
-          <p class="scenic-map-popup__desc">{{ resolvedPoi?.address || '当前景点暂未配置地图坐标。' }}</p>
+          <p class="scenic-map-popup__desc">{{ resolvedPoiAddress || text.noAddressConfigured }}</p>
         </div>
         <div class="scenic-map-popup__head-actions">
-          <span class="scenic-map-popup__key">{{ canUseAmap ? '已读取高德凭证' : '缺少高德凭证' }}</span>
-          <Button round plain size="small" @click="handleDismissMap">关闭</Button>
+          <span class="scenic-map-popup__key">{{ canUseAmap ? text.amapReady : text.amapMissing }}</span>
+          <Button round plain size="small" @click="handleDismissMap">{{ text.close }}</Button>
         </div>
       </div>
 
       <div v-if="mapError" class="scenic-map-popup__feedback">{{ mapError }}</div>
-      <div v-if="!resolvedPoi" class="scenic-map-popup__placeholder">当前景点还没有配置地图坐标，请先在 `src/data/poiMapData.js` 中补充坐标。</div>
+      <div v-if="!resolvedPoi" class="scenic-map-popup__placeholder">{{ text.noPoiPlaceholder }}</div>
 
       <template v-else>
         <div class="scenic-map-popup__workspace">
           <div class="scenic-map-popup__map-wrap">
             <div ref="mapRoot" class="scenic-map-popup__map" :class="{ 'is-disabled': !canUseAmap }">
-              <div v-if="loading" class="scenic-map-popup__map-mask">地图加载中...</div>
+              <div v-if="loading" class="scenic-map-popup__map-mask">{{ text.loadingMap }}</div>
               <div v-else-if="!canUseAmap" class="scenic-map-popup__placeholder scenic-map-popup__placeholder--inside">
-                <strong>地图区域已预留</strong>
-                <p>请确认 `.env.local` 同时配置了 `VITE_AMAP_KEY` 和 `VITE_AMAP_SECURITY_CODE`。</p>
-                <p>KEY {{ amapKey ? '已配置' : '未配置' }} / SECURITY {{ amapSecurityCode ? '已配置' : '未配置' }}</p>
+                <strong>{{ text.mapReservedTitle }}</strong>
+                <p>{{ text.credentialsHint }}</p>
+                <p>{{ buildScenicCredentialDetails({ amapKey, amapSecurityCode, language }) }}</p>
               </div>
             </div>
           </div>
 
           <aside class="scenic-map-popup__sidebar">
             <section class="scenic-map-popup__card scenic-map-popup__card--modes">
-              <button type="button" class="scenic-map-popup__mode-btn" :class="{ 'is-active': routeMode === 'walking' }" @click="routeMode = 'walking'">步行导航</button>
-              <button type="button" class="scenic-map-popup__mode-btn" :class="{ 'is-active': routeMode === 'driving' }" @click="routeMode = 'driving'">车行导航</button>
+              <button type="button" class="scenic-map-popup__mode-btn" :class="{ 'is-active': routeMode === 'walking' }" @click="routeMode = 'walking'">{{ text.walkingNavigation }}</button>
+              <button type="button" class="scenic-map-popup__mode-btn" :class="{ 'is-active': routeMode === 'driving' }" @click="routeMode = 'driving'">{{ text.drivingNavigation }}</button>
             </section>
 
             <section class="scenic-map-popup__card scenic-map-popup__card--actions">
-              <Button round plain type="primary" :loading="routeLoading" @click="handleRefreshRoute">刷新路线</Button>
-              <Button round plain @click="handleToggleFullscreen">{{ isFullscreen ? '退出全屏' : '全屏' }}</Button>
-              <Button round plain @click="handleMinimize">缩到侧边</Button>
+              <Button round plain type="primary" :loading="routeLoading" @click="handleRefreshRoute">{{ text.refreshRoute }}</Button>
+              <Button round plain @click="handleToggleFullscreen">{{ isFullscreen ? text.exitFullscreen : text.fullscreen }}</Button>
+              <Button round plain @click="handleMinimize">{{ text.minimize }}</Button>
             </section>
 
             <section class="scenic-map-popup__card">
               <div class="scenic-map-popup__card-head">
-                <h4>导航顺序</h4>
-                <span>{{ routeMode === 'driving' ? '车行' : '步行' }}</span>
+                <h4>{{ text.navigationOrder }}</h4>
+                <span>{{ routeModeLabel }}</span>
               </div>
               <p class="scenic-map-popup__route-summary">{{ agentRoutePlan ? displayRouteSummary : routeSummary }}</p>
             </section>
 
             <section v-if="agentRoutePlan" class="scenic-map-popup__card">
               <div class="scenic-map-popup__card-head">
-                <h4>AI 路线步骤</h4>
-                <span>{{ agentRouteSteps.length }} 段</span>
+                <h4>{{ text.aiRouteSteps }}</h4>
+                <span>{{ buildScenicCountLabel(agentRouteSteps.length, 'segment', language) }}</span>
               </div>
               <p class="scenic-map-popup__route-summary">{{ displayRouteSummary }}</p>
               <div v-if="agentRouteSteps.length" class="scenic-map-popup__list">
@@ -774,11 +822,11 @@ onBeforeUnmount(() => {
                 </article>
               </div>
               <details v-if="agentRoutePlan.transitPlan" class="scenic-map-popup__transit">
-                <summary>公共交通方案</summary>
+                <summary>{{ text.transitPlan }}</summary>
                 <p class="scenic-map-popup__route-summary">{{ agentRoutePlan.transitPlan.summary }}</p>
                 <textarea
                   class="scenic-map-popup__transit-textarea"
-                  :value="agentRoutePlan.transitPlan.text || '暂无公共交通方案'"
+                  :value="agentRoutePlan.transitPlan.text || text.noTransitPlan"
                   readonly
                 />
               </details>
@@ -786,13 +834,13 @@ onBeforeUnmount(() => {
 
             <section v-if="!agentRoutePlan" class="scenic-map-popup__card">
               <div class="scenic-map-popup__card-head">
-                <h4>附近搜索</h4>
-                <span>{{ searchRadius }} m</span>
+                <h4>{{ text.nearbySearch }}</h4>
+                <span>{{ formatDistance(searchRadius, language) }}</span>
               </div>
               <p class="scenic-map-popup__route-summary">{{ searchSummary }}</p>
               <div class="scenic-map-popup__search-types">
                 <button
-                  v-for="item in SEARCH_OPTIONS"
+                  v-for="item in searchOptions"
                   :key="item.id"
                   type="button"
                   class="scenic-map-popup__search-chip"
@@ -806,36 +854,36 @@ onBeforeUnmount(() => {
                 <Slider v-model="searchRadius" :min="500" :max="5000" :step="100" bar-height="4px" active-color="#2f8a5c" />
                 <div class="scenic-map-popup__slider-labels">
                   <span>500 m</span>
-                  <strong>{{ searchRadius }} m</strong>
+                  <strong>{{ formatDistance(searchRadius, language) }}</strong>
                   <span>5000 m</span>
                 </div>
               </div>
               <Button round plain type="success" :loading="searchingPlaces" @click="searchNearbyPlaces">
-                查找附近{{ activeSearchOption.label }}
+                {{ text.findNearby }} {{ activeSearchOption?.label }}
               </Button>
             </section>
 
             <section v-if="!agentRoutePlan" class="scenic-map-popup__card">
               <div class="scenic-map-popup__card-head">
-                <h4>点位列表</h4>
-                <span>{{ markerNotes.length }} 个</span>
+                <h4>{{ text.pointsList }}</h4>
+                <span>{{ buildScenicCountLabel(markerNotes.length, 'point', language) }}</span>
               </div>
               <div v-if="markerNotes.length" class="scenic-map-popup__list">
                 <article v-for="(item, index) in markerNotes" :key="`${item.lng}-${item.lat}-${index}`" class="scenic-map-popup__list-item">
                   <div class="scenic-map-popup__stop-head">
                     <strong>{{ index + 1 }}</strong>
-                    <Button size="mini" round plain type="danger" @click="handleDeleteStop(index)">删除</Button>
+                    <Button size="mini" round plain type="danger" @click="handleDeleteStop(index)">{{ text.delete }}</Button>
                   </div>
                   <Field
                     :model-value="item.note"
                     size="small"
-                    placeholder="修改点位名称"
+                    :placeholder="text.renamePointPlaceholder"
                     @update:model-value="handleRenameStop(index, $event)"
                   />
                   <span>{{ item.lng.toFixed(6) }}, {{ item.lat.toFixed(6) }}</span>
                 </article>
               </div>
-              <div v-else class="scenic-map-popup__empty">点击地图即可添加点位。</div>
+              <div v-else class="scenic-map-popup__empty">{{ text.emptyPoints }}</div>
             </section>
           </aside>
         </div>
@@ -845,7 +893,7 @@ onBeforeUnmount(() => {
 
   <teleport to="body">
     <button v-if="isMinimized && !show" type="button" class="scenic-map-floating" @click="handleRestoreFromMinimize">
-      <strong>地图</strong>
+      <strong>{{ text.mapLabel }}</strong>
       <span>{{ minimizedLabel }}</span>
     </button>
   </teleport>

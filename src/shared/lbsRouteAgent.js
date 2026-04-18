@@ -1,11 +1,27 @@
+import { normalizeChatLanguage } from './chatLanguage.js';
+
 const ROUTE_REQUEST_PATTERN = /(路线|路程|导航|怎么走|怎么去|如何去|带我去|去往|前往|到达|从.+到.+|route|directions|navigate|how do i get|walk to|drive to|歩いて|行き方|どう行く|경로|길안내|어떻게 가|가는 길)/i;
 const SUZHOU_CITY_PATTERN = /(苏州|蘇州|Suzhou)/i;
 const MAX_SUZHOU_STRAIGHT_DISTANCE_METERS = 500000;
 const DEFAULT_ROUTE_MODE = 'walking';
 const NON_DESTINATION_PATTERN = /(历史|介绍|推荐|攻略|美食|好玩吗|值得|是什么|在哪看|什么时候|门票|开放|文化|怎么玩|拍照|故事|为什么|怎么安排|有哪些|history|intro|recommend|guide|ticket|open|when|what|why|おすすめ|紹介|チケット|歴史|추천|소개|입장료|역사)/i;
 
+const NARROW_ROUTE_REQUEST_PATTERN = /(导航|怎么走|如何去|怎么去|带我去|去往|前往|到达|步行路线|驾车路线|公交路线|交通路线|步行去|开车去|坐车去|从.+到.+|route|directions|navigate|how do i get|walk to|drive to|歩いて|行き方|どう行く|경로|길안내|어떻게 가|가는 길)/i;
+const ITINERARY_REQUEST_PATTERN = /(游玩路线|游玩线路|路线规划|线路规划|行程规划|游玩安排|路线安排|行程安排|一日游|半日游|先去哪里|先去哪|应该先去哪里|第一次来苏州|第一次来|初次来苏州|怎么玩|怎么逛|怎么安排|逛哪些|玩哪些|顺序怎么排)/i;
+
+export function isItineraryPlanningRequest(message) {
+  const normalized = String(message || '').trim();
+  return Boolean(normalized) && ITINERARY_REQUEST_PATTERN.test(normalized);
+}
+
 export function isRoutePlanningRequest(message) {
-  return ROUTE_REQUEST_PATTERN.test(String(message || '').trim());
+  const normalized = String(message || '').trim();
+
+  if (!normalized || isItineraryPlanningRequest(normalized)) {
+    return false;
+  }
+
+  return NARROW_ROUTE_REQUEST_PATTERN.test(normalized);
 }
 
 export function looksLikeDirectDestination(message) {
@@ -15,7 +31,11 @@ export function looksLikeDirectDestination(message) {
     return false;
   }
 
-  if (isRoutePlanningRequest(normalized) || NON_DESTINATION_PATTERN.test(normalized)) {
+  if (
+    isItineraryPlanningRequest(normalized)
+    || isRoutePlanningRequest(normalized)
+    || NON_DESTINATION_PATTERN.test(normalized)
+  ) {
     return false;
   }
 
@@ -136,33 +156,64 @@ export function buildLbsRoutePrompt({ currentCity = '苏州市', currentPage = '
     '3. 如果地点不在苏州市，必须把 needsClarification 设为 true，并在 clarification 中要求用户改成苏州市内地点。',
     '4. 如果终点不明确，needsClarification 设为 true。',
     '5. mode 只能是 walking 或 driving，默认 walking。',
+    '6. 如果用户在问第一次来苏州先去哪里、怎么玩、行程怎么安排、游玩路线怎么排，这属于游玩规划，不是导航，intent 必须是 "chat"。',
   ].join('\n');
 }
 
-export function formatDistance(distanceMeters) {
+export function formatDistance(distanceMeters, language = 'zh') {
   const meters = Number(distanceMeters);
+  const replyLanguage = normalizeChatLanguage(language);
 
   if (!Number.isFinite(meters) || meters <= 0) {
-    return '0 米';
+    return replyLanguage === 'zh' ? '0 米' : replyLanguage === 'ko' ? '0m' : '0 m';
   }
 
   if (meters < 1000) {
-    return `${Math.round(meters)} 米`;
+    return replyLanguage === 'zh' ? `${Math.round(meters)} 米` : replyLanguage === 'ko' ? `${Math.round(meters)}m` : `${Math.round(meters)} m`;
   }
 
-  return `${(meters / 1000).toFixed(meters >= 10000 ? 0 : 1)} 公里`;
+  if (replyLanguage === 'zh') {
+    return `${(meters / 1000).toFixed(meters >= 10000 ? 0 : 1)} 公里`;
+  }
+
+  return `${(meters / 1000).toFixed(meters >= 10000 ? 0 : 1)} km`;
 }
 
-export function formatDuration(durationSeconds) {
+export function formatDuration(durationSeconds, language = 'zh') {
   const seconds = Number(durationSeconds);
+  const replyLanguage = normalizeChatLanguage(language);
 
   if (!Number.isFinite(seconds) || seconds <= 0) {
+    if (replyLanguage === 'en') {
+      return 'about 0 min';
+    }
+
+    if (replyLanguage === 'ja') {
+      return '約 0 分';
+    }
+
+    if (replyLanguage === 'ko') {
+      return '약 0분';
+    }
+
     return '约 0 分钟';
   }
 
   const minutes = Math.round(seconds / 60);
 
   if (minutes < 60) {
+    if (replyLanguage === 'en') {
+      return `about ${minutes} min`;
+    }
+
+    if (replyLanguage === 'ja') {
+      return `約 ${minutes} 分`;
+    }
+
+    if (replyLanguage === 'ko') {
+      return `약 ${minutes}분`;
+    }
+
     return `约 ${minutes} 分钟`;
   }
 
@@ -170,7 +221,31 @@ export function formatDuration(durationSeconds) {
   const remainMinutes = minutes % 60;
 
   if (!remainMinutes) {
+    if (replyLanguage === 'en') {
+      return `about ${hours} hr`;
+    }
+
+    if (replyLanguage === 'ja') {
+      return `約 ${hours} 時間`;
+    }
+
+    if (replyLanguage === 'ko') {
+      return `약 ${hours}시간`;
+    }
+
     return `约 ${hours} 小时`;
+  }
+
+  if (replyLanguage === 'en') {
+    return `about ${hours} hr ${remainMinutes} min`;
+  }
+
+  if (replyLanguage === 'ja') {
+    return `約 ${hours} 時間 ${remainMinutes} 分`;
+  }
+
+  if (replyLanguage === 'ko') {
+    return `약 ${hours}시간 ${remainMinutes}분`;
   }
 
   return `约 ${hours} 小时 ${remainMinutes} 分钟`;

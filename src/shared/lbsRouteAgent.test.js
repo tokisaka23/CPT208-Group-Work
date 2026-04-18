@@ -7,6 +7,7 @@ import {
   formatDistance,
   formatDuration,
   haversineDistanceMeters,
+  isItineraryPlanningRequest,
   isRoutePlanningRequest,
   isWithinSuzhouCity,
   looksLikeDirectDestination,
@@ -17,13 +18,22 @@ import {
 
 test('isRoutePlanningRequest recognizes navigation prompts', () => {
   assert.equal(isRoutePlanningRequest('从平江路到苏州博物馆怎么走？'), true);
+  assert.equal(isRoutePlanningRequest('请给我步行路线到拙政园'), true);
   assert.equal(isRoutePlanningRequest('帮我介绍一下平江路的历史'), false);
+  assert.equal(isRoutePlanningRequest('我第一次来苏州，我现在在平江路附近，能不能帮我规划一下游玩路线'), false);
+});
+
+test('isItineraryPlanningRequest recognizes travel-planning prompts', () => {
+  assert.equal(isItineraryPlanningRequest('我第一次来苏州，我现在在平江路附近，能不能帮我规划一下游玩路线'), true);
+  assert.equal(isItineraryPlanningRequest('第一次来苏州应该先去哪里？'), true);
+  assert.equal(isItineraryPlanningRequest('从平江路到拙政园怎么走？'), false);
 });
 
 test('looksLikeDirectDestination recognizes standalone POI names', () => {
   assert.equal(looksLikeDirectDestination('观前街'), true);
   assert.equal(looksLikeDirectDestination('上海迪士尼'), true);
   assert.equal(looksLikeDirectDestination('帮我介绍观前街的历史'), false);
+  assert.equal(looksLikeDirectDestination('第一次来苏州应该先去哪里'), false);
 });
 
 test('extractJsonObject parses direct JSON and wrapped JSON', () => {
@@ -92,4 +102,11 @@ test('distance and duration formatters stay readable', () => {
   assert.equal(formatDistance(2480), '2.5 公里');
   assert.equal(formatDuration(900), '约 15 分钟');
   assert.equal(formatDuration(5400), '约 1 小时 30 分钟');
+});
+
+test('distance and duration formatters support multiple reply languages', () => {
+  assert.equal(formatDistance(860, 'en'), '860 m');
+  assert.equal(formatDistance(2480, 'ja'), '2.5 km');
+  assert.equal(formatDuration(900, 'en'), 'about 15 min');
+  assert.equal(formatDuration(5400, 'ko'), '약 1시간 30분');
 });

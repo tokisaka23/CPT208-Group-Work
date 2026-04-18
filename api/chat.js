@@ -7,12 +7,19 @@ import {
   extractJsonObject,
   formatDistance,
   formatDuration,
+  isItineraryPlanningRequest,
   isRoutePlanningRequest,
   isWithinSuzhouCity,
   looksLikeDirectDestination,
   mergeRoutePolylines,
   normalizeRouteMode,
 } from '../src/shared/lbsRouteAgent.js';
+import {
+  buildReplyLanguageInstruction,
+  detectMessageLanguage,
+  inferChatLanguage,
+  normalizeChatLanguage,
+} from '../src/shared/chatLanguage.js';
 
 const CHAT_HISTORY_TABLE = 'chat_history';
 const CONVERSATIONS_TABLE = 'conversations';
@@ -240,26 +247,149 @@ function getAmapWebServiceKey() {
   ).trim();
 }
 
-function normalizeAmapErrorMessage(error) {
+function getRouteCopy(language = 'zh') {
+  const replyLanguage = normalizeChatLanguage(language);
+
+  if (replyLanguage === 'en') {
+    return {
+      clarification: 'Please tell me a clearer start and destination within Suzhou.',
+      serviceUnavailable: 'Route planning is unavailable right now. Please try again in a moment.',
+      keyMismatch: 'The AMap Web Service Key does not match the calling platform. Configure a server-side `AMAP_WEB_SERVICE_KEY` in `.env.local` instead of reusing `VITE_AMAP_KEY`.',
+      invalidKey: 'The AMap Web Service Key is invalid. Please check `AMAP_WEB_SERVICE_KEY` in `.env.local`.',
+      missingKey: 'The server-side AMap route key is missing. Add `AMAP_WEB_SERVICE_KEY=your AMap Web Service Key` to `.env.local`.',
+      walkingUnavailable: 'Walking directions are unavailable right now',
+      drivingUnavailable: 'Driving directions are unavailable right now',
+      transitUnavailable: 'Transit directions are unavailable right now',
+      preferWalking: 'I prioritized walking.',
+      preferDriving: 'I prioritized driving.',
+      routeSummary: (startName, endName) => `I mapped a route from ${startName} to ${endName}.`,
+      walkingSummary: (distanceText, durationText) => `Walking about ${distanceText}, ${durationText}`,
+      drivingSummary: (distanceText, durationText) => `Driving about ${distanceText}, ${durationText}`,
+      transitSummary: (durationText, walkingText, costText) => `Transit ${durationText}, walk ${walkingText}, ${costText}.`,
+      fareFallback: 'fare depends on the line',
+      currencyUnit: 'CNY',
+      noPrimaryRoute: 'AMap did not return a usable route. Please try again shortly.',
+      noWalkingOrDriving: 'Walking and driving directions are both unavailable right now. Please try again in a moment.',
+      walkLabel: 'Walk',
+      busLabel: 'Bus',
+      railLabel: 'Metro',
+      from: 'from',
+      to: 'to',
+      viaStops: (count) => `about ${count} stops`,
+    };
+  }
+
+  if (replyLanguage === 'ja') {
+    return {
+      clarification: '蘇州市内の出発地と目的地をもう少し具体的に教えてください。',
+      serviceUnavailable: '経路案内を一時的に利用できません。しばらくしてからもう一度お試しください。',
+      keyMismatch: 'AMap Web Service Key と呼び出し元のプラットフォームが一致していません。`.env.local` の `AMAP_WEB_SERVICE_KEY` にサーバー専用キーを設定してください。',
+      invalidKey: 'AMap Web Service Key が無効です。`.env.local` の `AMAP_WEB_SERVICE_KEY` を確認してください。',
+      missingKey: 'サーバー側の AMap ルートキーがありません。`.env.local` に `AMAP_WEB_SERVICE_KEY=あなたの AMap Web Service Key` を追加してください。',
+      walkingUnavailable: '徒歩ルートは現在利用できません',
+      drivingUnavailable: '車ルートは現在利用できません',
+      transitUnavailable: '公共交通ルートは現在利用できません',
+      preferWalking: '徒歩を優先して整理しました。',
+      preferDriving: '車移動を優先して整理しました。',
+      routeSummary: (startName, endName) => `${startName} から ${endName} までのルートをまとめました。`,
+      walkingSummary: (distanceText, durationText) => `徒歩 約 ${distanceText}、${durationText}`,
+      drivingSummary: (distanceText, durationText) => `車で 約 ${distanceText}、${durationText}`,
+      transitSummary: (durationText, walkingText, costText) => `公共交通は ${durationText}、徒歩 ${walkingText}、${costText}。`,
+      fareFallback: '運賃は現地案内をご確認ください',
+      currencyUnit: '元',
+      noPrimaryRoute: 'AMap から利用可能なルートが返されませんでした。しばらくしてからもう一度お試しください。',
+      noWalkingOrDriving: '徒歩と車のルートがどちらも現在利用できません。しばらくしてからもう一度お試しください。',
+      walkLabel: '徒歩',
+      busLabel: 'バス',
+      railLabel: '軌道交通',
+      from: 'から',
+      to: 'まで',
+      viaStops: (count) => `約 ${count} 停留所`,
+    };
+  }
+
+  if (replyLanguage === 'ko') {
+    return {
+      clarification: '쑤저우 시내 기준으로 출발지와 목적지를 조금 더 구체적으로 알려 주세요.',
+      serviceUnavailable: '경로 안내를 지금은 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+      keyMismatch: 'AMap Web Service Key 와 호출 플랫폼이 일치하지 않습니다. `.env.local` 에 서버 전용 `AMAP_WEB_SERVICE_KEY` 를 설정해 주세요.',
+      invalidKey: 'AMap Web Service Key 가 유효하지 않습니다. `.env.local` 의 `AMAP_WEB_SERVICE_KEY` 를 확인해 주세요.',
+      missingKey: '서버 측 AMap 경로 키가 없습니다. `.env.local` 에 `AMAP_WEB_SERVICE_KEY=당신의 AMap Web Service Key` 를 추가해 주세요.',
+      walkingUnavailable: '도보 경로를 지금은 사용할 수 없습니다',
+      drivingUnavailable: '차량 경로를 지금은 사용할 수 없습니다',
+      transitUnavailable: '대중교통 경로를 지금은 사용할 수 없습니다',
+      preferWalking: '도보 기준으로 우선 정리했습니다.',
+      preferDriving: '차량 이동 기준으로 우선 정리했습니다.',
+      routeSummary: (startName, endName) => `${startName}에서 ${endName}까지의 경로를 정리했어요.`,
+      walkingSummary: (distanceText, durationText) => `도보 약 ${distanceText}, ${durationText}`,
+      drivingSummary: (distanceText, durationText) => `차량 약 ${distanceText}, ${durationText}`,
+      transitSummary: (durationText, walkingText, costText) => `대중교통은 ${durationText}, 도보 ${walkingText}, ${costText}.`,
+      fareFallback: '요금은 현장 안내를 참고해 주세요',
+      currencyUnit: '元',
+      noPrimaryRoute: 'AMap 에서 사용 가능한 경로를 돌려주지 않았습니다. 잠시 후 다시 시도해 주세요.',
+      noWalkingOrDriving: '도보와 차량 경로를 모두 지금은 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+      walkLabel: '도보',
+      busLabel: '버스',
+      railLabel: '도시철도',
+      from: '에서',
+      to: '까지',
+      viaStops: (count) => `약 ${count}정거장`,
+    };
+  }
+
+  return {
+    clarification: '请补充更明确的苏州市内起点和终点。',
+    serviceUnavailable: '路线服务暂时不可用，请稍后重试。',
+    keyMismatch: '高德 Web Service Key 与调用平台不匹配。请在 `.env.local` 中配置服务端专用的 `AMAP_WEB_SERVICE_KEY`，不要复用前端 `VITE_AMAP_KEY`。',
+    invalidKey: '高德 Web Service Key 无效，请检查 `.env.local` 中的 `AMAP_WEB_SERVICE_KEY`。',
+    missingKey: '缺少高德服务端路线 Key。请在 `.env.local` 中新增 `AMAP_WEB_SERVICE_KEY=你的高德 Web Service Key`。',
+    walkingUnavailable: '步行路线暂不可用',
+    drivingUnavailable: '车行路线暂不可用',
+    transitUnavailable: '公共交通方案暂不可用',
+    preferWalking: '已优先按步行理解你的意图。',
+    preferDriving: '已优先按车行理解你的意图。',
+    routeSummary: (startName, endName) => `已为你规划从${startName}到${endName}的路线。`,
+    walkingSummary: (distanceText, durationText) => `步行约${distanceText}，${durationText}`,
+    drivingSummary: (distanceText, durationText) => `车行约${distanceText}，${durationText}`,
+    transitSummary: (durationText, walkingText, costText) => `公共交通${durationText}，步行 ${walkingText}，${costText}。`,
+    fareFallback: '票价以现场为准',
+    currencyUnit: '元',
+    noPrimaryRoute: '高德未返回可用路线，请稍后重试。',
+    noWalkingOrDriving: '步行和车行路线都暂时不可用，请稍后重试。',
+    walkLabel: '步行',
+    busLabel: '公交',
+    railLabel: '轨道交通',
+    from: '从',
+    to: '到',
+    viaStops: (count) => `约 ${count} 站`,
+  };
+}
+
+function normalizeAmapErrorMessage(error, language = 'zh') {
   const message = String(error?.message || '').trim();
+  const routeCopy = getRouteCopy(language);
 
   if (!message) {
-    return '高德路线服务暂时不可用，请稍后重试。';
+    return routeCopy.serviceUnavailable;
   }
 
   if (/USERKEY_PLAT_NOMATCH|USERKEY_PLAT_NOMATC0H/i.test(message)) {
-    return '高德 Web Service Key 与调用平台不匹配。请在 `.env.local` 中配置服务端专用的 `AMAP_WEB_SERVICE_KEY`，不要复用前端 `VITE_AMAP_KEY`。';
+    return routeCopy.keyMismatch;
   }
 
   if (/INVALID_USER_KEY/i.test(message)) {
-    return '高德 Web Service Key 无效，请检查 `.env.local` 中的 `AMAP_WEB_SERVICE_KEY`。';
+    return routeCopy.invalidKey;
   }
 
   if (/Missing AMAP_WEB_SERVICE_KEY environment variable/i.test(message)) {
-    return '缺少高德服务端路线 Key。请在 `.env.local` 中新增 `AMAP_WEB_SERVICE_KEY=你的高德 Web Service Key`。';
+    return routeCopy.missingKey;
   }
 
-  return message;
+  const detectedLanguage = detectMessageLanguage(message);
+  const replyLanguage = normalizeChatLanguage(language);
+  return !detectedLanguage || detectedLanguage === replyLanguage || replyLanguage === 'zh'
+    ? message
+    : routeCopy.serviceUnavailable;
 }
 
 function normalizeUserLocation(value) {
@@ -512,35 +642,52 @@ async function planRouteByAmap({ start, end, mode }) {
   };
 }
 
-function buildRouteAssistantReply({ start, end, preferredMode, walkingPlan, drivingPlan, transitPlan }) {
+export function buildRouteAssistantReply({
+  start,
+  end,
+  preferredMode,
+  walkingPlan,
+  drivingPlan,
+  transitPlan,
+  language = 'zh',
+}) {
+  const routeCopy = getRouteCopy(language);
   const walkingText = walkingPlan
-    ? `步行约${formatDistance(walkingPlan.distance)}，${formatDuration(walkingPlan.duration)}`
-    : '步行路线暂不可用';
+    ? routeCopy.walkingSummary(
+      formatDistance(walkingPlan.distance, language),
+      formatDuration(walkingPlan.duration, language),
+    )
+    : routeCopy.walkingUnavailable;
   const drivingText = drivingPlan
-    ? `车行约${formatDistance(drivingPlan.distance)}，${formatDuration(drivingPlan.duration)}`
-    : '车行路线暂不可用';
-  const transitText = transitPlan?.summary || '公共交通方案暂不可用';
-  const preferredLabel = preferredMode === 'driving' ? '已优先按车行理解你的意图。' : '已优先按步行理解你的意图。';
+    ? routeCopy.drivingSummary(
+      formatDistance(drivingPlan.distance, language),
+      formatDuration(drivingPlan.duration, language),
+    )
+    : routeCopy.drivingUnavailable;
+  const transitText = transitPlan?.summary || routeCopy.transitUnavailable;
+  const preferredLabel = preferredMode === 'driving' ? routeCopy.preferDriving : routeCopy.preferWalking;
 
-  return `已为你规划从${start.name}到${end.name}的路线。${preferredLabel}${walkingText}；${drivingText}；${transitText}`;
+  return `${routeCopy.routeSummary(start.name, end.name)} ${preferredLabel} ${walkingText}; ${drivingText}; ${transitText}`.replace(/\s+/g, ' ').trim();
 }
 
-function formatTransitSummary(transit) {
-  const durationText = formatDuration(transit.duration || 0);
-  const walkingText = formatDistance(transit.walkingDistance || 0);
+function formatTransitSummary(transit, language = 'zh') {
+  const routeCopy = getRouteCopy(language);
+  const durationText = formatDuration(transit.duration || 0, language);
+  const walkingText = formatDistance(transit.walkingDistance || 0, language);
   const cost = Number(transit.cost || 0);
-  const costText = cost > 0 ? `${cost.toFixed(cost >= 10 ? 0 : 1)} 元` : '票价以现场为准';
-  return `公共交通约${durationText}，步行 ${walkingText}，${costText}。`;
+  const costText = cost > 0 ? `${cost.toFixed(cost >= 10 ? 0 : 1)} ${routeCopy.currencyUnit}` : routeCopy.fareFallback;
+  return routeCopy.transitSummary(durationText, walkingText, costText);
 }
 
-function extractTransitLines(segments = []) {
+function extractTransitLines(segments = [], language = 'zh') {
+  const routeCopy = getRouteCopy(language);
   return segments.flatMap((segment) => {
     const lines = [];
     const walkingSteps = Array.isArray(segment?.walking?.steps) ? segment.walking.steps : [];
     walkingSteps.forEach((step) => {
       const instruction = String(step?.instruction || '').trim();
       if (instruction) {
-        lines.push(`步行：${instruction}`);
+        lines.push(`${routeCopy.walkLabel}: ${instruction}`);
       }
     });
 
@@ -552,7 +699,21 @@ function extractTransitLines(segments = []) {
       const viaCount = Number(line?.via_num || 0);
 
       if (name) {
-        lines.push(`公交：${name}${departure ? `，从 ${departure}` : ''}${arrival ? ` 到 ${arrival}` : ''}${viaCount > 0 ? `，约 ${viaCount} 站` : ''}`);
+        const detailParts = [];
+
+        if (departure) {
+          detailParts.push(`${routeCopy.from} ${departure}`);
+        }
+
+        if (arrival) {
+          detailParts.push(`${routeCopy.to} ${arrival}`);
+        }
+
+        if (viaCount > 0) {
+          detailParts.push(routeCopy.viaStops(viaCount));
+        }
+
+        lines.push(`${routeCopy.busLabel}: ${name}${detailParts.length ? `, ${detailParts.join(', ')}` : ''}`);
       }
     });
 
@@ -560,7 +721,7 @@ function extractTransitLines(segments = []) {
     railwayLines.forEach((line) => {
       const name = String(line?.name || '').trim();
       if (name) {
-        lines.push(`轨道交通：${name}`);
+        lines.push(`${routeCopy.railLabel}: ${name}`);
       }
     });
 
@@ -568,7 +729,7 @@ function extractTransitLines(segments = []) {
   });
 }
 
-async function planTransitByAmap({ start, end, city }) {
+async function planTransitByAmap({ start, end, city, language = 'zh' }) {
   const payload = await requestAmap('/direction/transit/integrated', {
     origin: `${start.lng},${start.lat}`,
     destination: `${end.lng},${end.lat}`,
@@ -587,7 +748,7 @@ async function planTransitByAmap({ start, end, city }) {
   }
 
   const segments = Array.isArray(primaryTransit.segments) ? primaryTransit.segments : [];
-  const lines = extractTransitLines(segments);
+  const lines = extractTransitLines(segments, language);
 
   return {
     distance: Number(primaryTransit.distance || 0),
@@ -599,14 +760,14 @@ async function planTransitByAmap({ start, end, city }) {
       duration: primaryTransit.duration,
       walkingDistance: primaryTransit.walking_distance,
       cost: primaryTransit.cost,
-    }),
+    }, language),
     text: lines.join('\n'),
   };
 }
 
-async function loadTransitPlanOptional({ start, end, city }) {
+async function loadTransitPlanOptional({ start, end, city, language = 'zh' }) {
   try {
-    return await planTransitByAmap({ start, end, city });
+    return await planTransitByAmap({ start, end, city, language });
   } catch (error) {
     console.warn('[api/chat] transit plan failed', error?.message || error);
     return null;
@@ -622,15 +783,52 @@ async function loadModeRouteOptional({ start, end, mode }) {
   }
 }
 
+function buildRouteClarificationReply(language = 'zh', clarification = '') {
+  const routeCopy = getRouteCopy(language);
+  const normalizedClarification = String(clarification || '').trim();
+
+  if (normalizedClarification && detectMessageLanguage(normalizedClarification) === normalizeChatLanguage(language)) {
+    return normalizedClarification;
+  }
+
+  return routeCopy.clarification;
+}
+
+export function buildGuideSystemPrompt({ gpsLocation, itineraryRequested, replyLanguage }) {
+  const location = String(gpsLocation || 'Unknown').trim() || 'Unknown';
+  const normalizedLanguage = normalizeChatLanguage(replyLanguage);
+  const itineraryInstruction = itineraryRequested
+    ? 'The user is asking for a visiting plan, not turn-by-turn navigation. Suggest a practical Suzhou itinerary or first stop based on the current page context.'
+    : 'If the user asks where to start or how to explore, give practical visiting advice instead of navigation unless they explicitly ask for directions.';
+  const brevityInstruction = normalizedLanguage === 'zh'
+    ? 'Keep it within 150 Chinese characters.'
+    : 'Keep it within 150 words.';
+
+  return [
+    'You are a senior local Suzhou guide with deep knowledge of Wu culture.',
+    `Current page context: ${location}.`,
+    itineraryInstruction,
+    buildReplyLanguageInstruction(normalizedLanguage),
+    'Include one historical detail or one practical tip when it helps.',
+    brevityInstruction,
+  ].join(' ');
+}
+
 async function handleAsk(bodyData, req) {
   const message = String(bodyData?.message || '').trim() || 'Hello';
   const gpsLocation = String(bodyData?.gpsLocation || 'Unknown').trim() || 'Unknown';
   const conversationId = String(bodyData?.conversationId || '').trim();
   const conversationName = normalizeConversationName(bodyData?.conversationName);
   const apiKey = process.env.QWEN_API_KEY;
+  const itineraryRequested = isItineraryPlanningRequest(message);
   const routeRequested = isRoutePlanningRequest(message);
   const directDestinationRequested = looksLikeDirectDestination(message);
   const rawUserLocation = normalizeUserLocation(bodyData?.userLocation);
+  const replyLanguage = inferChatLanguage({
+    message,
+    messages: bodyData?.messages,
+    fallbackLanguage: 'zh',
+  });
 
   if (!apiKey) {
     throw new Error('Missing QWEN_API_KEY environment variable');
@@ -678,7 +876,7 @@ async function handleAsk(bodyData, req) {
         if (routeIntent.needsClarification) {
           return {
             success: true,
-            response: routeIntent.clarification || '请补充更明确的苏州市内起点和终点。',
+            response: buildRouteClarificationReply(replyLanguage, routeIntent.clarification),
           };
         }
 
@@ -693,11 +891,12 @@ async function handleAsk(bodyData, req) {
             start,
             end,
             city: currentCity,
+            language: replyLanguage,
           }),
         ]);
 
         if (!walkingPlan && !drivingPlan) {
-          const unavailableError = new Error('步行和车行路线都暂时不可用，请稍后重试。');
+          const unavailableError = new Error(getRouteCopy(replyLanguage).noWalkingOrDriving);
           unavailableError.statusCode = 502;
           throw unavailableError;
         }
@@ -713,6 +912,7 @@ async function handleAsk(bodyData, req) {
           walkingPlan,
           drivingPlan,
           transitPlan,
+          language: replyLanguage,
         });
 
         if (authenticatedContext?.user?.id) {
@@ -748,14 +948,18 @@ async function handleAsk(bodyData, req) {
         };
       }
     } catch (routeError) {
-      const normalizedMessage = normalizeAmapErrorMessage(routeError);
+      const normalizedMessage = normalizeAmapErrorMessage(routeError, replyLanguage);
       const error = new Error(normalizedMessage);
       error.statusCode = routeError?.statusCode || 400;
       throw error;
     }
   }
 
-  const systemPrompt = `You are a senior local Suzhou guide with deep knowledge of Wu culture. User location: ${gpsLocation}. Reply in warm, conversational Chinese, include one historical detail or practical tip, and keep it within 150 Chinese characters.`;
+  const systemPrompt = buildGuideSystemPrompt({
+    gpsLocation,
+    itineraryRequested,
+    replyLanguage,
+  });
   const modelMessages = buildModelMessages({
     systemPrompt,
     persistedHistory,
