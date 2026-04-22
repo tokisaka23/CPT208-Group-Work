@@ -33,10 +33,10 @@ const openFavorites = () => {
 
 const appTextSource = {
   brandTitle: {
-    zh: '平江慢游',
-    en: 'Pingjiang Slow Travel',
-    ja: '平江スロートラベル',
-    ko: '평강 슬로우 트래블',
+    zh: '苏城漫游',
+    en: 'SuCIty Roam',
+    ja: 'SuCIty Roam',
+    ko: 'SuCIty Roam',
   },
   brandSubtitle: {
     zh: '平江 · 园林 · 文博 · 市井',

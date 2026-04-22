@@ -65,10 +65,10 @@ const routeTitleSource = {
     ko: '생활 유산',
   },
   appName: {
-    zh: '江南慢游',
-    en: 'Jiangnan Slow Travel',
-    ja: '江南スロートラベル',
-    ko: '강남 슬로우 트래블',
+    zh: '苏城漫游',
+    en: 'SuCIty Roam',
+    ja: 'SuCIty Roam',
+    ko: 'SuCIty Roam',
   },
 };
 
