@@ -5,6 +5,7 @@ import PanoramaSphereViewer from '../components/PanoramaSphereViewer.vue';
 import { gardenDetailsSource } from '../data/gardenDetails';
 import { zhuozhengPanoramaScenesSource } from '../data/zhuozhengPanoramaScenes';
 import { resolveLocalized, useLanguage } from '../i18n';
+import { panoramaPanToYaw } from '../shared/panoramaView';
 
 const { language } = useLanguage();
 
@@ -188,7 +189,7 @@ watch(
 
     activeHotspotId.value = scene.hotspots?.[0]?.id || '';
     viewState.value = {
-      yaw: ((scene.initialPan ?? 50) - 50) * 1.8,
+      yaw: panoramaPanToYaw(scene.initialPan),
       pitch: scene.initialTilt ?? 0,
       fov: scene.initialFov ?? 70,
     };

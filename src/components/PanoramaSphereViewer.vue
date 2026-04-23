@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as THREE from 'three';
-import { derivePanoramaInitialView } from '../shared/panoramaView';
+import { derivePanoramaInitialView, panoramaPanToYaw } from '../shared/panoramaView';
 
 const props = defineProps({
   scene: {
@@ -26,11 +26,18 @@ const projectedHotspots = ref([]);
 const flatScale = ref(1);
 const flatOffsetX = ref(0);
 const flatOffsetY = ref(0);
-
-const fallbackHotspots = computed(() =>
-  (props.scene?.hotspots || []).filter((item) => Number.isFinite(item?.x) && Number.isFinite(item?.y)),
-);
 const useSphereMode = computed(() => props.scene?.isPanorama === true);
+const hasSphericalHotspots = computed(() =>
+  (props.scene?.hotspots || []).some((item) => Number.isFinite(item?.yaw) && Number.isFinite(item?.pitch)),
+);
+
+const fallbackHotspots = computed(() => {
+  if (useSphereMode.value && hasSphericalHotspots.value) {
+    return [];
+  }
+
+  return (props.scene?.hotspots || []).filter((item) => Number.isFinite(item?.x) && Number.isFinite(item?.y));
+});
 const flatImageStyle = computed(() => ({
   transform: `translate3d(${flatOffsetX.value}%, ${flatOffsetY.value}%, 0) scale(${flatScale.value})`,
   transition: viewerState.isDragging ? 'none' : 'transform 0.24s ease',
@@ -70,11 +77,8 @@ const resetFlatView = () => {
   flatOffsetY.value = 0;
 };
 
-const hasSphericalHotspots = () =>
-  (props.scene?.hotspots || []).some((item) => Number.isFinite(item?.yaw) || Number.isFinite(item?.pitch));
-
 const projectHotspots = () => {
-  if (!camera || !overlayRef.value || !hasSphericalHotspots()) {
+  if (!camera || !overlayRef.value || !hasSphericalHotspots.value) {
     projectedHotspots.value = [];
     return;
   }
@@ -93,14 +97,17 @@ const projectHotspots = () => {
       const radius = 500;
 
       hotspotVector.set(
-        radius * Math.cos(pitch) * Math.sin(yaw),
-        radius * Math.sin(pitch),
         radius * Math.cos(pitch) * Math.cos(yaw),
+        radius * Math.sin(pitch),
+        radius * Math.cos(pitch) * Math.sin(yaw),
       );
 
       projectionVector.copy(hotspotVector).project(camera);
 
-      const visible = projectionVector.z < 1;
+      const visible = projectionVector.z < 1
+        && projectionVector.z > -1
+        && Math.abs(projectionVector.x) <= 1.08
+        && Math.abs(projectionVector.y) <= 1.08;
       const left = (projectionVector.x * 0.5 + 0.5) * width;
       const top = (-projectionVector.y * 0.5 + 0.5) * height;
 
@@ -189,7 +196,7 @@ const resizeRenderer = () => {
 
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setSize(width, height, false);
+  renderer.setSize(width, height);
   projectHotspots();
 };
 
@@ -200,8 +207,16 @@ const updateTexture = async () => {
 
   const texture = await textureLoader.loadAsync(props.scene.image);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
+  const textureWidth = texture.image?.width ?? 0;
+  const textureHeight = texture.image?.height ?? 0;
+  const canUseMipmaps = renderer?.capabilities?.isWebGL2
+    || (THREE.MathUtils.isPowerOfTwo(textureWidth) && THREE.MathUtils.isPowerOfTwo(textureHeight));
+
+  texture.generateMipmaps = canUseMipmaps;
+  texture.minFilter = canUseMipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = Math.min(renderer?.capabilities?.getMaxAnisotropy?.() ?? 1, 8);
+  texture.needsUpdate = true;
 
   if (sphereMesh) {
     const previousMaterial = sphereMesh.material;
@@ -217,7 +232,7 @@ const updateTexture = async () => {
   }
 
   const initialView = getInitialView();
-  viewerState.lon = (initialView.pan - 50) * 1.8;
+  viewerState.lon = panoramaPanToYaw(initialView.pan);
   viewerState.lat = initialView.tilt;
   viewerState.fov = initialView.fov;
   applyCameraRotation();
@@ -235,8 +250,11 @@ const initializeRenderer = async () => {
     antialias: true,
     alpha: true,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileViewport() ? 2 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  renderer.domElement.style.display = 'block';
 
   scene3d = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 1, 1100);

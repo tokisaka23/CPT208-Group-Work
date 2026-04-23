@@ -13,4 +13,5 @@ test('zhuozheng panorama entry keeps the original desktop default and a wider mo
   assert.equal(entryScene.initialMobilePan, 53);
   assert.equal(entryScene.initialMobileTilt, -6);
   assert.equal(entryScene.initialMobileFov, 98);
+  assert.equal(entryScene.hotspots[0].yaw, 184);
 });

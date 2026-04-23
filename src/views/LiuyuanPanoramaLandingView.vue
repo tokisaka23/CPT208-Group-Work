@@ -478,6 +478,83 @@ const backgroundImage = computed(() => liuyuanPanoramaCover || scenes.value[0]?.
   }
 }
 
+@media (max-width: 640px) {
+  .liuyuan-panorama-entry {
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .liuyuan-panorama-entry__topbar {
+    gap: 0.75rem;
+    padding-top: calc(0.9rem + env(safe-area-inset-top, 0px));
+  }
+
+  .liuyuan-panorama-entry__brand {
+    border-radius: 20px;
+    padding: 0.78rem 0.9rem;
+  }
+
+  .liuyuan-panorama-entry__backlink {
+    width: fit-content;
+    min-height: 2.7rem;
+    padding: 0 1rem;
+  }
+
+  .liuyuan-panorama-entry__content {
+    padding-bottom: 2rem;
+  }
+
+  .liuyuan-panorama-entry__hero-panel {
+    border-radius: 26px;
+  }
+
+  .liuyuan-panorama-entry__actions {
+    position: sticky;
+    bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+    z-index: 3;
+    display: grid;
+    padding: 0.3rem;
+    border-radius: 999px;
+    background: rgba(20, 12, 7, 0.52);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .liuyuan-panorama-entry__button {
+    width: 100%;
+    min-height: 3.15rem;
+  }
+
+  .liuyuan-panorama-entry__spotlight-list {
+    display: flex;
+    gap: 0.85rem;
+    margin-right: -1rem;
+    margin-left: -1rem;
+    padding: 0 1rem 0.25rem;
+    overflow-x: auto;
+    scroll-padding-left: 1rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .liuyuan-panorama-entry__spotlight-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .liuyuan-panorama-entry__spotlight {
+    flex: 0 0 min(82vw, 22rem);
+    grid-template-columns: 1fr;
+    scroll-snap-align: start;
+  }
+
+  .liuyuan-panorama-entry__spotlight-image {
+    aspect-ratio: 1.45 / 1;
+  }
+}
+
 @media (max-width: 430px) {
   .liuyuan-panorama-entry__topbar {
     gap: 0.75rem;

@@ -16,7 +16,7 @@ const buildHotspot = ({
   description,
   x,
   y,
-  yaw: Math.round((x - 50) * 3.6),
+  yaw: Math.round(x * 3.6),
   pitch: Math.round((50 - y) * 1.5),
 });
 

@@ -5,6 +5,7 @@ import PanoramaSphereViewer from '../components/PanoramaSphereViewer.vue';
 import { gardenDetailsSource } from '../data/gardenDetails';
 import { liuyuanPanoramaScenesSource } from '../data/liuyuanPanoramaTour';
 import { resolveLocalized, useLanguage } from '../i18n';
+import { derivePanoramaInitialView, panoramaPanToYaw } from '../shared/panoramaView';
 
 const { language } = useLanguage();
 const route = useRoute();
@@ -44,6 +45,7 @@ const pageTextSource = {
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const isMobileViewport = () => typeof window !== 'undefined' && window.innerWidth <= 640;
 
 const pageText = computed(() => resolveLocalized(pageTextSource, language.value));
 const garden = computed(() => resolveLocalized(gardenDetailsSource.liuyuan, language.value));
@@ -56,9 +58,6 @@ const scenes = computed(() =>
       order: localizedScene.order || String(index + 1).padStart(2, '0'),
       hotspots: localizedScene.hotspots || [],
       accent: localizedScene.accent || '#8c5b33',
-      initialPan: localizedScene.initialPan ?? 50,
-      initialTilt: localizedScene.initialTilt ?? 0,
-      initialFov: localizedScene.initialFov ?? 70,
     };
   }),
 );
@@ -176,11 +175,13 @@ watch(
       activeHotspotId.value = '';
       return;
     }
-    activeHotspotId.value = scene.initialHotspotId || scene.hotspots?.[0]?.id || '';
+    const nextHotspotId = scene.initialHotspotId || scene.hotspots?.[0]?.id || '';
+    const initialView = derivePanoramaInitialView(scene, nextHotspotId, isMobileViewport());
+    activeHotspotId.value = nextHotspotId;
     viewState.value = {
-      yaw: ((scene.initialPan ?? 50) - 50) * 1.8,
-      pitch: scene.initialTilt ?? 0,
-      fov: scene.initialFov ?? 70,
+      yaw: panoramaPanToYaw(initialView.pan),
+      pitch: initialView.tilt ?? 0,
+      fov: initialView.fov ?? 70,
     };
   },
   { immediate: true },
@@ -196,8 +197,12 @@ watch(
 );
 
 onMounted(() => {
-  if (typeof window !== 'undefined' && window.innerWidth > 640) {
-    controlsOpen.value = true;
+  if (typeof window !== 'undefined') {
+    if (window.innerWidth > 640) {
+      controlsOpen.value = true;
+    } else {
+      railOpen.value = true;
+    }
   }
 
   if (backgroundAudioRef.value) {
@@ -323,7 +328,7 @@ onBeforeUnmount(() => {
       </transition>
     </aside>
 
-    <footer class="liuyuan-panorama-viewer__bottom">
+    <footer class="liuyuan-panorama-viewer__bottom" :class="{ 'is-open': railOpen }">
       <section class="liuyuan-panorama-viewer__scene-strip-wrap glass">
         <div class="liuyuan-panorama-viewer__scene-strip-head">
           <div class="liuyuan-panorama-viewer__scene-strip-meta">
@@ -771,8 +776,219 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .liuyuan-panorama-viewer__backdrop {
+    filter: none;
+    transform: none;
+    background-position: center;
+    background-size: cover;
+  }
+
+  .liuyuan-panorama-viewer__veil {
+    background:
+      linear-gradient(180deg, rgba(16, 11, 8, 0.02), rgba(16, 11, 8, 0.12) 18%, rgba(16, 11, 8, 0.44) 78%, rgba(16, 11, 8, 0.6)),
+      linear-gradient(90deg, rgba(16, 11, 8, 0.08), transparent 12%, transparent 88%, rgba(16, 11, 8, 0.1));
+  }
+
+  .liuyuan-panorama-viewer__topbar {
+    align-items: stretch;
+    padding: calc(0.65rem + env(safe-area-inset-top, 0px)) 0.65rem 0;
+  }
+
   .liuyuan-panorama-viewer__brand {
     display: none;
+  }
+
+  .liuyuan-panorama-viewer__top-actions {
+    width: 100%;
+  }
+
+  .liuyuan-panorama-viewer__pill,
+  .liuyuan-panorama-viewer__chip-button,
+  .liuyuan-panorama-viewer__utility-toggle,
+  .liuyuan-panorama-viewer__control,
+  .liuyuan-panorama-viewer__rail-toggle {
+    min-height: 2.2rem;
+    padding: 0 0.72rem;
+    font-size: 0.74rem;
+  }
+
+  .liuyuan-panorama-viewer__floating {
+    top: calc(3.55rem + env(safe-area-inset-top, 0px));
+    left: 0.65rem;
+    right: auto;
+    width: min(16rem, calc(100vw - 1.3rem));
+    gap: 0.38rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip,
+  .liuyuan-panorama-viewer__info-card,
+  .liuyuan-panorama-viewer__utility,
+  .liuyuan-panorama-viewer__scene-strip-wrap {
+    border-radius: 24px;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 0.56rem 0.64rem;
+    gap: 0.4rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip-main {
+    min-width: 0;
+    gap: 0.16rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip p {
+    font-size: 0.58rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip h1 {
+    font-size: 1rem;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip-main strong {
+    display: none;
+  }
+
+  .liuyuan-panorama-viewer__scene-chip-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.3rem;
+  }
+
+  .liuyuan-panorama-viewer__info-card {
+    max-width: min(19rem, calc(100vw - 1.3rem));
+    padding: 0.7rem 0.78rem;
+    max-height: min(24vh, 11rem);
+    overflow-y: auto;
+  }
+
+  .liuyuan-panorama-viewer__utility {
+    display: none;
+  }
+
+  .liuyuan-panorama-viewer__utility-head {
+    align-items: center;
+  }
+
+  .liuyuan-panorama-viewer__utility-head p {
+    display: none;
+  }
+
+  .liuyuan-panorama-viewer__utility-head strong {
+    font-size: 0.84rem;
+  }
+
+  .liuyuan-panorama-viewer__utility-head span {
+    flex: 0 0 auto;
+    font-size: 0.76rem;
+  }
+
+  .liuyuan-panorama-viewer__utility-body {
+    gap: 0.5rem;
+  }
+
+  .liuyuan-panorama-viewer__utility-meters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .liuyuan-panorama-viewer__utility-metric {
+    gap: 0.22rem;
+  }
+
+  .liuyuan-panorama-viewer__utility-metric small {
+    font-size: 0.58rem;
+  }
+
+  .liuyuan-panorama-viewer__meter {
+    height: 0.28rem;
+  }
+
+  .liuyuan-panorama-viewer__controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.34rem;
+  }
+
+  .liuyuan-panorama-viewer__hint {
+    display: none;
+  }
+
+  .liuyuan-panorama-viewer__bottom {
+    position: fixed;
+    left: 0.65rem;
+    right: 0.65rem;
+    bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    transition:
+      bottom 0.24s ease,
+      transform 0.24s ease,
+      opacity 0.24s ease;
+  }
+
+  .liuyuan-panorama-viewer__bottom.is-open {
+    bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .liuyuan-panorama-viewer__scene-strip-wrap {
+    padding: 0.42rem 0.48rem;
+    gap: 0.36rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-strip-head {
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-strip-meta {
+    min-width: 0;
+    gap: 0.1rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-strip-meta strong {
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .liuyuan-panorama-viewer__scene-strip-meta small {
+    display: none;
+  }
+
+  .liuyuan-panorama-viewer__scene-strip {
+    grid-auto-columns: minmax(8.4rem, 63vw);
+    padding-bottom: 0.16rem;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .liuyuan-panorama-viewer__scene-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .liuyuan-panorama-viewer__scene-card {
+    min-height: 5.35rem;
+    border-radius: 14px;
+    scroll-snap-align: start;
+  }
+
+  .liuyuan-panorama-viewer__scene-card-image {
+    height: 3rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-card-copy {
+    padding: 0.42rem 0.48rem 0.5rem;
+  }
+
+  .liuyuan-panorama-viewer__scene-card strong {
+    font-size: 0.76rem;
   }
 }
 </style>

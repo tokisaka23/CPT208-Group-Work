@@ -526,6 +526,20 @@ const pageContextLabel = computed(() => {
 const currentJourney = computed(() => routeJourneys.value[route.path] || routeJourneys.value['/']);
 const isImmersivePanoramaRoute = computed(() => route.path.includes('/panorama'));
 
+function isPrimaryNavActive(targetPath) {
+  const groupedRoutes = {
+    '/': ['/', '/pingjiang-road'],
+    '/gardens': ['/gardens', '/zhuozheng', '/liu', '/wangshi', '/tianping'],
+    '/museums': ['/museums', '/suzhou-museum'],
+    '/heritage': ['/heritage'],
+  };
+  const candidates = groupedRoutes[targetPath] || [targetPath];
+
+  return candidates.some((candidate) => (
+    route.path === candidate || (candidate !== '/' && route.path.startsWith(`${candidate}/`))
+  ));
+}
+
 const activeFeature = ref('');
 const activeFeatureInfo = computed(() => featurePanels.value[activeFeature.value] || null);
 const isFeatureOpen = computed(() => Boolean(activeFeature.value));
@@ -561,6 +575,7 @@ const isAiHistoryCollapsed = ref(false);
 const isMobileViewport = ref(false);
 const profileMenuRef = ref(null);
 const serviceMenuRef = ref(null);
+const mobileServiceLayerRef = ref(null);
 const isServiceMenuOpen = ref(false);
 
 const MAX_AI_CONTEXT_MESSAGES = 12;
@@ -1347,8 +1362,13 @@ function handleWindowClickForHeaderMenus(event) {
 
   if (isServiceMenuOpen.value) {
     const serviceRoot = serviceMenuRef.value;
+    const mobileServiceLayer = mobileServiceLayerRef.value;
 
-    if (serviceRoot && !serviceRoot.contains(target)) {
+    if (
+      serviceRoot
+      && !serviceRoot.contains(target)
+      && (!mobileServiceLayer || !mobileServiceLayer.contains(target))
+    ) {
       closeServiceMenu();
     }
   }
@@ -1919,6 +1939,7 @@ watch(
           <span class="brand-copy">
             <strong class="brand-title">{{ appText.brandTitle }}</strong>
             <small class="brand-subtitle">{{ appText.brandSubtitle }}</small>
+            <small class="brand-current-route">{{ pageContextLabel }}</small>
           </span>
         </RouterLink>
 
@@ -1928,6 +1949,7 @@ watch(
             :key="item.to"
             :to="item.to"
             class="primary-nav__item"
+            :class="{ 'is-active': isPrimaryNavActive(item.to) }"
           >
             <span class="primary-nav__icon" aria-hidden="true">
               <svg v-if="item.icon === 'pingjiang'" viewBox="0 0 24 24" fill="none">
@@ -2215,9 +2237,9 @@ watch(
       </div>
     </header>
 
-    <main class="page-body">
+    <main class="page-body" :class="{ 'page-body--immersive': isImmersivePanoramaRoute }">
       <RouterView v-slot="{ Component }">
-        <transition name="fade" mode="out-in" appear>
+        <transition :name="isImmersivePanoramaRoute ? 'fade-immersive' : 'fade'" mode="out-in" appear>
           <component :is="Component" :key="route.fullPath" />
         </transition>
       </RouterView>
@@ -2234,7 +2256,13 @@ watch(
         </section>
 
         <nav class="footer-nav" :aria-label="appText.footerNavAria">
-          <RouterLink v-for="item in navItems" :key="`footer-${item.to}`" :to="item.to" class="footer-link">
+          <RouterLink
+            v-for="item in navItems"
+            :key="`footer-${item.to}`"
+            :to="item.to"
+            class="footer-link"
+            :class="{ 'is-active': isPrimaryNavActive(item.to) }"
+          >
             {{ item.label }}
           </RouterLink>
         </nav>
@@ -2245,7 +2273,7 @@ watch(
       </div>
     </footer>
 
-    <button type="button" class="favorites-fab" :aria-label="appText.openFavoritesAria" @click="openFavorites">
+    <button v-if="!isImmersivePanoramaRoute" type="button" class="favorites-fab" :aria-label="appText.openFavoritesAria" @click="openFavorites">
       <span class="favorites-fab__icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none">
           <path
@@ -2258,6 +2286,213 @@ watch(
       </span>
       <span class="favorites-fab__label">{{ appText.favoritesLabel }}</span>
     </button>
+
+    <nav v-if="!isImmersivePanoramaRoute && isMobileViewport" class="mobile-tabbar" :aria-label="appText.navAria">
+      <RouterLink
+        v-for="item in navItems"
+        :key="`mobile-${item.to}`"
+        :to="item.to"
+        class="mobile-tabbar__item"
+        :class="{ 'is-active': isPrimaryNavActive(item.to) }"
+        :aria-current="isPrimaryNavActive(item.to) ? 'page' : undefined"
+        @click="closeServiceMenu"
+      >
+        <span class="mobile-tabbar__icon" aria-hidden="true">
+          <svg v-if="item.icon === 'pingjiang'" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4.5 11.1 12 4.8l7.5 6.3v8.6a1.45 1.45 0 0 1-1.45 1.45H5.95A1.45 1.45 0 0 1 4.5 19.7v-8.6Z"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M9.45 21.1v-5.5a1 1 0 0 1 1-1h3.1a1 1 0 0 1 1 1v5.5"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M7.75 10.2h8.5"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+          </svg>
+          <svg v-else-if="item.icon === 'gardens'" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M6.5 15.7c6.65.6 10.2-3.35 11-10.6-6.45-.28-11.05 3.2-11 10.6Z"
+              stroke="currentColor"
+              stroke-linejoin="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M6.5 15.7c2.4-3.65 6.15-6.25 11-10.6"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M6.5 15.7V21"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+          </svg>
+          <svg v-else-if="item.icon === 'museums'" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4.65 9.1 12 4.55l7.35 4.55"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M6.55 10.2V19m3.75-8.8V19m3.4-8.8V19m3.75-8.8V19"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.5"
+            />
+            <path
+              d="M5.3 21h13.4"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none">
+            <path
+              d="M8.15 10.35V7.9a3.85 3.85 0 1 1 7.7 0v2.45"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M7.2 10.35h9.6c.67 0 1.2.54 1.2 1.2v7.2c0 1.05-.85 1.9-1.9 1.9H7.9A1.9 1.9 0 0 1 6 18.75v-7.2c0-.66.54-1.2 1.2-1.2Z"
+              stroke="currentColor"
+              stroke-linejoin="round"
+              stroke-width="1.55"
+            />
+            <path
+              d="M12 13.15v4.25"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.55"
+            />
+          </svg>
+        </span>
+        <span class="mobile-tabbar__label">{{ item.label }}</span>
+      </RouterLink>
+
+      <button
+        type="button"
+        class="mobile-tabbar__item mobile-tabbar__item--services"
+        :class="{ 'is-active': isServiceMenuOpen }"
+        :aria-expanded="isServiceMenuOpen"
+        :aria-label="appText.moreServicesAria"
+        @click.stop="toggleServiceMenu"
+      >
+        <span class="mobile-tabbar__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M5.25 8.1c1.7-.8 3.35-1.2 4.95-1.2 1.55 0 3.2.4 4.95 1.2 1.25.55 2.5 1 3.75 1.35"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.45"
+            />
+            <path
+              d="M5.25 15.9c1.7.8 3.35 1.2 4.95 1.2 1.55 0 3.2-.4 4.95-1.2 1.25-.55 2.5-1 3.75-1.35"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.45"
+            />
+            <circle cx="8.2" cy="12" r="1.2" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+            <circle cx="15.8" cy="12" r="1.2" fill="currentColor" />
+          </svg>
+          <span
+            v-if="hasFriendFeatureNotification"
+            class="mobile-tabbar__badge"
+            :aria-label="appText.friendNoticeAria"
+          />
+        </span>
+        <span class="mobile-tabbar__label">{{ appText.moreServices }}</span>
+      </button>
+    </nav>
+
+    <transition name="mobile-sheet">
+      <div
+        v-if="!isImmersivePanoramaRoute && isMobileViewport && isServiceMenuOpen"
+        ref="mobileServiceLayerRef"
+        class="mobile-services-layer"
+        @click.self="closeServiceMenu"
+      >
+        <section class="mobile-services-sheet" role="menu" :aria-label="appText.moreServices">
+          <span class="mobile-services-sheet__handle" aria-hidden="true" />
+          <div class="mobile-services-sheet__header">
+            <p>{{ appText.brandSubtitle }}</p>
+            <h2>{{ appText.moreServices }}</h2>
+          </div>
+          <button
+            v-for="feature in featureButtons"
+            :key="`mobile-service-${feature.id}`"
+            type="button"
+            class="mobile-services-sheet__item"
+            @click="handleSelectFeature(feature.id)"
+          >
+            <span class="mobile-services-sheet__icon" aria-hidden="true">
+              <svg v-if="feature.id === 'friends'" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M8.6 10.2a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Zm6.65 1.35a2.45 2.45 0 1 0 0-4.9 2.45 2.45 0 0 0 0 4.9Zm-10 6.95a4.65 4.65 0 0 1 6.95 0m1.45 0a3.95 3.95 0 0 1 5.65-.8"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.45"
+                />
+              </svg>
+              <svg v-else-if="feature.id === 'ai'" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 4.9 13.6 8.5l3.95.32-3 2.58.9 3.8L12 13.2l-3.45 2.05.9-3.8-3-2.58 3.95-.32L12 4.9Z"
+                  stroke="currentColor"
+                  stroke-linejoin="round"
+                  stroke-width="1.45"
+                />
+                <path
+                  d="M12 3.1v1.35m0 15.1v1.35m7.2-8.9h1.35m-16.1 0H5.8"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="1.2"
+                  opacity="0.6"
+                />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M7.7 7.25h8.6a1.95 1.95 0 0 1 1.95 1.95v5.6a1.95 1.95 0 0 1-1.95 1.95h-5.2l-3.5 2.45v-2.45H7.7a1.95 1.95 0 0 1-1.95-1.95V9.2a1.95 1.95 0 0 1 1.95-1.95Z"
+                  stroke="currentColor"
+                  stroke-linejoin="round"
+                  stroke-width="1.45"
+                />
+                <path
+                  d="M9 10.7h6m-6 2.8h4.2"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-width="1.25"
+                />
+              </svg>
+              <span
+                v-if="feature.id === 'friends' && hasFriendFeatureNotification"
+                class="mobile-services-sheet__badge"
+                :aria-label="appText.friendNoticeAria"
+              />
+            </span>
+            <span class="mobile-services-sheet__copy">
+              <strong>{{ feature.label }}</strong>
+              <small>{{ featurePanels[feature.id]?.description }}</small>
+            </span>
+          </button>
+        </section>
+      </div>
+    </transition>
 
     <transition name="veil" appear>
       <div
@@ -2740,6 +2975,10 @@ watch(
   letter-spacing: 0.18em;
 }
 
+.brand-current-route {
+  display: none;
+}
+
 .primary-nav {
   position: relative;
   flex: 1 1 auto;
@@ -2793,7 +3032,8 @@ watch(
 
 .primary-nav__item:hover,
 .primary-nav__item.router-link-active,
-.primary-nav__item.router-link-exact-active {
+.primary-nav__item.router-link-exact-active,
+.primary-nav__item.is-active {
   color: #2f4e62;
   border-color: rgba(124, 147, 164, 0.24);
   background:
@@ -3318,7 +3558,8 @@ watch(
 }
 
 .footer-link:hover,
-.footer-link.router-link-exact-active {
+.footer-link.router-link-exact-active,
+.footer-link.is-active {
   color: var(--celadon-700);
   transform: translateX(-4px);
 }
@@ -3368,6 +3609,27 @@ watch(
   opacity: 1;
   transform: translateY(0) scale(1);
   filter: blur(0);
+}
+
+.fade-immersive-enter-active,
+.fade-immersive-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.fade-immersive-enter-from,
+.fade-immersive-leave-to {
+  opacity: 0;
+}
+
+.fade-immersive-enter-to,
+.fade-immersive-leave-from {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+.page-body--immersive {
+  padding-bottom: 0 !important;
 }
 
 .veil-enter-active,
@@ -3454,6 +3716,31 @@ watch(
   letter-spacing: 0.12em;
   transform: translateX(0.06em);
   color: rgba(74, 74, 74, 0.9);
+}
+
+.mobile-tabbar,
+.mobile-services-layer {
+  display: none;
+}
+
+.mobile-sheet-enter-active,
+.mobile-sheet-leave-active {
+  transition: opacity 0.24s ease;
+}
+
+.mobile-sheet-enter-active .mobile-services-sheet,
+.mobile-sheet-leave-active .mobile-services-sheet {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mobile-sheet-enter-from,
+.mobile-sheet-leave-to {
+  opacity: 0;
+}
+
+.mobile-sheet-enter-from .mobile-services-sheet,
+.mobile-sheet-leave-to .mobile-services-sheet {
+  transform: translateY(1.4rem);
 }
 
 .dialog {
@@ -4267,11 +4554,317 @@ watch(
 }
 
 @media (max-width: 720px) {
+  .site-header--refined {
+    box-shadow: 0 10px 26px rgba(84, 71, 47, 0.08);
+  }
+
+  .header-inner--refined {
+    min-height: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    display: grid;
+    align-items: center;
+    gap: 0.75rem;
+    padding:
+      calc(0.72rem + env(safe-area-inset-top, 0px))
+      0.95rem
+      0.72rem;
+  }
+
+  .brand-link--refined {
+    min-width: 0;
+  }
+
+  .site-header--refined .brand-seal {
+    width: 2.45rem;
+    border-radius: 0.95rem;
+  }
+
+  .site-header--refined .brand-copy {
+    min-width: 0;
+    gap: 0.02rem;
+  }
+
+  .site-header--refined .brand-title {
+    font-size: 0.96rem;
+  }
+
+  .site-header--refined .brand-subtitle {
+    display: none;
+  }
+
+  .brand-current-route {
+    display: block;
+    max-width: 46vw;
+    color: rgba(91, 83, 71, 0.62);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .primary-nav,
+  .service-menu,
+  .global-footer {
+    display: none;
+  }
+
+  .header-actions--refined {
+    margin-left: 0;
+    gap: 0.5rem;
+  }
+
+  .language-switch--refined,
+  .profile-button--refined {
+    min-height: 2.58rem;
+    border-radius: 999px;
+  }
+
+  .language-switch--refined {
+    padding-left: 0.62rem;
+    padding-right: 0.62rem;
+  }
+
+  .language-switch--refined select {
+    min-width: 4rem;
+    max-width: 5.4rem;
+    font-size: 0.78rem;
+  }
+
+  .profile-button--refined {
+    padding: 0.18rem 0.42rem 0.18rem 0.22rem;
+  }
+
+  .site-header--refined .profile-avatar {
+    width: 1.7rem;
+  }
+
+  .page-body {
+    padding-bottom: calc(6.85rem + env(safe-area-inset-bottom));
+  }
+
   .favorites-fab {
     right: 1rem;
-    bottom: calc(1rem + env(safe-area-inset-bottom));
-    width: 3.95rem;
-    height: 3.95rem;
+    bottom: calc(6.4rem + env(safe-area-inset-bottom));
+    width: 3.68rem;
+    height: 3.68rem;
+    z-index: 62;
+  }
+
+  .favorites-fab__icon {
+    width: 1.64rem;
+    height: 1.64rem;
+  }
+
+  .favorites-fab__label {
+    font-size: 0.56rem;
+  }
+
+  .mobile-tabbar {
+    position: fixed;
+    right: max(0.66rem, env(safe-area-inset-right));
+    bottom: calc(0.62rem + env(safe-area-inset-bottom));
+    left: max(0.66rem, env(safe-area-inset-left));
+    z-index: 65;
+    min-height: 5.05rem;
+    padding: 0.42rem;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.2rem;
+    border-radius: 1.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background:
+      linear-gradient(180deg, rgba(255, 252, 247, 0.95), rgba(242, 236, 227, 0.94)),
+      radial-gradient(circle at 12% 0%, rgba(124, 147, 164, 0.16), transparent 34%);
+    box-shadow:
+      0 22px 50px rgba(54, 45, 35, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-tabbar__item {
+    min-width: 0;
+    min-height: 4.08rem;
+    padding: 0.42rem 0.18rem 0.38rem;
+    border-radius: 1.12rem;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.2rem;
+    color: rgba(76, 69, 59, 0.72);
+    transition:
+      transform 0.22s ease,
+      color 0.22s ease,
+      background-color 0.22s ease,
+      box-shadow 0.22s ease;
+  }
+
+  .mobile-tabbar__item.router-link-active,
+  .mobile-tabbar__item.router-link-exact-active,
+  .mobile-tabbar__item.is-active {
+    color: #2f4e62;
+    background: rgba(235, 243, 246, 0.86);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  }
+
+  .mobile-tabbar__item:active {
+    transform: translateY(1px) scale(0.98);
+  }
+
+  .mobile-tabbar__icon {
+    position: relative;
+    width: 2rem;
+    height: 2rem;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(124, 147, 164, 0.09);
+  }
+
+  .mobile-tabbar__icon svg {
+    width: 1.08rem;
+    height: 1.08rem;
+  }
+
+  .mobile-tabbar__label {
+    max-width: 100%;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1.18;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-tabbar__badge,
+  .mobile-services-sheet__badge {
+    position: absolute;
+    width: 0.58rem;
+    height: 0.58rem;
+    border-radius: 999px;
+    background: #ee4f44;
+    box-shadow: 0 0 0 2px rgba(255, 252, 247, 0.95);
+  }
+
+  .mobile-tabbar__badge {
+    top: 0.12rem;
+    right: 0.12rem;
+  }
+
+  .mobile-services-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    display: grid;
+    align-items: end;
+    padding: 1rem 0.85rem calc(6.15rem + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(28, 25, 23, 0), rgba(28, 25, 23, 0.22));
+    backdrop-filter: blur(4px);
+  }
+
+  .mobile-services-sheet {
+    width: min(100%, 520px);
+    margin: 0 auto;
+    padding: 0.64rem;
+    display: grid;
+    gap: 0.54rem;
+    border-radius: 1.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background:
+      linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(243, 238, 230, 0.96)),
+      radial-gradient(circle at 14% 16%, rgba(124, 147, 164, 0.14), transparent 34%);
+    box-shadow:
+      0 24px 58px rgba(54, 45, 35, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .mobile-services-sheet__handle {
+    justify-self: center;
+    width: 2.8rem;
+    height: 0.26rem;
+    border-radius: 999px;
+    background: rgba(76, 69, 59, 0.22);
+  }
+
+  .mobile-services-sheet__header {
+    display: grid;
+    gap: 0.08rem;
+    padding: 0.2rem 0.38rem 0.34rem;
+  }
+
+  .mobile-services-sheet__header p,
+  .mobile-services-sheet__header h2 {
+    margin: 0;
+  }
+
+  .mobile-services-sheet__header p {
+    color: rgba(91, 83, 71, 0.62);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+  }
+
+  .mobile-services-sheet__header h2 {
+    color: #42372c;
+    font-family: var(--font-serif);
+    font-size: 1.24rem;
+    letter-spacing: 0.08em;
+  }
+
+  .mobile-services-sheet__item {
+    width: 100%;
+    padding: 0.78rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.76rem;
+    border-radius: 1.18rem;
+    border: 1px solid rgba(111, 121, 138, 0.1);
+    background: rgba(255, 252, 247, 0.86);
+    color: #4c453b;
+    text-align: left;
+  }
+
+  .mobile-services-sheet__icon {
+    position: relative;
+    width: 2.42rem;
+    height: 2.42rem;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 1rem;
+    background: rgba(124, 147, 164, 0.1);
+  }
+
+  .mobile-services-sheet__icon svg {
+    width: 1.18rem;
+    height: 1.18rem;
+  }
+
+  .mobile-services-sheet__badge {
+    top: 0.24rem;
+    right: 0.24rem;
+  }
+
+  .mobile-services-sheet__copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .mobile-services-sheet__copy strong {
+    font-size: 0.96rem;
+    font-weight: 700;
+  }
+
+  .mobile-services-sheet__copy small {
+    color: rgba(91, 83, 71, 0.7);
+    font-size: 0.78rem;
+    line-height: 1.42;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .fade-enter-active,

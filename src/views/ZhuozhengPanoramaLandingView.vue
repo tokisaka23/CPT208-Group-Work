@@ -476,12 +476,51 @@ const backgroundImage = computed(() => zhuozhengPanoramaCover || scenes.value[0]
 }
 
 @media (max-width: 640px) {
+  .panorama-entry {
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .panorama-entry__spotlight-grid {
-    grid-template-columns: 1fr;
+    display: flex;
+    grid-template-columns: none;
+    gap: 0.85rem;
+    margin-right: -1rem;
+    margin-left: -1rem;
+    padding: 0 1rem 0.25rem;
+    overflow-x: auto;
+    scroll-padding-left: 1rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .panorama-entry__spotlight-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .panorama-entry__spotlight-card {
+    flex: 0 0 min(82vw, 22rem);
+    scroll-snap-align: start;
   }
 
   .panorama-entry__topbar {
     flex-direction: column;
+    gap: 0.75rem;
+    padding-top: calc(0.9rem + env(safe-area-inset-top, 0px));
+  }
+
+  .panorama-entry__brand {
+    border-radius: 20px;
+    padding: 0.78rem 0.9rem;
+  }
+
+  .panorama-entry__backlink {
+    width: fit-content;
+    min-height: 2.7rem;
+    padding: 0 1rem;
   }
 
   .panorama-entry__copy h1 {
@@ -494,6 +533,48 @@ const backgroundImage = computed(() => zhuozhengPanoramaCover || scenes.value[0]
   .panorama-entry__rail {
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+
+  .panorama-entry__center {
+    place-items: start center;
+    padding-top: 1.25rem;
+    padding-bottom: 2rem;
+  }
+
+  .panorama-entry__copy {
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  .panorama-entry__copy > p,
+  .panorama-entry__copy > h1,
+  .panorama-entry__copy > span {
+    text-align: left;
+  }
+
+  .panorama-entry__actions {
+    position: sticky;
+    bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+    z-index: 3;
+    display: grid;
+    padding: 0.3rem;
+    border-radius: 999px;
+    background: rgba(9, 13, 16, 0.46);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .panorama-entry__button {
+    width: 100%;
+    min-height: 3.15rem;
+  }
+
+  .panorama-entry__spotlights {
+    width: 100%;
+  }
+
+  .panorama-entry__footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>

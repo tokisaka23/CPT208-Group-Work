@@ -1,4 +1,15 @@
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const sanitizePan = (value, fallback = 50) => (Number.isFinite(value) ? value : fallback);
+const MOBILE_FOV_DEFAULT = 74;
+const MOBILE_FOV_MIN = 60;
+const MOBILE_FOV_MAX = 78;
+
+const sanitizeMobileFov = (value, fallback = MOBILE_FOV_DEFAULT) =>
+  clamp(Number.isFinite(value) ? value : fallback, MOBILE_FOV_MIN, MOBILE_FOV_MAX);
+
+export function panoramaPanToYaw(pan = 50) {
+  return sanitizePan(pan, 50) * 3.6;
+}
 
 export function pickPanoramaFocusHotspot(scene, activeHotspotId = '') {
   const hotspots = scene?.hotspots || [];
@@ -13,9 +24,7 @@ export function pickPanoramaFocusHotspot(scene, activeHotspotId = '') {
 
 export function derivePanoramaInitialView(scene, activeHotspotId = '', isMobile = false) {
   const focusHotspot = pickPanoramaFocusHotspot(scene, activeHotspotId);
-  const derivedPan = Number.isFinite(focusHotspot?.x)
-    ? ((focusHotspot.x - 50) * 3.6) / 1.8 + 50
-    : 50;
+  const derivedPan = sanitizePan(focusHotspot?.x, 50);
   const hotspotTilt = Number.isFinite(focusHotspot?.pitch)
     ? focusHotspot.pitch
     : Number.isFinite(focusHotspot?.y)
@@ -24,7 +33,11 @@ export function derivePanoramaInitialView(scene, activeHotspotId = '', isMobile 
   const derivedTilt = isMobile
     ? clamp(hotspotTilt - 2, -20, 16)
     : clamp(hotspotTilt + 1, -16, 22);
-  const derivedFov = isMobile ? 96 : 84;
+  const derivedFov = isMobile ? MOBILE_FOV_DEFAULT : 84;
+  const mobileFov = sanitizeMobileFov(
+    scene?.initialMobileFov ?? scene?.initialFov ?? derivedFov,
+    derivedFov,
+  );
 
   if (!isMobile) {
     return {
@@ -37,6 +50,6 @@ export function derivePanoramaInitialView(scene, activeHotspotId = '', isMobile 
   return {
     pan: scene?.initialMobilePan ?? scene?.initialPan ?? derivedPan,
     tilt: scene?.initialMobileTilt ?? scene?.initialTilt ?? derivedTilt,
-    fov: scene?.initialMobileFov ?? scene?.initialFov ?? derivedFov,
+    fov: mobileFov,
   };
 }
