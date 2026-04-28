@@ -1,7 +1,9 @@
 ﻿<script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Button, CellGroup, Field, showFailToast, showSuccessToast } from 'vant';
+import { useLanguage } from '../i18n';
 import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase/clientRuntime';
+import { formatUgcSubmitMessage, getUgcSubmitText } from './ugcSubmitI18n.js';
 
 const props = defineProps({
   uploaderId: {
@@ -11,6 +13,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['submitted']);
+const { language } = useLanguage();
+const text = computed(() => getUgcSubmitText(language.value));
 
 const MAX_IMAGE_SIZE_MB = 1;
 const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
@@ -27,7 +31,8 @@ const form = reactive({
 
 const submitting = ref(false);
 const locating = ref(false);
-const locationText = ref('');
+const locationStatus = ref('');
+const locationText = computed(() => (locationStatus.value ? text.value[locationStatus.value] : ''));
 const submitResult = ref('');
 const selectedImage = ref(null);
 const imagePreviewUrl = ref('');
@@ -79,7 +84,7 @@ function loadImageFromUrl(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('图片读取失败'));
+    image.onerror = () => reject(new Error(text.value.imageLoadFailed));
     image.src = url;
   });
 }
@@ -104,14 +109,14 @@ async function compressImage(file) {
 
     const context = canvas.getContext('2d');
     if (!context) {
-      throw new Error('当前浏览器不支持图片压缩');
+      throw new Error(text.value.browserNoCompress);
     }
 
     context.drawImage(image, 0, 0, targetWidth, targetHeight);
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', COMPRESS_QUALITY));
     if (!blob) {
-      throw new Error('图片压缩失败');
+      throw new Error(text.value.compressFailed);
     }
 
     return new File([blob], `compressed-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -162,7 +167,7 @@ function endCrop() {
 
 function openCropper() {
   if (!selectedImage.value) {
-    showFailToast('请先选择图片');
+    showFailToast(text.value.selectImageFirst);
     return;
   }
 
@@ -177,7 +182,7 @@ async function applyCrop() {
   }
 
   if (cropSelection.width < 8 || cropSelection.height < 8) {
-    showFailToast('请先框选裁剪范围');
+    showFailToast(text.value.selectCropArea);
     return;
   }
 
@@ -192,7 +197,7 @@ async function applyCrop() {
 
   const context = canvas.getContext('2d');
   if (!context) {
-    showFailToast('当前浏览器不支持图片裁剪');
+    showFailToast(text.value.browserNoCrop);
     return;
   }
 
@@ -210,13 +215,13 @@ async function applyCrop() {
 
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
   if (!blob) {
-    showFailToast('裁剪失败，请重试');
+    showFailToast(text.value.cropFailed);
     return;
   }
 
   const croppedFile = new File([blob], `cropped-${Date.now()}.jpg`, { type: 'image/jpeg' });
   if (croppedFile.size > MAX_IMAGE_SIZE_BYTES) {
-    showFailToast('裁剪后的图片仍超过 1MB，请重新框选');
+    showFailToast(text.value.croppedTooLarge);
     return;
   }
 
@@ -224,7 +229,7 @@ async function applyCrop() {
   selectedImage.value = croppedFile;
   imagePreviewUrl.value = URL.createObjectURL(croppedFile);
   closeCrop();
-  showSuccessToast('已应用裁剪');
+  showSuccessToast(text.value.cropApplied);
 }
 
 function handleImageChange(event) {
@@ -237,7 +242,7 @@ function handleImageChange(event) {
     }
 
     if (!file.type.startsWith('image/')) {
-      showFailToast('请选择图片文件');
+      showFailToast(text.value.chooseImageFile);
       event.target.value = '';
       clearSelectedImage();
       return;
@@ -248,9 +253,9 @@ function handleImageChange(event) {
     if (file.size > COMPRESS_THRESHOLD_BYTES) {
       try {
         nextFile = await compressImage(file);
-        showSuccessToast('图片已自动压缩');
+        showSuccessToast(text.value.compressed);
       } catch (error) {
-        showFailToast(error.message || '图片压缩失败');
+        showFailToast(error.message || text.value.compressFailed);
         event.target.value = '';
         clearSelectedImage();
         return;
@@ -258,7 +263,7 @@ function handleImageChange(event) {
     }
 
     if (nextFile.size > MAX_IMAGE_SIZE_BYTES) {
-      showFailToast('图片压缩后仍超过 1MB，请换一张图片');
+      showFailToast(text.value.compressedStillTooLarge);
       event.target.value = '';
       clearSelectedImage();
       return;
@@ -272,41 +277,41 @@ function handleImageChange(event) {
 
 function getCurrentLocation() {
   if (!navigator.geolocation) {
-    showFailToast('当前浏览器不支持定位');
+    showFailToast(text.value.geolocationUnsupported);
     return;
   }
 
   locating.value = true;
-  locationText.value = '正在获取当前位置...';
+  locationStatus.value = 'locating';
 
   navigator.geolocation.getCurrentPosition(
     ({ coords }) => {
       form.lat = coords.latitude;
       form.lng = coords.longitude;
       locating.value = false;
-      locationText.value = '';
-      showSuccessToast('定位成功');
+      locationStatus.value = '';
+      showSuccessToast(text.value.locationSuccess);
     },
     (error) => {
       locating.value = false;
-      locationText.value = '定位失败，请检查浏览器位置权限';
+      locationStatus.value = 'locationFailedPermission';
 
       if (error.code === 1) {
-        showFailToast('你拒绝了位置权限');
+        showFailToast(text.value.locationDenied);
         return;
       }
 
       if (error.code === 2) {
-        showFailToast('暂时无法获取你的位置');
+        showFailToast(text.value.locationUnavailable);
         return;
       }
 
       if (error.code === 3) {
-        showFailToast('定位超时，请重试');
+        showFailToast(text.value.locationTimeout);
         return;
       }
 
-      showFailToast('定位失败');
+      showFailToast(text.value.locationFailed);
     },
     {
       enableHighAccuracy: true,
@@ -322,46 +327,46 @@ function resetForm() {
   form.lat = null;
   form.lng = null;
   submitResult.value = '';
-  locationText.value = '';
+  locationStatus.value = '';
   clearSelectedImage();
   getCurrentLocation();
 }
 
 async function handleSubmit() {
   if (!isSupabaseConfigured()) {
-    showFailToast('未检测到 Supabase 配置，请检查 .env.local');
+    showFailToast(text.value.supabaseMissing);
     return;
   }
 
   if (!canSubmit.value) {
-    showFailToast('请先登录后再上传');
+    showFailToast(text.value.loginRequired);
     return;
   }
 
   if (!form.name.trim()) {
-    showFailToast('请输入景点名称');
+    showFailToast(text.value.nameRequired);
     return;
   }
 
   if (!form.description.trim()) {
-    showFailToast('请输入景点描述');
+    showFailToast(text.value.descriptionRequired);
     return;
   }
 
   if (!selectedImage.value) {
-    showFailToast('请上传景点图片');
+    showFailToast(text.value.imageRequired);
     return;
   }
 
   if (form.lat === null || form.lng === null) {
-    showFailToast('正在等待定位结果');
+    showFailToast(text.value.waitingLocation);
     return;
   }
 
   const lat = Number(form.lat);
   const lng = Number(form.lng);
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    showFailToast('定位结果无效，请刷新重试');
+    showFailToast(text.value.invalidLocation);
     return;
   }
 
@@ -380,8 +385,8 @@ async function handleSubmit() {
 
   if (uploadError) {
     submitting.value = false;
-    submitResult.value = `图片上传失败: ${uploadError.message}`;
-    showFailToast('图片上传失败');
+    submitResult.value = formatUgcSubmitMessage(text.value.uploadFailedResult, { message: uploadError.message });
+    showFailToast(text.value.uploadFailed);
     return;
   }
 
@@ -406,13 +411,13 @@ async function handleSubmit() {
   submitting.value = false;
 
   if (error) {
-    submitResult.value = `提交失败: ${error.message}`;
-    showFailToast('提交失败');
+    submitResult.value = formatUgcSubmitMessage(text.value.submitFailedResult, { message: error.message });
+    showFailToast(text.value.submitFailed);
     return;
   }
 
-  submitResult.value = `提交成功: ${data.name}`;
-  showSuccessToast('提交成功');
+  submitResult.value = formatUgcSubmitMessage(text.value.submitSuccessResult, { name: data.name });
+  showSuccessToast(text.value.submitSuccess);
   emit('submitted', data);
   resetForm();
 }
@@ -429,19 +434,19 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="ugc-submit">
-    <h2 class="title">上传新景点</h2>
-    <p class="subtitle">页面加载后会自动获取当前位置，提交后写入 `ugc_pois`。</p>
-    <p v-if="!canSubmit" class="auth-note">当前未登录，无法提交景点。</p>
+    <h2 class="title">{{ text.title }}</h2>
+    <p class="subtitle">{{ text.subtitle }}</p>
+    <p v-if="!canSubmit" class="auth-note">{{ text.authNote }}</p>
 
     <CellGroup inset>
-      <Field v-model="form.name" label="景点名" placeholder="例如：平江路小众茶馆" />
+      <Field v-model="form.name" :label="text.nameLabel" :placeholder="text.namePlaceholder" />
       <Field
         v-model="form.description"
-        label="描述"
+        :label="text.descriptionLabel"
         type="textarea"
         rows="3"
         autosize
-        placeholder="请填写景点描述"
+        :placeholder="text.descriptionPlaceholder"
       />
     </CellGroup>
 
@@ -449,9 +454,9 @@ onBeforeUnmount(() => {
 
     <div class="image-upload">
       <label class="upload-card" for="ugc-image-input">
-        <span class="upload-title">{{ selectedImage ? '更换图片' : '上传图片' }}</span>
+        <span class="upload-title">{{ selectedImage ? text.replaceImage : text.uploadImage }}</span>
         <span class="upload-hint">
-          {{ selectedImage ? selectedImage.name : '选择一张景点照片作为预览图（1MB以内，超过将自动压缩）' }}
+          {{ selectedImage ? selectedImage.name : text.uploadHint }}
         </span>
       </label>
       <input
@@ -464,16 +469,16 @@ onBeforeUnmount(() => {
       />
 
       <div v-if="imagePreviewUrl" class="preview-wrap">
-        <img :src="imagePreviewUrl" alt="景点预览图" class="image-preview" />
+        <img :src="imagePreviewUrl" :alt="text.previewAlt" class="image-preview" />
         <div class="preview-actions">
-          <Button plain type="primary" size="small" @click="openCropper">框选裁剪</Button>
-          <Button plain type="default" size="small" @click="clearSelectedImage">撤回图片</Button>
+          <Button plain type="primary" size="small" @click="openCropper">{{ text.cropButton }}</Button>
+          <Button plain type="default" size="small" @click="clearSelectedImage">{{ text.removeImage }}</Button>
         </div>
       </div>
     </div>
 
     <Button block type="primary" :loading="submitting || locating" :disabled="!canSubmit" @click="handleSubmit">
-      提交景点
+      {{ text.submitButton }}
     </Button>
 
     <p v-if="submitResult" class="result">{{ submitResult }}</p>
@@ -487,7 +492,7 @@ onBeforeUnmount(() => {
           @pointermove.prevent="updateCrop"
           @pointerleave="endCrop"
         >
-          <img ref="cropImageRef" :src="cropSourceUrl" alt="裁剪图片" class="crop-image" draggable="false" />
+          <img ref="cropImageRef" :src="cropSourceUrl" :alt="text.cropImageAlt" class="crop-image" draggable="false" />
           <div
             v-if="cropSelection.width > 0 && cropSelection.height > 0"
             class="crop-box"
@@ -499,10 +504,10 @@ onBeforeUnmount(() => {
             }"
           />
         </div>
-        <p class="crop-tip">在图片上拖动鼠标框选要保留的区域。</p>
+        <p class="crop-tip">{{ text.cropTip }}</p>
         <div class="crop-actions">
-          <Button plain type="default" @click="closeCrop">取消</Button>
-          <Button type="primary" @click="applyCrop">应用裁剪</Button>
+          <Button plain type="default" @click="closeCrop">{{ text.cancel }}</Button>
+          <Button type="primary" @click="applyCrop">{{ text.applyCrop }}</Button>
         </div>
       </div>
     </div>

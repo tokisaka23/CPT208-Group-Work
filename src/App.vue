@@ -156,7 +156,7 @@ const appTextSource = {
   featurePanels: {
     friends: {
       label: { zh: '好友同游', en: 'Travel Together', ja: '友だちと巡る', ko: '친구와 함께' },
-      eyebrow: 'Travel Together',
+      eyebrow: { zh: '好友同游', en: 'Travel Together', ja: '友だちと巡る', ko: '친구와 함께' },
       description: {
         zh: '把当前页面、集合点和慢游节奏快速同步给朋友，适合同一条路线结伴看。',
         en: 'Sync the current page, meeting point, and travel rhythm with friends when you want to explore the same route together.',
@@ -166,7 +166,7 @@ const appTextSource = {
     },
     ai: {
       label: { zh: 'AI 伴游', en: 'AI Guide', ja: 'AI ガイド', ko: 'AI 가이드' },
-      eyebrow: 'Smart Guide',
+      eyebrow: { zh: '智能导览', en: 'Smart Guide', ja: 'スマートガイド', ko: '스마트 가이드' },
       description: {
         zh: '根据你当前打开的页面给出导览建议，也可以直接问它先看哪里、怎么走更顺。',
         en: 'Get guidance based on the page you are viewing now, or ask directly where to start and how to walk more smoothly.',
@@ -176,7 +176,7 @@ const appTextSource = {
     },
     upload: {
       label: { zh: '上传照片', en: 'Photo Upload', ja: '写真アップロード', ko: '사진 업로드' },
-      eyebrow: 'Photo Upload',
+      eyebrow: { zh: '照片上传', en: 'Photo Upload', ja: '写真アップロード', ko: '사진 업로드' },
       description: {
         zh: '把你在园林里的随手拍传上来，上传成功后会在这里回显。',
         en: 'Upload a photo from your walk. After it succeeds, the image will preview here.',

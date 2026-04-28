@@ -40,3 +40,12 @@ test('App keeps immersive panorama routes free from route blur and floating glob
   assert.match(source, /\.fade-immersive-enter-active,/);
   assert.match(source, /\.page-body--immersive\s*\{/);
 });
+
+test('App upload feature panel localizes service eyebrow copy', async () => {
+  const source = await readFile(new URL('./App.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /upload:\s*\{[\s\S]*?eyebrow:\s*\{\s*zh: '照片上传'/);
+  assert.match(source, /upload:\s*\{[\s\S]*?en: 'Photo Upload'/);
+  assert.match(source, /ai:\s*\{[\s\S]*?eyebrow:\s*\{\s*zh: '智能导览'/);
+  assert.match(source, /friends:\s*\{[\s\S]*?eyebrow:\s*\{\s*zh: '好友同游'/);
+});
