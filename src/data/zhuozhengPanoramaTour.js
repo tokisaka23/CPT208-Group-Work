@@ -1,4 +1,17 @@
-﻿const panoramaAsset = (fileName) => new URL(`../../image/拙政园1774850195997/${fileName}`, import.meta.url).href;
+﻿const panoramaAssetModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../image/拙政园1774850195997/*.webp', {
+    eager: true,
+    import: 'default',
+  })
+  : {};
+
+const panoramaAsset = (fileName) => {
+  const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
+  return (
+    panoramaAssetModules[`../../image/拙政园1774850195997/${webpFileName}`] ||
+    new URL(/* @vite-ignore */ `../../image/拙政园1774850195997/${webpFileName}`, import.meta.url).href
+  );
+};
 
 const buildHotspot = ({
   id,

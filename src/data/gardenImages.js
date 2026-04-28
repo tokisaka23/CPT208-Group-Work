@@ -1,9 +1,11 @@
 const localGardenAssetEntries = import.meta.glob(
   [
-    '../assets/gardens/*.jpg',
-    '../assets/gardens/*.jpeg',
+    '../assets/gardens/suzhoumuseum2.jpg',
+    '../assets/gardens/tianpingshan1.jpg',
     '../assets/gardens/*.png',
     '../assets/gardens/*.webp',
+    '!../assets/gardens/suzhoumuseum2.webp',
+    '!../assets/gardens/tianpingshan1.webp',
     '../assets/gardens/*.avif',
   ],
   {

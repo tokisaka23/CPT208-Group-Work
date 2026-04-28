@@ -9,7 +9,7 @@ import { derivePanoramaInitialView, panoramaPanToYaw } from '../shared/panoramaV
 
 const { language } = useLanguage();
 const route = useRoute();
-const panoramaMusicSrc = new URL('../../music/03. Crescent.flac', import.meta.url).href;
+const panoramaMusicSrc = new URL('../../music/03. Crescent.mp3', import.meta.url).href;
 const panoramaMusicVolume = 0.25;
 
 const pageTextSource = {

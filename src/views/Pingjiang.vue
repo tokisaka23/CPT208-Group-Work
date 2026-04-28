@@ -3,29 +3,29 @@ import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import InkCard from '../components/InkCard.vue';
 import { useSiteContent } from '../data/siteContent';
-import zhuozhengyuanHeroImage from '../assets/gardens/zhuozhengyuan.jpg';
-import zhuozhengyuan1Image from '../assets/gardens/zhuozhengyuan1.jpg';
-import liuyuan1Image from '../assets/gardens/liuyuan1.jpg';
-import liuyuan2Image from '../assets/gardens/liuyuan2.jpg';
-import liuyuan3Image from '../assets/gardens/liuyuan3.jpg';
-import pingjiangroadHeroImage from '../assets/gardens/pingjiangroad-hero.jpg';
-import suzhoumuseumHeroImage from '../assets/gardens/suzhoumuseum-hero.jpg';
-import tianpingshanHeroImage from '../assets/gardens/tianpingshan-hero.jpg';
-import wangshiyuan1Image from '../assets/gardens/wangshiyuan1.jpg';
-import wangshiyuan2Image from '../assets/gardens/wangshiyuan2.jpg';
-import wangshiyuan3Image from '../assets/gardens/wangshiyuan3.jpg';
-import suxianrouyuebingImage from '../assets/seasonal/suxianrouyuebing.jpg';
-import jiuniangbingImage from '../assets/seasonal/jiuniangbing.jpg';
-import biluoxiarenImage from '../assets/seasonal/biluoxiaren.jpg';
-import sushilvdoutangImage from '../assets/seasonal/sushilvdoutang.jpg';
-import fengzhendaroumianImage from '../assets/seasonal/fengzhendaroumian.jpg';
-import jitoumitangshuiImage from '../assets/seasonal/jitoumitangshui.jpg';
-import xiefenxiaolongImage from '../assets/seasonal/xiefenxiaolong.jpg';
-import tangchaoliziImage from '../assets/seasonal/tangchaolizi.jpg';
-import guihuatangouImage from '../assets/seasonal/guihuatangou.jpg';
-import cangshuyangrouImage from '../assets/seasonal/cangshuyangrou.jpg';
-import chidouxiaoyuanziImage from '../assets/seasonal/chidouxiaoyuanzi.jpg';
-import shengjianTangbaoImage from '../assets/seasonal/shengjian-tangbao.jpg';
+import zhuozhengyuanHeroImage from '../assets/gardens/zhuozhengyuan.webp';
+import zhuozhengyuan1Image from '../assets/gardens/zhuozhengyuan1.webp';
+import liuyuan1Image from '../assets/gardens/liuyuan1.webp';
+import liuyuan2Image from '../assets/gardens/liuyuan2.webp';
+import liuyuan3Image from '../assets/gardens/liuyuan3.webp';
+import pingjiangroadHeroImage from '../assets/gardens/pingjiangroad-hero.webp';
+import suzhoumuseumHeroImage from '../assets/gardens/suzhoumuseum-hero.webp';
+import tianpingshanHeroImage from '../assets/gardens/tianpingshan-hero.webp';
+import wangshiyuan1Image from '../assets/gardens/wangshiyuan1.webp';
+import wangshiyuan2Image from '../assets/gardens/wangshiyuan2.webp';
+import wangshiyuan3Image from '../assets/gardens/wangshiyuan3.webp';
+import suxianrouyuebingImage from '../assets/seasonal/suxianrouyuebing.webp';
+import jiuniangbingImage from '../assets/seasonal/jiuniangbing.webp';
+import biluoxiarenImage from '../assets/seasonal/biluoxiaren.webp';
+import sushilvdoutangImage from '../assets/seasonal/sushilvdoutang.webp';
+import fengzhendaroumianImage from '../assets/seasonal/fengzhendaroumian.webp';
+import jitoumitangshuiImage from '../assets/seasonal/jitoumitangshui.webp';
+import xiefenxiaolongImage from '../assets/seasonal/xiefenxiaolong.webp';
+import tangchaoliziImage from '../assets/seasonal/tangchaolizi.webp';
+import guihuatangouImage from '../assets/seasonal/guihuatangou.webp';
+import cangshuyangrouImage from '../assets/seasonal/cangshuyangrou.webp';
+import chidouxiaoyuanziImage from '../assets/seasonal/chidouxiaoyuanzi.webp';
+import shengjianTangbaoImage from '../assets/seasonal/shengjian-tangbao.webp';
 
 const { chapterCards, pingjiangRhythms } = useSiteContent();
 
@@ -440,7 +440,7 @@ const activeSeason = computed(() => {
           class="season-card"
         >
           <div class="season-card__media">
-            <img :src="item.image" :alt="item.name" class="season-card__image" />
+            <img :src="item.image" :alt="item.name" class="season-card__image" loading="lazy" decoding="async" />
           </div>
           <div class="season-card__head">
             <span>{{ item.tag }}</span>
@@ -467,7 +467,7 @@ const activeSeason = computed(() => {
             class="season-card season-card--food"
           >
             <div class="season-card__media season-card__media--food">
-              <img :src="item.image" :alt="item.name" class="season-card__image" />
+              <img :src="item.image" :alt="item.name" class="season-card__image" loading="lazy" decoding="async" />
             </div>
             <div class="season-card__head">
               <span>{{ item.tag }}</span>

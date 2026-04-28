@@ -1,4 +1,17 @@
-const panoramaAsset = (fileName) => new URL(`../../image/苏州园林留园/${fileName}`, import.meta.url).href;
+const panoramaAssetModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../image/苏州园林留园/*.webp', {
+    eager: true,
+    import: 'default',
+  })
+  : {};
+
+const panoramaAsset = (fileName) => {
+  const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
+  return (
+    panoramaAssetModules[`../../image/苏州园林留园/${webpFileName}`] ||
+    new URL(/* @vite-ignore */ `../../image/苏州园林留园/${webpFileName}`, import.meta.url).href
+  );
+};
 
 const buildHotspot = ({
   id,

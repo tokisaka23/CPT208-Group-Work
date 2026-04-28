@@ -2,16 +2,16 @@
 import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import InkCard from '../components/InkCard.vue';
-import zhuozhengyuanHeroImage from '../assets/gardens/zhuozhengyuan.jpg';
-import liuyuan1Image from '../assets/gardens/liuyuan1.jpg';
-import pingjiangroadHeroImage from '../assets/gardens/pingjiangroad-hero.jpg';
-import suzhoumuseumHeroImage from '../assets/gardens/suzhoumuseum-hero.jpg';
-import tianpingshanHeroImage from '../assets/gardens/tianpingshan-hero.jpg';
-import wangshiyuan1Image from '../assets/gardens/wangshiyuan1.jpg';
-import suxianrouyuebingImage from '../assets/seasonal/suxianrouyuebing.jpg';
-import sushilvdoutangImage from '../assets/seasonal/sushilvdoutang.jpg';
-import xiefenxiaolongImage from '../assets/seasonal/xiefenxiaolong.jpg';
-import cangshuyangrouImage from '../assets/seasonal/cangshuyangrou.jpg';
+import zhuozhengyuanHeroImage from '../assets/gardens/zhuozhengyuan.webp';
+import liuyuan1Image from '../assets/gardens/liuyuan1.webp';
+import pingjiangroadHeroImage from '../assets/gardens/pingjiangroad-hero.webp';
+import suzhoumuseumHeroImage from '../assets/gardens/suzhoumuseum-hero.webp';
+import tianpingshanHeroImage from '../assets/gardens/tianpingshan-hero.webp';
+import wangshiyuan1Image from '../assets/gardens/wangshiyuan1.webp';
+import suxianrouyuebingImage from '../assets/seasonal/suxianrouyuebing.webp';
+import sushilvdoutangImage from '../assets/seasonal/sushilvdoutang.webp';
+import xiefenxiaolongImage from '../assets/seasonal/xiefenxiaolong.webp';
+import cangshuyangrouImage from '../assets/seasonal/cangshuyangrou.webp';
 import { resolveLocalized, useLanguage } from '../i18n';
 
 const { language } = useLanguage();
@@ -133,21 +133,21 @@ const chapterCards = computed(() => pageText.value.chapterCards);
       </div>
       <div class="season-grid">
         <article class="season-card">
-          <img :src="activeSeason.routeImage" :alt="activeSeason.label" />
+          <img :src="activeSeason.routeImage" :alt="activeSeason.label" loading="lazy" decoding="async" />
           <div>
             <strong>{{ activeSeason.primary.label }}</strong>
             <p>{{ activeSeason.lead }}</p>
           </div>
         </article>
         <article class="season-card">
-          <img :src="activeSeason.streetImage" :alt="activeSeason.secondary.label" />
+          <img :src="activeSeason.streetImage" :alt="activeSeason.secondary.label" loading="lazy" decoding="async" />
           <div>
             <strong>{{ activeSeason.secondary.label }}</strong>
             <p>{{ activeSeason.routeTitle }}</p>
           </div>
         </article>
         <article class="season-card">
-          <img :src="activeSeason.foodImage" :alt="pageText.foodEyebrow" />
+          <img :src="activeSeason.foodImage" :alt="pageText.foodEyebrow" loading="lazy" decoding="async" />
           <div>
             <strong>{{ activeSeason.foodTitle }}</strong>
             <p>{{ activeSeason.foodText }}</p>

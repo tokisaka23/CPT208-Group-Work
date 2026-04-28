@@ -1,6 +1,6 @@
 import { computed } from 'vue';
 import { currentLanguage, resolveLocalized } from '../i18n/index.js';
-import kunquMuseumImage from '../assets/kunqu-museum.jpg';
+import kunquMuseumImage from '../assets/kunqu-museum.webp';
 import { resolveGardenCardImage } from './gardenImages';
 
 const siteContentSource = {

@@ -1,4 +1,17 @@
-const panoramaAsset = (fileName) => new URL(`../../image/网师园/${fileName}`, import.meta.url).href;
+const panoramaAssetModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../image/网师园/*.webp', {
+    eager: true,
+    import: 'default',
+  })
+  : {};
+
+const panoramaAsset = (fileName) => {
+  const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
+  return (
+    panoramaAssetModules[`../../image/网师园/${webpFileName}`] ||
+    new URL(/* @vite-ignore */ `../../image/网师园/${webpFileName}`, import.meta.url).href
+  );
+};
 
 const text = (zh, en) => ({ zh, en });
 
