@@ -68,3 +68,19 @@ test('panorama entry and roam views wire image error fallbacks', async () => {
     assert.match(source, /@error=/);
   }
 });
+
+test('panorama entry and roam thumbnails prefer jpg display assets', async () => {
+  for (const view of entryViews) {
+    const source = await readFile(new URL(view.file, import.meta.url), 'utf8');
+
+    assert.match(source, /CoverFallback \|\| scenes\.value\[0\]\?\.fallbackImage/);
+    assert.match(source, /:src="spot\.fallbackImage \|\| spot\.image"/);
+  }
+
+  for (const view of roamViews) {
+    const source = await readFile(new URL(view.file, import.meta.url), 'utf8');
+
+    assert.match(source, /url\(\$\{activeScene\.value\.fallbackImage\}\), url\(\$\{activeScene\.value\?\.image \|\| garden\.value\.heroImage\}\)/);
+    assert.match(source, /:src="scene\.fallbackThumbnail \|\| scene\.fallbackImage \|\| scene\.thumbnail \|\| scene\.image"/);
+  }
+});

@@ -85,8 +85,8 @@ const pageText = computed(() => resolveLocalized(pageTextSource, language.value)
 const scenes = computed(() => zhuozhengPanoramaScenesSource.map((scene) => resolveLocalized(scene, language.value)));
 const spotlights = computed(() => zhuozhengPanoramaSpotlights.map((item) => resolveLocalized(item, language.value)));
 const routePreview = computed(() => scenes.value.slice(0, 5));
-const backgroundImage = computed(() => zhuozhengPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
-const backgroundImageFallback = computed(() => zhuozhengPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const backgroundImage = computed(() => zhuozhengPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const backgroundImageFallback = computed(() => zhuozhengPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
 const handleImageError = (event, fallbackImage) => {
   applyImageFallback(event, fallbackImage);
 };
@@ -147,11 +147,11 @@ const handleImageError = (event, fallbackImage) => {
               class="panorama-entry__spotlight-card"
             >
               <img
-                :src="spot.image"
+                :src="spot.fallbackImage || spot.image"
                 :alt="spot.title"
                 loading="lazy"
                 class="panorama-entry__spotlight-image"
-                @error="handleImageError($event, spot.fallbackImage)"
+                @error="handleImageError($event, spot.image)"
               />
               <div class="panorama-entry__spotlight-copy">
                 <strong>{{ spot.title }}</strong>

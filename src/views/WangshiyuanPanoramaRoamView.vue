@@ -89,7 +89,7 @@ const progressLabel = computed(() => {
 });
 const activeSceneBackdropStyle = computed(() => ({
   backgroundImage: activeScene.value?.fallbackImage
-    ? `url(${activeScene.value?.image || garden.value.heroImage}), url(${activeScene.value.fallbackImage})`
+    ? `url(${activeScene.value.fallbackImage}), url(${activeScene.value?.image || garden.value.heroImage})`
     : `url(${activeScene.value?.image || garden.value.heroImage})`,
 }));
 const angleMeterRatio = computed(() => `${clamp((normalizedYaw.value / 360) * 100, 0, 100)}%`);
@@ -359,11 +359,11 @@ onBeforeUnmount(() => {
               @click="setActiveScene(index)"
             >
               <img
-                :src="scene.thumbnail || scene.image"
+                :src="scene.fallbackThumbnail || scene.fallbackImage || scene.thumbnail || scene.image"
                 :alt="scene.title"
                 class="wangshi-panorama-viewer__scene-card-image"
                 loading="lazy"
-                @error="handleImageError($event, scene.fallbackThumbnail || scene.fallbackImage)"
+                @error="handleImageError($event, scene.thumbnail || scene.image)"
               />
               <div class="wangshi-panorama-viewer__scene-card-copy">
                 <span>{{ scene.order }}</span>

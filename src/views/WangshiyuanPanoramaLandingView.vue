@@ -42,8 +42,8 @@ const pageText = computed(() => resolveLocalized(pageTextSource, language.value)
 const scenes = computed(() => wangshiyuanPanoramaScenesSource.map((scene) => resolveLocalized(scene, language.value)));
 const spotlights = computed(() => wangshiyuanPanoramaSpotlights.map((item) => resolveLocalized(item, language.value)));
 const routePreview = computed(() => scenes.value.slice(0, 6));
-const backgroundImage = computed(() => wangshiyuanPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
-const backgroundImageFallback = computed(() => wangshiyuanPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const backgroundImage = computed(() => wangshiyuanPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const backgroundImageFallback = computed(() => wangshiyuanPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
 const handleImageError = (event, fallbackImage) => {
   applyImageFallback(event, fallbackImage);
 };
@@ -124,11 +124,11 @@ const handleImageError = (event, fallbackImage) => {
               class="wangshi-panorama-entry__spotlight"
             >
               <img
-                :src="spot.image"
+                :src="spot.fallbackImage || spot.image"
                 :alt="spot.title"
                 loading="lazy"
                 class="wangshi-panorama-entry__spotlight-image"
-                @error="handleImageError($event, spot.fallbackImage)"
+                @error="handleImageError($event, spot.image)"
               />
               <div class="wangshi-panorama-entry__spotlight-copy">
                 <strong>{{ spot.title }}</strong>
