@@ -12,6 +12,10 @@
     {
       "source": "/api/groups/:action",
       "destination": "/api/groups?action=:action"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/"
     }
   ]
 }

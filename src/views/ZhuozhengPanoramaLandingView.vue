@@ -4,10 +4,12 @@ import { RouterLink } from 'vue-router';
 import { gardenDetailsSource } from '../data/gardenDetails';
 import {
   zhuozhengPanoramaCover,
+  zhuozhengPanoramaCoverFallback,
   zhuozhengPanoramaScenesSource,
   zhuozhengPanoramaSpotlights,
 } from '../data/zhuozhengPanoramaTour';
 import { resolveLocalized, useLanguage } from '../i18n';
+import { applyImageFallback } from '../shared/imageFallback';
 
 const { language } = useLanguage();
 
@@ -84,11 +86,20 @@ const scenes = computed(() => zhuozhengPanoramaScenesSource.map((scene) => resol
 const spotlights = computed(() => zhuozhengPanoramaSpotlights.map((item) => resolveLocalized(item, language.value)));
 const routePreview = computed(() => scenes.value.slice(0, 5));
 const backgroundImage = computed(() => zhuozhengPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
+const backgroundImageFallback = computed(() => zhuozhengPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const handleImageError = (event, fallbackImage) => {
+  applyImageFallback(event, fallbackImage);
+};
 </script>
 
 <template>
   <article class="panorama-entry">
-    <img :src="backgroundImage" :alt="garden.heroAlt || garden.name" class="panorama-entry__image" />
+    <img
+      :src="backgroundImage"
+      :alt="garden.heroAlt || garden.name"
+      class="panorama-entry__image"
+      @error="handleImageError($event, backgroundImageFallback)"
+    />
     <div class="panorama-entry__veil" />
     <div class="panorama-entry__flare" />
 
@@ -135,7 +146,13 @@ const backgroundImage = computed(() => zhuozhengPanoramaCover || scenes.value[0]
               :to="{ path: '/zhuozheng/panorama/viewer', query: { scene: spot.id } }"
               class="panorama-entry__spotlight-card"
             >
-              <img :src="spot.image" :alt="spot.title" loading="lazy" class="panorama-entry__spotlight-image" />
+              <img
+                :src="spot.image"
+                :alt="spot.title"
+                loading="lazy"
+                class="panorama-entry__spotlight-image"
+                @error="handleImageError($event, spot.fallbackImage)"
+              />
               <div class="panorama-entry__spotlight-copy">
                 <strong>{{ spot.title }}</strong>
                 <span>{{ spot.caption }}</span>

@@ -5,6 +5,13 @@ const panoramaAssetModules = typeof import.meta.glob === 'function'
   })
   : {};
 
+const panoramaFallbackAssetModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../image/网师园/*.jpg', {
+    eager: true,
+    import: 'default',
+  })
+  : {};
+
 const panoramaAsset = (fileName) => {
   const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
   return (
@@ -12,6 +19,11 @@ const panoramaAsset = (fileName) => {
     new URL(/* @vite-ignore */ `../../image/网师园/${webpFileName}`, import.meta.url).href
   );
 };
+
+const panoramaFallbackAsset = (fileName) => (
+  panoramaFallbackAssetModules[`../../image/网师园/${fileName}`] ||
+  new URL(/* @vite-ignore */ `../../image/网师园/${fileName}`, import.meta.url).href
+);
 
 const text = (zh, en) => ({ zh, en });
 
@@ -32,6 +44,8 @@ const scene = (id, order, fileName, titleZh, titleEn, descZh, descEn, accent, in
   isPanorama: true,
   image: panoramaAsset(fileName),
   thumbnail: panoramaAsset(fileName),
+  fallbackImage: panoramaFallbackAsset(fileName),
+  fallbackThumbnail: panoramaFallbackAsset(fileName),
   title: text(titleZh, titleEn),
   description: text(descZh, descEn),
   accent,
@@ -48,29 +62,34 @@ const scene = (id, order, fileName, titleZh, titleEn, descZh, descEn, accent, in
 });
 
 export const wangshiyuanPanoramaCover = panoramaAsset('cover.jpg');
+export const wangshiyuanPanoramaCoverFallback = panoramaFallbackAsset('cover.jpg');
 
 export const wangshiyuanPanoramaSpotlights = [
   {
     id: 'wanjuan-tang',
     image: panoramaAsset('3_万卷堂.jpg'),
+    fallbackImage: panoramaFallbackAsset('3_万卷堂.jpg'),
     title: text('万卷堂', 'Wanjuan Tang'),
     caption: text('先从厅堂秩序读起，更容易看懂网师园怎样在小尺度里铺开层次。', 'Start with the hall order to understand how depth unfolds in a compact site.'),
   },
   {
     id: 'dianchunyi-garden',
     image: panoramaAsset('8_殿春簃花园.jpg'),
+    fallbackImage: panoramaFallbackAsset('8_殿春簃花园.jpg'),
     title: text('殿春簃花园', 'Dianchunyi Garden'),
     caption: text('假山、花墙和亭子放在一起，是“小中见大”最直接的一景。', 'Rockery, walls, and pavilion make one of the clearest compact compositions.'),
   },
   {
     id: 'waterside-pavilion',
     image: panoramaAsset('12_水阁.jpg'),
+    fallbackImage: panoramaFallbackAsset('12_水阁.jpg'),
     title: text('水阁', 'Waterside Pavilion'),
     caption: text('窗棂、栏杆和池水一起工作，最适合慢慢看叠合层次。', 'Lattice, railings, and pond water overlap into a calm layered view.'),
   },
   {
     id: 'xiaoshan-conggui-xuan',
     image: panoramaAsset('14_小山丛桂轩.jpg'),
+    fallbackImage: panoramaFallbackAsset('14_小山丛桂轩.jpg'),
     title: text('小山丛桂轩', 'Xiaoshan Conggui Xuan'),
     caption: text('路线走到这里会明显慢下来，边界和留白都更耐看。', 'By this stop the route slows down and the edges become more legible.'),
   },

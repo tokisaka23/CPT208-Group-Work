@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as THREE from 'three';
 import { derivePanoramaInitialView, panoramaPanToYaw } from '../shared/panoramaView';
+import { applyImageFallback } from '../shared/imageFallback';
 
 const props = defineProps({
   scene: {
@@ -75,6 +76,26 @@ const resetFlatView = () => {
   flatScale.value = 1;
   flatOffsetX.value = 0;
   flatOffsetY.value = 0;
+};
+
+const getSceneImageSources = () => (
+  [props.scene?.image, props.scene?.fallbackImage]
+    .filter(Boolean)
+    .filter((imageSource, index, sources) => sources.indexOf(imageSource) === index)
+);
+
+const loadSceneTexture = async () => {
+  let lastError = null;
+
+  for (const imageSource of getSceneImageSources()) {
+    try {
+      return await textureLoader.loadAsync(imageSource);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Panorama texture source is unavailable.');
 };
 
 const projectHotspots = () => {
@@ -205,7 +226,14 @@ const updateTexture = async () => {
     return;
   }
 
-  const texture = await textureLoader.loadAsync(props.scene.image);
+  let texture = null;
+
+  try {
+    texture = await loadSceneTexture();
+  } catch {
+    return;
+  }
+
   texture.colorSpace = THREE.SRGBColorSpace;
   const textureWidth = texture.image?.width ?? 0;
   const textureHeight = texture.image?.height ?? 0;
@@ -238,6 +266,10 @@ const updateTexture = async () => {
   applyCameraRotation();
   projectHotspots();
 }
+
+const handleFlatImageError = (event) => {
+  applyImageFallback(event, props.scene?.fallbackImage);
+};
 
 const initializeRenderer = async () => {
   if (!containerRef.value) {
@@ -392,6 +424,7 @@ onBeforeUnmount(() => {
       class="panorama-sphere-viewer__flat-image"
       :style="flatImageStyle"
       draggable="false"
+      @error="handleFlatImageError"
     />
 
     <button

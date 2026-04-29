@@ -4,10 +4,12 @@ import { RouterLink } from 'vue-router';
 import { gardenDetailsSource } from '../data/gardenDetails';
 import {
   wangshiyuanPanoramaCover,
+  wangshiyuanPanoramaCoverFallback,
   wangshiyuanPanoramaScenesSource,
   wangshiyuanPanoramaSpotlights,
 } from '../data/wangshiyuanPanoramaTour';
 import { resolveLocalized, useLanguage } from '../i18n';
+import { applyImageFallback } from '../shared/imageFallback';
 
 const { language } = useLanguage();
 
@@ -41,11 +43,20 @@ const scenes = computed(() => wangshiyuanPanoramaScenesSource.map((scene) => res
 const spotlights = computed(() => wangshiyuanPanoramaSpotlights.map((item) => resolveLocalized(item, language.value)));
 const routePreview = computed(() => scenes.value.slice(0, 6));
 const backgroundImage = computed(() => wangshiyuanPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
+const backgroundImageFallback = computed(() => wangshiyuanPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const handleImageError = (event, fallbackImage) => {
+  applyImageFallback(event, fallbackImage);
+};
 </script>
 
 <template>
   <article class="wangshi-panorama-entry">
-    <img :src="backgroundImage" :alt="garden.heroAlt || garden.name" class="wangshi-panorama-entry__image" />
+    <img
+      :src="backgroundImage"
+      :alt="garden.heroAlt || garden.name"
+      class="wangshi-panorama-entry__image"
+      @error="handleImageError($event, backgroundImageFallback)"
+    />
     <div class="wangshi-panorama-entry__veil" />
     <div class="wangshi-panorama-entry__wash" />
 
@@ -112,7 +123,13 @@ const backgroundImage = computed(() => wangshiyuanPanoramaCover || scenes.value[
               :to="{ path: '/wangshi/panorama/viewer', query: { scene: spot.id } }"
               class="wangshi-panorama-entry__spotlight"
             >
-              <img :src="spot.image" :alt="spot.title" loading="lazy" class="wangshi-panorama-entry__spotlight-image" />
+              <img
+                :src="spot.image"
+                :alt="spot.title"
+                loading="lazy"
+                class="wangshi-panorama-entry__spotlight-image"
+                @error="handleImageError($event, spot.fallbackImage)"
+              />
               <div class="wangshi-panorama-entry__spotlight-copy">
                 <strong>{{ spot.title }}</strong>
                 <span>{{ spot.caption }}</span>

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { liuyuanPanoramaScenesSource } from './liuyuanPanoramaTour.js';
+import { wangshiyuanPanoramaScenesSource } from './wangshiyuanPanoramaTour.js';
 import { zhuozhengPanoramaScenesSource } from './zhuozhengPanoramaTour.js';
 
 test('zhuozheng key scenes use wider and lower default mobile framing', () => {
@@ -40,4 +41,23 @@ test('liuyuan key scenes open wider and stay anchored to the main subject on mob
   assert.equal(waterCourtScene.initialHotspotId, 'water-court-frame');
   assert.equal(waterCourtScene.initialMobileTilt, -8);
   assert.equal(waterCourtScene.initialMobileFov, 100);
+});
+
+test('panorama scenes keep jpg fallbacks for browsers that reject webp assets', () => {
+  const sceneSets = [
+    zhuozhengPanoramaScenesSource,
+    liuyuanPanoramaScenesSource,
+    wangshiyuanPanoramaScenesSource,
+  ];
+
+  for (const scenes of sceneSets) {
+    assert.ok(scenes.length > 0);
+
+    for (const scene of scenes) {
+      assert.match(scene.image, /\.webp(?:$|\?)/);
+      assert.match(scene.thumbnail, /\.webp(?:$|\?)/);
+      assert.match(scene.fallbackImage, /\.jpg(?:$|\?)/);
+      assert.match(scene.fallbackThumbnail, /\.jpg(?:$|\?)/);
+    }
+  }
 });

@@ -20,3 +20,12 @@ test('PanoramaSphereViewer applies sharper texture sampling for mobile panoramas
   assert.match(source, /renderer\.setSize\(width, height\);/);
   assert.match(source, /renderer\.domElement\.style\.width = '100%';/);
 });
+
+test('PanoramaSphereViewer falls back to jpg when webp texture loading fails', async () => {
+  const source = await readFile(new URL('./PanoramaSphereViewer.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /props\.scene\?\.fallbackImage/);
+  assert.match(source, /for \(const imageSource of getSceneImageSources\(\)\)/);
+  assert.match(source, /textureLoader\.loadAsync\(imageSource\)/);
+  assert.match(source, /catch \(error\)/);
+});

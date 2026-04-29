@@ -5,6 +5,7 @@ import PanoramaSphereViewer from '../components/PanoramaSphereViewer.vue';
 import { gardenDetailsSource } from '../data/gardenDetails';
 import { zhuozhengPanoramaScenesSource } from '../data/zhuozhengPanoramaTour';
 import { resolveLocalized, useLanguage } from '../i18n';
+import { applyImageFallback } from '../shared/imageFallback';
 import { derivePanoramaInitialView, panoramaPanToYaw } from '../shared/panoramaView';
 
 const { language } = useLanguage();
@@ -87,7 +88,9 @@ const progressLabel = computed(() => {
   return `${current} / ${total}`;
 });
 const activeSceneBackdropStyle = computed(() => ({
-  backgroundImage: `url(${activeScene.value?.image || garden.value.heroImage})`,
+  backgroundImage: activeScene.value?.fallbackImage
+    ? `url(${activeScene.value?.image || garden.value.heroImage}), url(${activeScene.value.fallbackImage})`
+    : `url(${activeScene.value?.image || garden.value.heroImage})`,
 }));
 const angleMeterRatio = computed(() => `${clamp((normalizedYaw.value / 360) * 100, 0, 100)}%`);
 const activeNoteTitle = computed(() => activeHotspot.value?.title || activeScene.value?.title || '');
@@ -136,6 +139,10 @@ const toggleControls = () => {
 
 const handleViewChange = (nextViewState) => {
   viewState.value = nextViewState;
+};
+
+const handleImageError = (event, fallbackImage) => {
+  applyImageFallback(event, fallbackImage);
 };
 
 const removeResumeAudioListeners = () => {
@@ -351,7 +358,13 @@ onBeforeUnmount(() => {
               :style="{ '--scene-accent': scene.accent }"
               @click="setActiveScene(index)"
             >
-              <img :src="scene.thumbnail || scene.image" :alt="scene.title" class="zhuozheng-panorama-viewer__scene-card-image" loading="lazy" />
+              <img
+                :src="scene.thumbnail || scene.image"
+                :alt="scene.title"
+                class="zhuozheng-panorama-viewer__scene-card-image"
+                loading="lazy"
+                @error="handleImageError($event, scene.fallbackThumbnail || scene.fallbackImage)"
+              />
               <div class="zhuozheng-panorama-viewer__scene-card-copy">
                 <span>{{ scene.order }}</span>
                 <strong>{{ scene.title }}</strong>

@@ -59,3 +59,12 @@ test('panorama entry views keep mobile calls to action thumb-reachable', async (
     assert.match(source, new RegExp(`@media \\(max-width: 640px\\)[\\s\\S]*?scroll-snap-type: x mandatory;`));
   }
 });
+
+test('panorama entry and roam views wire image error fallbacks', async () => {
+  for (const view of [...entryViews, ...roamViews]) {
+    const source = await readFile(new URL(view.file, import.meta.url), 'utf8');
+
+    assert.match(source, /applyImageFallback/);
+    assert.match(source, /@error=/);
+  }
+});

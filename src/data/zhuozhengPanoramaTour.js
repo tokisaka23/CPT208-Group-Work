@@ -5,6 +5,13 @@
   })
   : {};
 
+const panoramaFallbackAssetModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../image/拙政园1774850195997/*.jpg', {
+    eager: true,
+    import: 'default',
+  })
+  : {};
+
 const panoramaAsset = (fileName) => {
   const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
   return (
@@ -12,6 +19,11 @@ const panoramaAsset = (fileName) => {
     new URL(/* @vite-ignore */ `../../image/拙政园1774850195997/${webpFileName}`, import.meta.url).href
   );
 };
+
+const panoramaFallbackAsset = (fileName) => (
+  panoramaFallbackAssetModules[`../../image/拙政园1774850195997/${fileName}`] ||
+  new URL(/* @vite-ignore */ `../../image/拙政园1774850195997/${fileName}`, import.meta.url).href
+);
 
 const buildHotspot = ({
   id,
@@ -47,39 +59,48 @@ const buildScene = ({
   initialMobileFov,
   initialHotspotId,
   hotspots,
-}) => ({
-  id,
-  order,
-  isPanorama: true,
-  image: image || panoramaAsset(fileName),
-  thumbnail: image || panoramaAsset(fileName),
-  title,
-  description,
-  accent,
-  sourceName: {
-    zh: '项目本地全景素材',
-    en: 'Local panorama asset set',
-  },
-  sourceLabel: {
-    zh: '当前画面使用 image 文件夹中的拙政园实景全景图。',
-    en: 'This scene uses the local panorama images stored in the project image folder.',
-  },
-  initialPan,
-  initialTilt,
-  initialFov,
-  initialMobilePan,
-  initialMobileTilt,
-  initialMobileFov,
-  initialHotspotId,
-  hotspots,
-});
+}) => {
+  const primaryImage = image || panoramaAsset(fileName);
+  const fallbackImage = image || panoramaFallbackAsset(fileName);
+
+  return {
+    id,
+    order,
+    isPanorama: true,
+    image: primaryImage,
+    thumbnail: primaryImage,
+    fallbackImage,
+    fallbackThumbnail: fallbackImage,
+    title,
+    description,
+    accent,
+    sourceName: {
+      zh: '项目本地全景素材',
+      en: 'Local panorama asset set',
+    },
+    sourceLabel: {
+      zh: '当前画面使用 image 文件夹中的拙政园实景全景图。',
+      en: 'This scene uses the local panorama images stored in the project image folder.',
+    },
+    initialPan,
+    initialTilt,
+    initialFov,
+    initialMobilePan,
+    initialMobileTilt,
+    initialMobileFov,
+    initialHotspotId,
+    hotspots,
+  };
+};
 
 export const zhuozhengPanoramaCover = panoramaAsset('cover.jpg');
+export const zhuozhengPanoramaCoverFallback = panoramaFallbackAsset('cover.jpg');
 
 export const zhuozhengPanoramaSpotlights = [
   {
     id: 'west-water',
     image: panoramaAsset('7_07.jpg'),
+    fallbackImage: panoramaFallbackAsset('7_07.jpg'),
     title: {
       zh: '西园水阁',
       en: 'West Garden Waterside',
@@ -92,6 +113,7 @@ export const zhuozhengPanoramaSpotlights = [
   {
     id: 'east-water',
     image: panoramaAsset('2_02.jpg'),
+    fallbackImage: panoramaFallbackAsset('2_02.jpg'),
     title: {
       zh: '东园水岸',
       en: 'East Water Edge',
@@ -104,6 +126,7 @@ export const zhuozhengPanoramaSpotlights = [
   {
     id: 'xiaofeihong',
     image: panoramaAsset('8_08_小飞虹.jpg'),
+    fallbackImage: panoramaFallbackAsset('8_08_小飞虹.jpg'),
     title: {
       zh: '小飞虹',
       en: 'Xiao Feihong',
@@ -116,6 +139,7 @@ export const zhuozhengPanoramaSpotlights = [
   {
     id: 'yuanxiangtang',
     image: panoramaAsset('10_10_远香堂.jpg'),
+    fallbackImage: panoramaFallbackAsset('10_10_远香堂.jpg'),
     title: {
       zh: '远香堂',
       en: 'Yuanxiang Tang',

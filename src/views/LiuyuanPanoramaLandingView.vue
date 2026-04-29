@@ -4,10 +4,12 @@ import { RouterLink } from 'vue-router';
 import { gardenDetailsSource } from '../data/gardenDetails';
 import {
   liuyuanPanoramaCover,
+  liuyuanPanoramaCoverFallback,
   liuyuanPanoramaScenesSource,
   liuyuanPanoramaSpotlights,
 } from '../data/liuyuanPanoramaTour';
 import { resolveLocalized, useLanguage } from '../i18n';
+import { applyImageFallback } from '../shared/imageFallback';
 
 const { language } = useLanguage();
 
@@ -80,11 +82,20 @@ const scenes = computed(() => liuyuanPanoramaScenesSource.map((scene) => resolve
 const spotlights = computed(() => liuyuanPanoramaSpotlights.map((item) => resolveLocalized(item, language.value)));
 const routePreview = computed(() => scenes.value.slice(0, 6));
 const backgroundImage = computed(() => liuyuanPanoramaCover || scenes.value[0]?.image || garden.value.heroImage);
+const backgroundImageFallback = computed(() => liuyuanPanoramaCoverFallback || scenes.value[0]?.fallbackImage || garden.value.heroImage);
+const handleImageError = (event, fallbackImage) => {
+  applyImageFallback(event, fallbackImage);
+};
 </script>
 
 <template>
   <article class="liuyuan-panorama-entry">
-    <img :src="backgroundImage" :alt="garden.heroAlt || garden.name" class="liuyuan-panorama-entry__image" />
+    <img
+      :src="backgroundImage"
+      :alt="garden.heroAlt || garden.name"
+      class="liuyuan-panorama-entry__image"
+      @error="handleImageError($event, backgroundImageFallback)"
+    />
     <div class="liuyuan-panorama-entry__veil" />
     <div class="liuyuan-panorama-entry__texture" />
 
@@ -151,7 +162,13 @@ const backgroundImage = computed(() => liuyuanPanoramaCover || scenes.value[0]?.
               :to="{ path: '/liu/panorama/viewer', query: { scene: spot.id } }"
               class="liuyuan-panorama-entry__spotlight"
             >
-              <img :src="spot.image" :alt="spot.title" loading="lazy" class="liuyuan-panorama-entry__spotlight-image" />
+              <img
+                :src="spot.image"
+                :alt="spot.title"
+                loading="lazy"
+                class="liuyuan-panorama-entry__spotlight-image"
+                @error="handleImageError($event, spot.fallbackImage)"
+              />
               <div class="liuyuan-panorama-entry__spotlight-copy">
                 <strong>{{ spot.title }}</strong>
                 <span>{{ spot.caption }}</span>

@@ -5,6 +5,13 @@ const panoramaAssetModules = typeof import.meta.glob === 'function'
   })
   : {};
 
+const panoramaFallbackAssetModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../../image/苏州园林留园/*.jpg', {
+    eager: true,
+    import: 'default',
+  })
+  : {};
+
 const panoramaAsset = (fileName) => {
   const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
   return (
@@ -12,6 +19,11 @@ const panoramaAsset = (fileName) => {
     new URL(/* @vite-ignore */ `../../image/苏州园林留园/${webpFileName}`, import.meta.url).href
   );
 };
+
+const panoramaFallbackAsset = (fileName) => (
+  panoramaFallbackAssetModules[`../../image/苏州园林留园/${fileName}`] ||
+  new URL(/* @vite-ignore */ `../../image/苏州园林留园/${fileName}`, import.meta.url).href
+);
 
 const buildHotspot = ({
   id,
@@ -53,6 +65,8 @@ const buildScene = ({
   isPanorama: true,
   image: image || panoramaAsset(fileName),
   thumbnail: image || panoramaAsset(fileName),
+  fallbackImage: image || panoramaFallbackAsset(fileName),
+  fallbackThumbnail: image || panoramaFallbackAsset(fileName),
   title,
   description,
   accent,
@@ -75,11 +89,13 @@ const buildScene = ({
 });
 
 export const liuyuanPanoramaCover = panoramaAsset('cover.jpg');
+export const liuyuanPanoramaCoverFallback = panoramaFallbackAsset('cover.jpg');
 
 export const liuyuanPanoramaSpotlights = [
   {
     id: 'corridor-sequence',
     image: panoramaAsset('3_03.jpg'),
+    fallbackImage: panoramaFallbackAsset('3_03.jpg'),
     title: {
       zh: '曲廊回环',
       en: 'Corridor Sequence',
@@ -92,6 +108,7 @@ export const liuyuanPanoramaSpotlights = [
   {
     id: 'water-court',
     image: panoramaAsset('4_04.jpg'),
+    fallbackImage: panoramaFallbackAsset('4_04.jpg'),
     title: {
       zh: '水庭初见',
       en: 'Water Court',
@@ -104,6 +121,7 @@ export const liuyuanPanoramaSpotlights = [
   {
     id: 'guanyun-peak',
     image: panoramaAsset('6_06.jpg'),
+    fallbackImage: panoramaFallbackAsset('6_06.jpg'),
     title: {
       zh: '冠云峰前',
       en: 'Guanyun Peak',
@@ -116,6 +134,7 @@ export const liuyuanPanoramaSpotlights = [
   {
     id: 'wufengxianguan',
     image: panoramaAsset('8_08.jpg'),
+    fallbackImage: panoramaFallbackAsset('8_08.jpg'),
     title: {
       zh: '五峰仙馆',
       en: 'Wufeng Xianguan',
