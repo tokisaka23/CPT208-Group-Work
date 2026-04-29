@@ -12,17 +12,46 @@ const panoramaFallbackAssetModules = typeof import.meta.glob === 'function'
   })
   : {};
 
-const panoramaAsset = (fileName) => {
-  const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
-  return (
-    panoramaAssetModules[`../../image/网师园/${webpFileName}`] ||
-    new URL(/* @vite-ignore */ `../../image/网师园/${webpFileName}`, import.meta.url).href
-  );
+const bundledPanoramaAssetModules = {
+  'cover.jpg': new URL('../../image/网师园/cover.webp', import.meta.url).href,
+  '1_网师园大门.jpg': new URL('../../image/网师园/1_网师园大门.webp', import.meta.url).href,
+  '2_轿厅.jpg': new URL('../../image/网师园/2_轿厅.webp', import.meta.url).href,
+  '3_万卷堂.jpg': new URL('../../image/网师园/3_万卷堂.webp', import.meta.url).href,
+  '4_五峰书屋.jpg': new URL('../../image/网师园/4_五峰书屋.webp', import.meta.url).href,
+  '5_集虚斋.jpg': new URL('../../image/网师园/5_集虚斋.webp', import.meta.url).href,
+  '6_看松读画轩.jpg': new URL('../../image/网师园/6_看松读画轩.webp', import.meta.url).href,
+  '7_池边小径1.jpg': new URL('../../image/网师园/7_池边小径1.webp', import.meta.url).href,
+  '8_殿春簃花园.jpg': new URL('../../image/网师园/8_殿春簃花园.webp', import.meta.url).href,
+  '9_露华馆花园.jpg': new URL('../../image/网师园/9_露华馆花园.webp', import.meta.url).href,
+  '10_花园.jpg': new URL('../../image/网师园/10_花园.webp', import.meta.url).href,
+  '11_蹈和馆.jpg': new URL('../../image/网师园/11_蹈和馆.webp', import.meta.url).href,
+  '12_水阁.jpg': new URL('../../image/网师园/12_水阁.webp', import.meta.url).href,
+  '13_池边小径2.jpg': new URL('../../image/网师园/13_池边小径2.webp', import.meta.url).href,
+  '14_小山丛桂轩.jpg': new URL('../../image/网师园/14_小山丛桂轩.webp', import.meta.url).href,
 };
 
+const bundledPanoramaFallbackAssetModules = {
+  'cover.jpg': new URL('../../image/网师园/cover.jpg', import.meta.url).href,
+  '1_网师园大门.jpg': new URL('../../image/网师园/1_网师园大门.jpg', import.meta.url).href,
+  '2_轿厅.jpg': new URL('../../image/网师园/2_轿厅.jpg', import.meta.url).href,
+  '3_万卷堂.jpg': new URL('../../image/网师园/3_万卷堂.jpg', import.meta.url).href,
+  '4_五峰书屋.jpg': new URL('../../image/网师园/4_五峰书屋.jpg', import.meta.url).href,
+  '5_集虚斋.jpg': new URL('../../image/网师园/5_集虚斋.jpg', import.meta.url).href,
+  '6_看松读画轩.jpg': new URL('../../image/网师园/6_看松读画轩.jpg', import.meta.url).href,
+  '7_池边小径1.jpg': new URL('../../image/网师园/7_池边小径1.jpg', import.meta.url).href,
+  '8_殿春簃花园.jpg': new URL('../../image/网师园/8_殿春簃花园.jpg', import.meta.url).href,
+  '9_露华馆花园.jpg': new URL('../../image/网师园/9_露华馆花园.jpg', import.meta.url).href,
+  '10_花园.jpg': new URL('../../image/网师园/10_花园.jpg', import.meta.url).href,
+  '11_蹈和馆.jpg': new URL('../../image/网师园/11_蹈和馆.jpg', import.meta.url).href,
+  '12_水阁.jpg': new URL('../../image/网师园/12_水阁.jpg', import.meta.url).href,
+  '13_池边小径2.jpg': new URL('../../image/网师园/13_池边小径2.jpg', import.meta.url).href,
+  '14_小山丛桂轩.jpg': new URL('../../image/网师园/14_小山丛桂轩.jpg', import.meta.url).href,
+};
+
+const panoramaAsset = (fileName) => bundledPanoramaAssetModules[fileName];
+
 const panoramaFallbackAsset = (fileName) => (
-  panoramaFallbackAssetModules[`../../image/网师园/${fileName}`] ||
-  new URL(/* @vite-ignore */ `../../image/网师园/${fileName}`, import.meta.url).href
+  bundledPanoramaFallbackAssetModules[fileName]
 );
 
 const text = (zh, en) => ({ zh, en });

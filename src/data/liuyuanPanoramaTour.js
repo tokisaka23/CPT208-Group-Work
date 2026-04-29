@@ -12,17 +12,44 @@ const panoramaFallbackAssetModules = typeof import.meta.glob === 'function'
   })
   : {};
 
-const panoramaAsset = (fileName) => {
-  const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
-  return (
-    panoramaAssetModules[`../../image/苏州园林留园/${webpFileName}`] ||
-    new URL(/* @vite-ignore */ `../../image/苏州园林留园/${webpFileName}`, import.meta.url).href
-  );
+const bundledPanoramaAssetModules = {
+  'cover.jpg': new URL('../../image/苏州园林留园/cover.webp', import.meta.url).href,
+  '1_01.jpg': new URL('../../image/苏州园林留园/1_01.webp', import.meta.url).href,
+  '2_02.jpg': new URL('../../image/苏州园林留园/2_02.webp', import.meta.url).href,
+  '3_03.jpg': new URL('../../image/苏州园林留园/3_03.webp', import.meta.url).href,
+  '4_04.jpg': new URL('../../image/苏州园林留园/4_04.webp', import.meta.url).href,
+  '5_05.jpg': new URL('../../image/苏州园林留园/5_05.webp', import.meta.url).href,
+  '6_06.jpg': new URL('../../image/苏州园林留园/6_06.webp', import.meta.url).href,
+  '7_07.jpg': new URL('../../image/苏州园林留园/7_07.webp', import.meta.url).href,
+  '8_08.jpg': new URL('../../image/苏州园林留园/8_08.webp', import.meta.url).href,
+  '9_09.jpg': new URL('../../image/苏州园林留园/9_09.webp', import.meta.url).href,
+  '10_10.jpg': new URL('../../image/苏州园林留园/10_10.webp', import.meta.url).href,
+  '11_11.jpg': new URL('../../image/苏州园林留园/11_11.webp', import.meta.url).href,
+  '12_12.jpg': new URL('../../image/苏州园林留园/12_12.webp', import.meta.url).href,
+  '13_13.jpg': new URL('../../image/苏州园林留园/13_13.webp', import.meta.url).href,
 };
 
+const bundledPanoramaFallbackAssetModules = {
+  'cover.jpg': new URL('../../image/苏州园林留园/cover.jpg', import.meta.url).href,
+  '1_01.jpg': new URL('../../image/苏州园林留园/1_01.jpg', import.meta.url).href,
+  '2_02.jpg': new URL('../../image/苏州园林留园/2_02.jpg', import.meta.url).href,
+  '3_03.jpg': new URL('../../image/苏州园林留园/3_03.jpg', import.meta.url).href,
+  '4_04.jpg': new URL('../../image/苏州园林留园/4_04.jpg', import.meta.url).href,
+  '5_05.jpg': new URL('../../image/苏州园林留园/5_05.jpg', import.meta.url).href,
+  '6_06.jpg': new URL('../../image/苏州园林留园/6_06.jpg', import.meta.url).href,
+  '7_07.jpg': new URL('../../image/苏州园林留园/7_07.jpg', import.meta.url).href,
+  '8_08.jpg': new URL('../../image/苏州园林留园/8_08.jpg', import.meta.url).href,
+  '9_09.jpg': new URL('../../image/苏州园林留园/9_09.jpg', import.meta.url).href,
+  '10_10.jpg': new URL('../../image/苏州园林留园/10_10.jpg', import.meta.url).href,
+  '11_11.jpg': new URL('../../image/苏州园林留园/11_11.jpg', import.meta.url).href,
+  '12_12.jpg': new URL('../../image/苏州园林留园/12_12.jpg', import.meta.url).href,
+  '13_13.jpg': new URL('../../image/苏州园林留园/13_13.jpg', import.meta.url).href,
+};
+
+const panoramaAsset = (fileName) => bundledPanoramaAssetModules[fileName];
+
 const panoramaFallbackAsset = (fileName) => (
-  panoramaFallbackAssetModules[`../../image/苏州园林留园/${fileName}`] ||
-  new URL(/* @vite-ignore */ `../../image/苏州园林留园/${fileName}`, import.meta.url).href
+  bundledPanoramaFallbackAssetModules[fileName]
 );
 
 const buildHotspot = ({

@@ -12,17 +12,38 @@ const panoramaFallbackAssetModules = typeof import.meta.glob === 'function'
   })
   : {};
 
-const panoramaAsset = (fileName) => {
-  const webpFileName = fileName.replace(/\.[^.]+$/, '.webp');
-  return (
-    panoramaAssetModules[`../../image/拙政园1774850195997/${webpFileName}`] ||
-    new URL(/* @vite-ignore */ `../../image/拙政园1774850195997/${webpFileName}`, import.meta.url).href
-  );
+const bundledPanoramaAssetModules = {
+  'cover.jpg': new URL('../../image/拙政园1774850195997/cover.webp', import.meta.url).href,
+  '1_01_入口.jpg': new URL('../../image/拙政园1774850195997/1_01_入口.webp', import.meta.url).href,
+  '2_02.jpg': new URL('../../image/拙政园1774850195997/2_02.webp', import.meta.url).href,
+  '3_03.jpg': new URL('../../image/拙政园1774850195997/3_03.webp', import.meta.url).href,
+  '4_04.jpg': new URL('../../image/拙政园1774850195997/4_04.webp', import.meta.url).href,
+  '5_05_听雨轩外.jpg': new URL('../../image/拙政园1774850195997/5_05_听雨轩外.webp', import.meta.url).href,
+  '6_06_听雨轩内.jpg': new URL('../../image/拙政园1774850195997/6_06_听雨轩内.webp', import.meta.url).href,
+  '7_07.jpg': new URL('../../image/拙政园1774850195997/7_07.webp', import.meta.url).href,
+  '8_08_小飞虹.jpg': new URL('../../image/拙政园1774850195997/8_08_小飞虹.webp', import.meta.url).href,
+  '9_09.jpg': new URL('../../image/拙政园1774850195997/9_09.webp', import.meta.url).href,
+  '10_10_远香堂.jpg': new URL('../../image/拙政园1774850195997/10_10_远香堂.webp', import.meta.url).href,
 };
 
+const bundledPanoramaFallbackAssetModules = {
+  'cover.jpg': new URL('../../image/拙政园1774850195997/cover.jpg', import.meta.url).href,
+  '1_01_入口.jpg': new URL('../../image/拙政园1774850195997/1_01_入口.jpg', import.meta.url).href,
+  '2_02.jpg': new URL('../../image/拙政园1774850195997/2_02.jpg', import.meta.url).href,
+  '3_03.jpg': new URL('../../image/拙政园1774850195997/3_03.jpg', import.meta.url).href,
+  '4_04.jpg': new URL('../../image/拙政园1774850195997/4_04.jpg', import.meta.url).href,
+  '5_05_听雨轩外.jpg': new URL('../../image/拙政园1774850195997/5_05_听雨轩外.jpg', import.meta.url).href,
+  '6_06_听雨轩内.jpg': new URL('../../image/拙政园1774850195997/6_06_听雨轩内.jpg', import.meta.url).href,
+  '7_07.jpg': new URL('../../image/拙政园1774850195997/7_07.jpg', import.meta.url).href,
+  '8_08_小飞虹.jpg': new URL('../../image/拙政园1774850195997/8_08_小飞虹.jpg', import.meta.url).href,
+  '9_09.jpg': new URL('../../image/拙政园1774850195997/9_09.jpg', import.meta.url).href,
+  '10_10_远香堂.jpg': new URL('../../image/拙政园1774850195997/10_10_远香堂.jpg', import.meta.url).href,
+};
+
+const panoramaAsset = (fileName) => bundledPanoramaAssetModules[fileName];
+
 const panoramaFallbackAsset = (fileName) => (
-  panoramaFallbackAssetModules[`../../image/拙政园1774850195997/${fileName}`] ||
-  new URL(/* @vite-ignore */ `../../image/拙政园1774850195997/${fileName}`, import.meta.url).href
+  bundledPanoramaFallbackAssetModules[fileName]
 );
 
 const buildHotspot = ({

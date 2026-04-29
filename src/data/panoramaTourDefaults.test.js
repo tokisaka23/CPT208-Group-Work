@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { liuyuanPanoramaScenesSource } from './liuyuanPanoramaTour.js';
 import { wangshiyuanPanoramaScenesSource } from './wangshiyuanPanoramaTour.js';
@@ -59,5 +60,21 @@ test('panorama scenes keep jpg fallbacks for browsers that reject webp assets', 
       assert.match(scene.fallbackImage, /\.jpg(?:$|\?)/);
       assert.match(scene.fallbackThumbnail, /\.jpg(?:$|\?)/);
     }
+  }
+});
+
+test('panorama asset data uses statically bundled image URLs', async () => {
+  const files = [
+    './zhuozhengPanoramaTour.js',
+    './liuyuanPanoramaTour.js',
+    './wangshiyuanPanoramaTour.js',
+  ];
+
+  for (const file of files) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8');
+
+    assert.match(source, /bundledPanoramaAssetModules/);
+    assert.match(source, /bundledPanoramaFallbackAssetModules/);
+    assert.doesNotMatch(source, /@vite-ignore/);
   }
 });
