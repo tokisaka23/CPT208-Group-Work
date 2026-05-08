@@ -21,15 +21,43 @@ dist-ssr
 # Vercel CLI 配置（核心补充！）
 .vercel       # 忽略 Vercel 本地配置目录（含项目ID、部署记录等敏感信息）
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# AI tools and internal documentation
+.agents
+.agents/
+.codex
+.codex/
+.claude
+.claude/
+AGENTS.md
+
+# Package managers and build tools
+.yarnrc
+.npm-cache/
+.yarn/
+pnpm-lock.yaml
+yarn.lock
+
+# IDE and editor directories
+.vscode/
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Vercel and deployment
+.vercel/
 .vercel
-.env*.local
+
+# Environment variables (local only)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Other AI tools
+.qwen/
+.agents/
+.codex/
