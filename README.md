@@ -297,5 +297,4 @@ AI coding assistance logs are included in `ai-logs/`. The folder contains prompt
 - Confirm Supabase, Qwen, and AMap environment variables are configured in deployment.
 - Run all four SQL setup files, including `database/004_app_feature_schema_and_demo_data.sql`.
 - Confirm storage bucket `ugc-images`, demo users, and required tables exist.
-- Review `ai-logs/` and make sure the portfolio cites the same AI tools and use cases.
 - Ensure `.env.local`, service keys, and private deployment files are not committed.
