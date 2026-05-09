@@ -95,6 +95,10 @@ Supabase
   +-- conversations / chat_history
 ```
 
+## Data Handling Evidence
+
+Evidence for user input handling, interaction state management, and stored user records is collected in [data-handling-evidence](data-handling-evidence).
+
 ## Project Structure
 
 ```text
