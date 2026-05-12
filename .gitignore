@@ -21,15 +21,6 @@ dist-ssr
 # Vercel CLI 配置（核心补充！）
 .vercel       # 忽略 Vercel 本地配置目录（含项目ID、部署记录等敏感信息）
 
-# AI tools and internal documentation
-.agents
-.agents/
-.codex
-.codex/
-.claude
-.claude/
-AGENTS.md
-
 # Package managers and build tools
 .yarnrc
 .npm-cache/
@@ -56,8 +47,3 @@ yarn.lock
 .env.local
 .env.*.local
 !.env.example
-
-# Other AI tools
-.qwen/
-.agents/
-.codex/
